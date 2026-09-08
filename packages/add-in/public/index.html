@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pi for Excel</title>
-  <meta name="description" content="An open-source AI agent inside Excel. Reads your workbook, makes changes, searches the web — with any model you already use." />
-  <link rel="icon" href="/assets/icon-32.png" type="image/png" />
+  <title>Pi for Office</title>
+  <meta name="description" content="An open-source AI agent inside Excel, Word & PowerPoint. Reads your document, makes changes, searches the web — with any model you already use." />
+  <link rel="icon" href="assets/icon-32.png" type="image/png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/landing.css" />
+    <link rel="stylesheet" href="landing.css" />
 
 </head>
 <body>
@@ -18,12 +18,12 @@
 
   <!-- Nav -->
   <nav>
-    <a href="/" class="nav-mark"><span class="nav-mark__logo">π</span> <span class="nav-mark__text">Pi for Excel</span> <span class="exp-badge">Experimental</span></a>
+    <a href="./" class="nav-mark"><span class="nav-mark__logo">π</span> <span class="nav-mark__text">Pi for Office</span> <span class="exp-badge">Experimental</span></a>
     <div class="nav-links">
       <a href="#install">Install</a>
       <a href="#connect">Connect</a>
-      <a href="/architecture">Architecture</a>
-      <a href="https://github.com/tmustier/pi-for-excel" class="gh-link" target="_blank" rel="noopener">
+      <a href="architecture/">Architecture</a>
+      <a href="https://github.com/dieuluucanh/pi-for-office" class="gh-link" target="_blank" rel="noopener">
         <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
         GitHub
       </a>
@@ -33,15 +33,15 @@
 
   <!-- Hero -->
   <div class="hero">
-    <h1>A powerful, open-source agent inside&nbsp;Excel</h1>
+    <h1>A powerful, open-source agent inside&nbsp;Microsoft&nbsp;Office</h1>
     <p class="hero-sub">
-      If you use a &ldquo;coding&rdquo; agent to do research, write reports, or build things: you know they can do way more than write code. Pi for Excel puts some of that power inside your spreadsheets, where you can actually work with it interactively. No account needed: login with wherever you get your AI from.
+      If you use a &ldquo;coding&rdquo; agent to do research, write reports, or build things: you know they can do way more than write code. Pi for Office puts some of that power inside your spreadsheets, documents, and slide decks, where you can actually work with it interactively. No account needed: login with wherever you get your AI from.
     </p>
     <a href="#install" class="hero-cta">
       Install it
       <svg viewBox="0 0 24 24"><path d="M7 17L17 7M17 7H7M17 7V17"/></svg>
     </a>
-    <p class="hero-note">Free &amp; open source. <a href="https://github.com/tmustier/pi-for-excel" target="_blank" rel="noopener">View on GitHub</a></p>
+    <p class="hero-note">Free &amp; open source. <a href="https://github.com/dieuluucanh/pi-for-office" target="_blank" rel="noopener">View on GitHub</a></p>
   </div>
 
 
@@ -54,7 +54,7 @@
         Excel is both your calculator and your interface. This gives your agent that same interface.
       </p>
       <p>
-        Pi for Excel reads the actual workbook: the structure, the formatting, the formulas, your current selection. It doesn't need an export and you can see it work in real time. It's working in the same place you are.
+        Pi for Office reads the actual workbook: the structure, the formatting, the formulas, your current selection. It doesn't need an export and you can see it work in real time. It's working in the same place you are.
       </p>
     </div>
 
@@ -91,7 +91,7 @@
     </div>
 
     <img
-      src="/assets/rules-dialog.png"
+      src="assets/rules-dialog.png"
       alt="Rules dialog showing formatting conventions for all files, this workbook, and format settings"
       class="section-screenshot"
       width="2008"
@@ -126,7 +126,7 @@
       <div class="section-label">Extensions</div>
       <h3>Ask it to extend itself</h3>
       <p>
-        You can ask Pi for Excel to build its own extensions — sidebar widgets, sub-agents, live data feeds, specialist tools, SaaS integrations. Extensions can call LLMs, fetch HTTP data, persist storage, and register tools through the built-in bridge.
+        You can ask Pi for Office to build its own extensions — sidebar widgets, sub-agents, live data feeds, specialist tools, SaaS integrations. Extensions can call LLMs, fetch HTTP data, persist storage, and register tools through the built-in bridge.
       </p>
     </div>
 
@@ -154,7 +154,7 @@
       <div class="card">
         <h3><span class="step-num">1</span> Download the manifest</h3>
         <p>This small file tells Excel where to find Pi. It's the only thing you need to download.</p>
-        <a href="/manifest.prod.xml" download class="dl-btn">
+        <a href="manifest.prod.xml" download class="dl-btn">
           <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
           manifest.prod.xml
         </a>
@@ -181,7 +181,7 @@
         <ol>
           <li>Quit Excel completely (<kbd>⌘Q</kbd>) and reopen it</li>
           <li>Go to <strong>Insert → My Add-ins</strong></li>
-          <li>Click <strong>Pi for Excel</strong> to open the sidebar</li>
+          <li>Click <strong>Pi for Office</strong> to open the sidebar</li>
         </ol>
       </div>
     </div>
@@ -189,13 +189,13 @@
     <!-- Windows -->
     <div id="panel-win" class="os-panel">
       <div class="callout callout--windows-note">
-        <strong>Heads up —</strong> Pi was built and tested on macOS. It <em>should</em> work on Windows (the underlying tech is cross-platform) but hasn't been extensively tested. Worth a try! If you hit issues, <a href="https://github.com/tmustier/pi-for-excel/issues" target="_blank" rel="noopener">open a GitHub issue</a>.
+        <strong>Heads up —</strong> Pi was built and tested on macOS. It <em>should</em> work on Windows (the underlying tech is cross-platform) but hasn't been extensively tested. Worth a try! If you hit issues, <a href="https://github.com/dieuluucanh/pi-for-office/issues" target="_blank" rel="noopener">open a GitHub issue</a>.
       </div>
 
       <div class="card">
         <h3><span class="step-num">1</span> Download the manifest</h3>
         <p>Same file — a small config that tells Excel where to find Pi.</p>
-        <a href="/manifest.prod.xml" download class="dl-btn">
+        <a href="manifest.prod.xml" download class="dl-btn">
           <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
           manifest.prod.xml
         </a>
@@ -264,7 +264,7 @@
       </p>
 
       <div class="callout">
-        <strong>What does this do?</strong> It runs a tiny local CORS proxy on your machine so Excel can complete OAuth safely. No git clone or mkcert setup is required for hosted use. Your data still flows between your computer and your provider. <a href="https://github.com/tmustier/pi-for-excel" target="_blank" rel="noopener">The code is open source.</a>
+        <strong>What does this do?</strong> It runs a tiny local CORS proxy on your machine so Excel can complete OAuth safely. No git clone or mkcert setup is required for hosted use. Your data still flows between your computer and your provider. <a href="https://github.com/dieuluucanh/pi-for-office" target="_blank" rel="noopener">The code is open source.</a>
       </div>
     </div>
 
@@ -281,11 +281,11 @@
   <footer>
     <span class="footer-pi">π</span>
     <p>
-      Pi for Excel is free, open source, and <a href="https://github.com/tmustier/pi-for-excel/blob/main/LICENSE" target="_blank" rel="noopener">MIT licensed</a>.
+      Pi for Office is free, open source, and <a href="https://github.com/dieuluucanh/pi-for-office/blob/main/LICENSE" target="_blank" rel="noopener">MIT licensed</a>.
       Updates are automatic — close and reopen the sidebar to get the latest version.
     </p>
     <p class="footer-note">
-      Built by <a href="https://github.com/tmustier" target="_blank" rel="noopener">Thomas Mustier</a>.
+      Forked from <a href="https://github.com/tmustier/pi-for-excel" target="_blank" rel="noopener">Pi for Excel</a>.
       Powered by <a href="https://pi.dev" target="_blank" rel="noopener">Pi</a>, an extensible coding agent by <a href="https://github.com/badlogic" target="_blank" rel="noopener">Mario Zechner</a>.
     </p>
   </footer>
@@ -293,7 +293,7 @@
 </div>
 
 
-<script src="/landing.js"></script>
+<script src="landing.js"></script>
 
 </body>
 </html>

@@ -1,7 +1,7 @@
 {
-  "name": "pi-for-excel",
+  "name": "pi-for-office",
   "version": "0.10.0-pre",
-  "description": "Open-source, multi-model AI sidebar add-in for Excel. Powered by Pi.",
+  "description": "Open-source, multi-model AI sidebar add-in for Excel, Word, and PowerPoint. Powered by Pi.",
   "type": "module",
   "scripts": {
     "dev": "vite --port 3141",
@@ -71,7 +71,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/tmustier/pi-for-excel.git"
+    "url": "https://github.com/dieuluucanh/pi-for-office.git"
   },
   "engines": {
     "node": "^22.19.0 || >=24"

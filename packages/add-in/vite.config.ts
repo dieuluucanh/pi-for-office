@@ -22,32 +22,41 @@ function piAuthPlugin(): Plugin {
   return {
     name: "pi-auth",
     configureServer(server) {
-      server.middlewares.use("/__pi-auth", (req: IncomingMessage, res: ServerResponse) => {
-        // SECURITY: auth.json can contain API keys + refresh tokens.
-        // Only serve it to loopback clients on loopback hostnames (Excel webviews,
-        // local browser). QEMU user networking can make WPS guest traffic appear
-        // loopback to Vite, so also require a localhost/127.0.0.1 Host header by default.
-        const remote = req.socket?.remoteAddress;
-        if (!isPiAuthRequestAllowed({ remoteAddress: remote, hostHeader: req.headers.host, allowNonLocalHost })) {
-          res.statusCode = 403;
-          res.setHeader("Content-Type", "application/json; charset=utf-8");
-          res.setHeader("Cache-Control", "no-store");
-          res.end(JSON.stringify({ error: "forbidden" }));
-          return;
-        }
+      server.middlewares.use(
+        "/__pi-auth",
+        (req: IncomingMessage, res: ServerResponse) => {
+          // SECURITY: auth.json can contain API keys + refresh tokens.
+          // Only serve it to loopback clients on loopback hostnames (Excel webviews,
+          // local browser). QEMU user networking can make WPS guest traffic appear
+          // loopback to Vite, so also require a localhost/127.0.0.1 Host header by default.
+          const remote = req.socket?.remoteAddress;
+          if (
+            !isPiAuthRequestAllowed({
+              remoteAddress: remote,
+              hostHeader: req.headers.host,
+              allowNonLocalHost,
+            })
+          ) {
+            res.statusCode = 403;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.setHeader("Cache-Control", "no-store");
+            res.end(JSON.stringify({ error: "forbidden" }));
+            return;
+          }
 
-        try {
-          const data = fs.readFileSync(authPath, "utf-8");
-          res.setHeader("Content-Type", "application/json; charset=utf-8");
-          res.setHeader("Cache-Control", "no-store");
-          res.end(data);
-        } catch {
-          res.statusCode = 404;
-          res.setHeader("Content-Type", "application/json; charset=utf-8");
-          res.setHeader("Cache-Control", "no-store");
-          res.end(JSON.stringify({ error: "auth.json not found" }));
-        }
-      });
+          try {
+            const data = fs.readFileSync(authPath, "utf-8");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.setHeader("Cache-Control", "no-store");
+            res.end(data);
+          } catch {
+            res.statusCode = 404;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.setHeader("Cache-Control", "no-store");
+            res.end(JSON.stringify({ error: "auth.json not found" }));
+          }
+        },
+      );
     },
   };
 }
@@ -72,7 +81,9 @@ type ProxyReqLike = {
   removeHeader(name: string): void;
   path?: string;
 };
-type ProxyServerLike = { on(event: "proxyReq", handler: (proxyReq: ProxyReqLike) => void): void };
+type ProxyServerLike = {
+  on(event: "proxyReq", handler: (proxyReq: ProxyReqLike) => void): void;
+};
 
 function stripBrowserHeaders(proxy: ProxyServerLike) {
   proxy.on("proxyReq", (proxyReq) => {
@@ -92,7 +103,9 @@ function stripBrowserHeaders(proxy: ProxyServerLike) {
     // (e.g. /v1internal:streamGenerateContent). Some proxy stacks encode
     // this as %3A, which Google treats as a different path and returns 404.
     if (typeof proxyReq.path === "string" && /%3a/i.test(proxyReq.path)) {
-      proxyReq.path = proxyReq.path.replaceAll("%3A", ":").replaceAll("%3a", ":");
+      proxyReq.path = proxyReq.path
+        .replaceAll("%3A", ":")
+        .replaceAll("%3a", ":");
     }
   });
 }
@@ -114,7 +127,8 @@ function proxyEntry(target: string, proxyPath: string) {
 }
 
 function buildBrowserAliasMap(): Record<string, string> {
-  const resolveFromRoot = (relativePath: string): string => path.resolve(__dirname, relativePath);
+  const resolveFromRoot = (relativePath: string): string =>
+    path.resolve(__dirname, relativePath);
 
   return {
     // Stub Node.js built-ins imported by Anthropic SDK's transitive deps (undici, @smithy).
@@ -128,15 +142,20 @@ function buildBrowserAliasMap(): Record<string, string> {
     // (skip validation, trust the LLM output).
     ajv: resolveFromRoot("src/stubs/ajv.ts"),
     "ajv-formats": resolveFromRoot("src/stubs/ajv-formats.ts"),
-
   };
 }
 
 /**
  * Full browser alias list, in vite's find/replacement shape.
  */
-function buildBrowserAliases(): { find: string | RegExp; replacement: string }[] {
-  return Object.entries(buildBrowserAliasMap()).map(([find, replacement]) => ({ find, replacement }));
+function buildBrowserAliases(): {
+  find: string | RegExp;
+  replacement: string;
+}[] {
+  return Object.entries(buildBrowserAliasMap()).map(([find, replacement]) => ({
+    find,
+    replacement,
+  }));
 }
 
 // ============================================================================
@@ -172,7 +191,14 @@ function resolveDevProxy(): DevProxyConfig | null {
   const resolved = resolveDevOrigin({
     env: { DEV_HOST: devHost, PORTLESS_URL: portlessUrl },
   });
-  const url = new URL(resolved.origin);
+  let url: URL;
+  try {
+    url = new URL(resolved.origin);
+  } catch {
+    // resolveDevOrigin already guarantees a clean https origin, so this is
+    // defensive only — never silently enter proxy mode on a bad value.
+    return null;
+  }
   return {
     host: url.hostname,
     clientPort: url.port ? Number.parseInt(url.port, 10) : 443,
@@ -182,12 +208,26 @@ function resolveDevProxy(): DevProxyConfig | null {
 /** Behind the proxy the port comes from PORT (portless-assigned); CLI --port wins over this either way. */
 function parseDevServerPort(raw: string | undefined): number {
   const parsed = Number.parseInt(raw ?? "", 10);
-  return Number.isInteger(parsed) && parsed > 0 && parsed < 65536 ? parsed : 3141;
+  return Number.isInteger(parsed) && parsed > 0 && parsed < 65536
+    ? parsed
+    : 3141;
 }
 
 // ============================================================================
 // Vite config
 // ============================================================================
+
+// GitHub Pages project sites live under a subpath (e.g. /pi-for-office/), so
+// asset URLs must be prefixed with that base. Read it from an env var rather
+// than a CLI flag: MSYS/Git Bash mangles leading-slash CLI args into Windows
+// paths, but env values pass through untouched. Unset => Vite's default "/"
+// (local dev, Vercel root hosting, serve:dist).
+function resolveBasePath(): string {
+  const raw = process.env.VITE_BASE_PATH?.trim();
+  if (!raw) return "/";
+  const normalized = raw.startsWith("/") ? raw : `/${raw}`;
+  return normalized.endsWith("/") ? normalized : `${normalized}/`;
+}
 
 // HTTPS certs — generate with: mkcert localhost
 const keyPath = path.resolve(__dirname, "key.pem");
@@ -198,9 +238,9 @@ const hasHttpsCerts = fs.existsSync(keyPath) && fs.existsSync(certPath);
 const devProxy = resolveDevProxy();
 
 export default defineConfig({
-  plugins: [
-    piAuthPlugin(),
-  ],
+  base: resolveBasePath(),
+
+  plugins: [piAuthPlugin()],
 
   server: {
     ...(devProxy
@@ -234,20 +274,53 @@ export default defineConfig({
 
     proxy: {
       // OAuth token endpoints. Keep longer/more-specific prefixes before shorter ones.
-      "/oauth-proxy/anthropic-platform": proxyEntry("https://platform.claude.com", "/oauth-proxy/anthropic-platform"),
-      "/oauth-proxy/anthropic": proxyEntry("https://console.anthropic.com", "/oauth-proxy/anthropic"),
-      "/oauth-proxy/github": proxyEntry("https://github.com", "/oauth-proxy/github"),
+      "/oauth-proxy/anthropic-platform": proxyEntry(
+        "https://platform.claude.com",
+        "/oauth-proxy/anthropic-platform",
+      ),
+      "/oauth-proxy/anthropic": proxyEntry(
+        "https://console.anthropic.com",
+        "/oauth-proxy/anthropic",
+      ),
+      "/oauth-proxy/github": proxyEntry(
+        "https://github.com",
+        "/oauth-proxy/github",
+      ),
 
       // API proxies (providers that block browser CORS)
-      "/api-proxy/anthropic": proxyEntry("https://api.anthropic.com", "/api-proxy/anthropic"),
-      "/api-proxy/openai-auth": proxyEntry("https://auth.openai.com", "/api-proxy/openai-auth"),
-      "/api-proxy/openai": proxyEntry("https://api.openai.com", "/api-proxy/openai"),
-      "/api-proxy/chatgpt": proxyEntry("https://chatgpt.com", "/api-proxy/chatgpt"),
-      "/api-proxy/google-oauth": proxyEntry("https://oauth2.googleapis.com", "/api-proxy/google-oauth"),
+      "/api-proxy/anthropic": proxyEntry(
+        "https://api.anthropic.com",
+        "/api-proxy/anthropic",
+      ),
+      "/api-proxy/openai-auth": proxyEntry(
+        "https://auth.openai.com",
+        "/api-proxy/openai-auth",
+      ),
+      "/api-proxy/openai": proxyEntry(
+        "https://api.openai.com",
+        "/api-proxy/openai",
+      ),
+      "/api-proxy/chatgpt": proxyEntry(
+        "https://chatgpt.com",
+        "/api-proxy/chatgpt",
+      ),
+      "/api-proxy/google-oauth": proxyEntry(
+        "https://oauth2.googleapis.com",
+        "/api-proxy/google-oauth",
+      ),
       // Keep more specific Google prefixes before /api-proxy/google to avoid prefix collisions.
-      "/api-proxy/google-cloudcode-sandbox": proxyEntry("https://daily-cloudcode-pa.sandbox.googleapis.com", "/api-proxy/google-cloudcode-sandbox"),
-      "/api-proxy/google-cloudcode": proxyEntry("https://cloudcode-pa.googleapis.com", "/api-proxy/google-cloudcode"),
-      "/api-proxy/google": proxyEntry("https://generativelanguage.googleapis.com", "/api-proxy/google"),
+      "/api-proxy/google-cloudcode-sandbox": proxyEntry(
+        "https://daily-cloudcode-pa.sandbox.googleapis.com",
+        "/api-proxy/google-cloudcode-sandbox",
+      ),
+      "/api-proxy/google-cloudcode": proxyEntry(
+        "https://cloudcode-pa.googleapis.com",
+        "/api-proxy/google-cloudcode",
+      ),
+      "/api-proxy/google": proxyEntry(
+        "https://generativelanguage.googleapis.com",
+        "/api-proxy/google",
+      ),
     },
   },
 
@@ -282,9 +355,7 @@ export default defineConfig({
       // Externalize node:* imports (Rollup can't bundle them for the browser).
       // Note: do NOT externalize regular deps (e.g. @smithy/*). If they leak
       // through as bare imports, the built add-in will fail to boot.
-      external: [
-        /^node:/,
-      ],
+      external: [/^node:/],
     },
   },
 });

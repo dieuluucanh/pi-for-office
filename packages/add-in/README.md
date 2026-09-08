@@ -11,7 +11,7 @@ Pi for Excel is an AI agent that lives inside Excel. It reads your workbook, mak
 **Core spreadsheet tools** — 16 built-in tools that the AI can call to interact with your workbook:
 
 | Tool | What it does |
-|---|---|
+| --- | --- |
 | `get_workbook_overview` | Structural blueprint — sheets, headers, named ranges, tables, charts, pivots |
 | `read_range` | Read cells in compact (markdown), CSV, or detailed (with formatting) mode |
 | `write_cells` | Write values/formulas with overwrite protection and auto-verification |
@@ -30,6 +30,7 @@ Pi for Excel is an AI agent that lives inside Excel. It reads your workbook, mak
 | `skills` | Bundled Agent Skills for task-specific workflows |
 
 **Multi-model support** — use any supported provider; switch models mid-conversation:
+
 - **Anthropic** (Claude) — API key or OAuth
 - **OpenAI** / **OpenAI Codex** — API key
 - **Google Gemini** — API key
@@ -49,10 +50,12 @@ Pi for Excel is an AI agent that lives inside Excel. It reads your workbook, mak
 **Extensions** — install sidebar extensions (mini-apps) from chat. The AI can generate and install extension code directly via the `extensions_manager` tool. Extensions run in an iframe sandbox by default.
 
 **Integrations** — opt-in external tool integrations:
+
 - **Web Search** (Jina default, Serper/Tavily/Brave) + `fetch_page` — find and read external sources without leaving Excel
 - **MCP Gateway** — connect to user-configured MCP servers for custom tool access
 
 **Bridge + advanced controls** (managed via `/experimental`):
+
 - Tmux bridge settings — configure bridge URL/token and run health checks
 - Python / LibreOffice bridge settings — configure bridge URL/token
 - Files workspace write/delete gate — shared artifact storage across sessions (assistant built-in docs under `assistant-docs/` are always available read-only)
@@ -62,7 +65,7 @@ Pi for Excel is an AI agent that lives inside Excel. It reads your workbook, mak
 
 ## Install
 
-1. Download [`manifest.prod.xml`](https://pi-for-excel.vercel.app/manifest.prod.xml)
+1. Download [`manifest.prod.xml`](https://dieuluucanh.github.io/pi-for-office/manifest.prod.xml)
 2. Add it to Excel — see [**install guide**](docs/install.md) for step-by-step instructions (macOS + Windows)
 3. Click **Open Pi** in the ribbon
 4. Connect a provider (API key or OAuth), or configure a custom OpenAI-compatible gateway in `/settings`
@@ -104,9 +107,11 @@ npm run dev        # Vite dev server on https://localhost:3141
 Then sideload the dev manifest into Excel:
 
 **macOS** ([Microsoft docs](https://learn.microsoft.com/en-us/office/dev/add-ins/testing/sideload-an-office-add-in-on-mac)):
+
 ```bash
 cp manifest.xml ~/Library/Containers/com.microsoft.Excel/Data/Documents/wef/
 ```
+
 Then open Excel → **Insert** → **My Add-ins** → **Pi for Excel**.
 
 **Windows** ([Microsoft docs](https://learn.microsoft.com/en-us/office/dev/add-ins/testing/create-a-network-shared-folder-catalog-for-task-pane-and-content-add-ins)):
@@ -122,12 +127,12 @@ Windows desktop Excel can't upload a manifest directly — it installs from a tr
 
 **Home** → **Add-ins** → **More Settings** → **Upload My Add-in** → select `manifest.xml`.
 
-The dev manifest points to `https://localhost:3141`. The production manifest (`manifest.prod.xml`) points to the hosted Vercel deployment.
+The dev manifest points to `https://localhost:3141`. The production manifest (`manifest.prod.xml`) points to the hosted GitHub Pages deployment.
 
 ### Useful commands
 
 | Command | Description |
-|---|---|
+| --- | --- |
 | `npm run dev` | Start Vite dev server (port 3141, HTTPS) |
 | `npm run dev:portless` | Opt-in: dev server behind portless — [docs/portless.md](./docs/portless.md) |
 | `npm run build` | Production build → `dist/` |
@@ -250,16 +255,17 @@ public/assets/         # Add-in icons (16/32/80/128px)
 
 ## Deployment
 
-The production build is a static site deployed to [Vercel](https://vercel.com). See [docs/deploy-vercel.md](docs/deploy-vercel.md) for maintainer setup.
+The production build is a static site deployed to **GitHub Pages** (free — no Vercel account needed). See [docs/deploy-github-pages.md](docs/deploy-github-pages.md) for the one-time setup and [docs/deploy-vercel.md](docs/deploy-vercel.md) for the legacy Vercel flow.
 
-Users install by downloading `manifest.prod.xml` and uploading it in Excel — the manifest points to the hosted Vercel URL. Updates are automatic (close and reopen the taskpane).
+Users install by downloading `manifest.prod.xml` and uploading it in Excel — the manifest points to the hosted GitHub Pages URL. Updates are automatic (close and reopen the taskpane).
 
 ## Documentation
 
 | Doc | Description |
-|---|---|
+| --- | --- |
 | [docs/install.md](docs/install.md) | Non-technical install guide |
-| [docs/deploy-vercel.md](docs/deploy-vercel.md) | Hosted deployment (Vercel) |
+| [docs/deploy-github-pages.md](docs/deploy-github-pages.md) | Hosted deployment (GitHub Pages, free) |
+| [docs/deploy-vercel.md](docs/deploy-vercel.md) | Hosted deployment (Vercel, legacy) |
 | [docs/extensions.md](docs/extensions.md) | Extension authoring guide |
 | [docs/integrations-external-tools.md](docs/integrations-external-tools.md) | Web Search + MCP integration setup |
 | [docs/security-threat-model.md](docs/security-threat-model.md) | Security threat model |

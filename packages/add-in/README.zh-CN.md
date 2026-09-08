@@ -3,7 +3,7 @@
 [English](./README.md) | 简体中文
 
 > [!NOTE]
-> 本简体中文指南由 AI 翻译/生成，可能存在译文问题；如与英文文档不一致，请以英文版为准。欢迎提 [Issue](https://github.com/tmustier/pi-for-excel/issues) 指正。
+> 本简体中文指南由 AI 翻译/生成，可能存在译文问题；如与英文文档不一致，请以英文版为准。欢迎提 [Issue](https://github.com/dieuluucanh/pi-for-office/issues) 指正。
 
 > 本文档是简要中文指南，仅涵盖 **Microsoft Excel 加载项**的**安装**与**模型配置**。完整功能说明、开发者文档等请参阅[英文版 README](./README.md) 与 [docs/](./docs/README.md) 目录。WPS 表格支持另见英文文档 [docs/wps-support.md](./docs/wps-support.md)。
 
@@ -30,13 +30,13 @@ Pi for Excel 是一款开源、多模型的 Microsoft Excel AI 侧边栏加载�
 
 下载此文件并保存到容易找到的位置(例如桌面):
 
-👉 **[manifest.prod.xml](https://pi-for-excel.vercel.app/manifest.prod.xml)**
+👉 **[manifest.prod.xml](https://dieuluucanh.github.io/pi-for-office/manifest.prod.xml)**
 
 <details>
 <summary>备用下载链接(如上方链接无法访问)</summary>
 
-- 最新 Release:https://github.com/tmustier/pi-for-excel/releases/latest
-- 仓库直链:https://github.com/tmustier/pi-for-excel/blob/main/manifest.prod.xml
+- 最新 Release:<https://github.com/dieuluucanh/pi-for-office/releases/latest>
+- 仓库直链:<https://github.com/dieuluucanh/pi-for-office/blob/main/packages/add-in/manifest.prod.xml>
 
 </details>
 
@@ -61,18 +61,22 @@ Pi for Excel 是一款开源、多模型的 Microsoft Excel AI 侧边栏加载�
 
 1. 打开 Finder,按 **Cmd + Shift + G**(前往文件夹)
 2. 粘贴以下路径并回车:
+
    ```
    ~/Library/Containers/com.microsoft.Excel/Data/Documents/wef
    ```
+
 3. 将 `manifest.prod.xml` 复制到该文件夹
 4. 完全退出 Excel(Cmd + Q)并重新打开
 5. 点击 **插入 → 我的加载项**,应能看到 **Pi for Excel**,点击一次以注册加载项
 6. 在 **开始(Home)** 功能区最右侧找到 **加载项(Add-ins)** 按钮(四个橙色方块图标),点击后选择 **Pi for Excel** 打开侧边栏
 
 > **文件夹不存在?** 先在终端(Terminal)中运行:
+>
 > ```bash
 > mkdir -p ~/Library/Containers/com.microsoft.Excel/Data/Documents/wef
 > ```
+>
 > 然后从第 3 步继续。
 
 #### Excel 网页版(Office Online)
@@ -118,7 +122,7 @@ Pi for Excel 是一款开源、多模型的 Microsoft Excel AI 侧边栏加载�
 常见示例(模型 ID 与地址请以各服务商官方文档为准):
 
 | 服务商 | Endpoint | 模型 ID 示例 |
-|---|---|---|
+| --- | --- | --- |
 | DeepSeek | `https://api.deepseek.com` | `deepseek-chat`、`deepseek-reasoner` |
 | 智谱 GLM(BigModel) | `https://open.bigmodel.cn/api/paas/v4` | `glm-4.6` 等 |
 | Ollama(本地) | `http://localhost:11434/v1` | 本地已下载的模型 |
@@ -155,7 +159,7 @@ npx pi-for-excel-proxy
 ## 常见问题(简)
 
 - **"我的加载项"里看不到 Pi** —— 重启 Excel 再试;确认上传的是 `manifest.prod.xml`(不是 localhost 开发版清单)
-- **侧边栏打开但是空白** —— 你的网络可能无法访问 `https://pi-for-excel.vercel.app`,请尝试更换网络或代理设置
+- **侧边栏打开但是空白** —— 你的网络可能无法访问 `https://dieuluucanh.github.io`,请尝试更换网络或代理设置
 - **如何更新** —— 大多数更新自动生效,关闭并重新打开侧边栏即可;极少数情况(清单变更)需重新下载并上传 `manifest.prod.xml`
 
 更多排错项见[英文安装指南 · Troubleshooting](./docs/install.md#troubleshooting)。
@@ -165,7 +169,7 @@ npx pi-for-excel-proxy
 ## 更多文档(英文)
 
 | 文档 | 说明 |
-|---|---|
+| --- | --- |
 | [README.md](./README.md) | 完整功能介绍、开发者快速上手、架构说明 |
 | [docs/install.md](./docs/install.md) | 完整安装指南 |
 | [docs/integrations-external-tools.md](./docs/integrations-external-tools.md) | 联网搜索 + MCP 集成配置 |

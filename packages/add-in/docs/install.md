@@ -10,13 +10,13 @@ No coding or dev tools required — just download one file and add it to Excel.
 
 Download this file and save it somewhere you can find it (e.g. your Desktop):
 
-👉 **[manifest.prod.xml](https://pi-for-excel.vercel.app/manifest.prod.xml)**
+👉 **[manifest.prod.xml](https://dieuluucanh.github.io/pi-for-office/manifest.prod.xml)**
 
 <details>
 <summary>Alternate download links (if the above is unavailable)</summary>
 
-- Latest release: https://github.com/tmustier/pi-for-excel/releases/latest
-- Direct repo copy: https://github.com/tmustier/pi-for-excel/blob/main/manifest.prod.xml
+- Latest release: <https://github.com/dieuluucanh/pi-for-office/releases/latest>
+- Direct repo copy: <https://github.com/dieuluucanh/pi-for-office/blob/main/packages/add-in/manifest.prod.xml>
 
 </details>
 
@@ -28,9 +28,11 @@ Download this file and save it somewhere you can find it (e.g. your Desktop):
 
 1. Open Finder and press **Cmd + Shift + G** (Go to Folder)
 2. Paste this path and press Enter:
+
    ```
    ~/Library/Containers/com.microsoft.Excel/Data/Documents/wef
    ```
+
 3. Copy `manifest.prod.xml` into that folder
 4. Quit Excel completely (Cmd + Q) and reopen it
 5. Go to **Insert → My Add-ins** — you should see **Pi for Excel** listed. Click it to register the add-in.
@@ -40,9 +42,11 @@ Download this file and save it somewhere you can find it (e.g. your Desktop):
    <img src="../public/assets/add-ins-dropdown.png" width="200" alt="Pi for Excel in the Add-ins dropdown" />
 
 > **Folder doesn't exist?** Create it first — open Terminal and run:
+>
 > ```bash
 > mkdir -p ~/Library/Containers/com.microsoft.Excel/Data/Documents/wef
 > ```
+>
 > Then repeat from step 3.
 
 For more detail, see [Microsoft's guide for Mac](https://learn.microsoft.com/en-us/office/dev/add-ins/testing/sideload-an-office-add-in-on-mac).
@@ -114,6 +118,7 @@ Use this when your org exposes an OpenAI-compatible endpoint (or for local OpenA
 3. Save the gateway, then choose its model from `/model`
 
 Notes:
+
 - If your gateway is publicly reachable over HTTPS, you can usually connect directly (no proxy).
 - For localhost/private endpoints via the local proxy, you may need to configure proxy host policy env vars (for example `ALLOWED_TARGET_HOSTS`, `ALLOW_LOOPBACK_TARGETS`, or `ALLOW_PRIVATE_TARGETS`) when starting `pi-for-excel-proxy`.
 
@@ -135,6 +140,7 @@ If login fails with a CORS/network error, follow the next section.
 Some OAuth/token endpoints are blocked by CORS inside Office webviews (especially on macOS WKWebView).
 
 Typical symptoms:
+
 - `Login was blocked by browser CORS`
 - `Load failed`
 - `Failed to fetch`
@@ -159,13 +165,14 @@ If you do not have Node.js (or are unsure):
 curl -fsSL https://piforexcel.com/proxy | sh
 ```
 
-2. In Pi, open `/settings` → **Proxy**:
+1. In Pi, open `/settings` → **Proxy**:
    - enable **Proxy**
    - set URL to the URL printed by the proxy (normally `https://localhost:3003`; if 3003 is busy for another service, it will choose a random free port and print that URL)
 
-3. Retry OAuth login
+2. Retry OAuth login
 
 Quick proxy sanity check (advanced):
+
 - In Terminal, run:
 
 ```bash
@@ -179,6 +186,7 @@ curl -k -i -s \
 - Use single quotes around the URL in zsh so `?alt=sse` is not treated as a glob.
 
 Notes:
+
 - Keep the proxy URL on **HTTPS** (`https://...`), not HTTP.
 - API-key providers generally work without proxy.
 - The local proxy also starts loopback-only callback listeners for browser OAuth flows so ChatGPT (`http://localhost:1455/auth/callback`), Anthropic (`http://localhost:53692/callback`), Google Code Assist (`http://localhost:8085/oauth2callback`), and Google Antigravity (`http://localhost:51121/oauth-callback`) can capture browser callbacks automatically. If a port is busy, the affected login still works via the manual URL paste fallback.
@@ -207,27 +215,33 @@ If you installed with `manifest.prod.xml`, Pi for Excel loads from a hosted URL 
 ## Troubleshooting
 
 ### Pi does not appear in My Add-ins
+
 - Re-open Excel and try again
 - Ensure you uploaded `manifest.prod.xml` (not the localhost dev manifest)
 
 ### Windows says the manifest certificate is invalid / mentions XML Expansion Packs
+
 - Use **Insert → My Add-ins → Upload My Add-in…** instead of **Manage → XML Expansion Packs**
 - `manifest.prod.xml` is an Office add-in manifest, not a legacy Excel XML Expansion Pack
 - If you already tried the XML Expansion Packs path, close Excel and repeat the upload flow above
 
 ### Taskpane opens but is blank
-- Your network may block `https://pi-for-excel.vercel.app`
+
+- Your network may block `https://dieuluucanh.github.io`
 - Try a different network / VPN setting
 
 ### I installed, but changes are not visible
+
 - Close and reopen Excel to clear cached taskpane state
 
 ### Do I need to install a separate Office.js bridge?
+
 - No — Office.js support comes from Excel itself when you install Pi with `manifest.prod.xml`
 - You do **not** need `generator-office`, Yeoman, or any extra Office.js package to use the hosted add-in
 - The optional local helper services are only for OAuth proxying, native Python / LibreOffice, and tmux
 
 ### OAuth login still fails
+
 - Confirm proxy is running and reachable at the exact URL in `/settings`
 - Confirm proxy URL is `https://localhost:<port>` (not `http://`)
 - Try API key auth as a fallback

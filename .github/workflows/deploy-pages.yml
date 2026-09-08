@@ -1,0 +1,77 @@
+name: Deploy to GitHub Pages
+
+# Hosts the production Office add-in (taskpane + manifest.prod.xml) on GitHub
+# Pages so it can be side-loaded by end users without a local dev server.
+#
+# One-time setup (repo owner):
+#   1. GitHub repo → Settings → Pages → Source: "GitHub Actions"
+#   2. Push to main — this workflow builds packages/add-in and deploys it.
+#
+# The add-in is served from the project-site subpath:
+#   https://dieuluucanh.github.io/pi-for-office/
+# Keep ADDIN_BASE_URL and the vite --base below in sync if the repo/owner
+# changes (e.g. after a rename or a new fork).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: packages/add-in/package-lock.json
+
+      - name: Install dependencies
+        working-directory: packages/add-in
+        run: npm ci
+
+      - name: Generate production manifest (GitHub Pages base URL)
+        working-directory: packages/add-in
+        env:
+          ADDIN_BASE_URL: https://dieuluucanh.github.io/pi-for-office
+        run: npm run manifest:prod
+
+      - name: Build (base = GitHub Pages subpath)
+        working-directory: packages/add-in
+        # VITE_BASE_PATH (not a CLI --base flag) so asset URLs resolve under
+        # the project-site subpath. Env var, not argv: Git Bash mangles
+        # leading-slash CLI args into Windows paths. The dev manifest
+        # (localhost) is unaffected — base only applies to this build.
+        env:
+          VITE_BASE_PATH: /pi-for-office/
+        run: npm run build
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: packages/add-in/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
