@@ -1,6 +1,6 @@
 {
   "name": "pi-for-office-proxy",
-  "version": "0.2.5-pre",
+  "version": "0.2.6-pre",
   "description": "One-command local HTTPS proxy helper for Pi for Office OAuth logins.",
   "type": "module",
   "bin": {
