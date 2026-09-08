@@ -38,10 +38,13 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: packages/add-in/package-lock.json
+          # npm auto-detects the workspace root even when run inside
+          # packages/add-in, so the ROOT lockfile drives the install.
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        working-directory: packages/add-in
+        # npm ci runs at the workspace root (npm walks up to the nearest
+        # workspace root), installing all workspaces from the root lockfile.
         run: npm ci
 
       - name: Generate production manifest (GitHub Pages base URL)
