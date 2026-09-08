@@ -69,7 +69,6 @@ const certPath =
 
 const DEFAULT_ALLOWED_ORIGINS = new Set([
   "https://localhost:3141",
-  "https://pi-for-excel.vercel.app",
   "https://dieuluucanh.github.io",
 ]);
 

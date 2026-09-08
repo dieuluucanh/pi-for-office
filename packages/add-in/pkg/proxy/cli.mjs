@@ -193,9 +193,13 @@ function ensureCertificates() {
 
 function resolveProxyConfig() {
   const userArgs = process.argv.slice(2);
+  const allowAllTargets = userArgs.includes("--allow-all-targets");
+  const filteredArgs = userArgs.filter((a) => a !== "--allow-all-targets");
   const hasExplicitScheme =
-    userArgs.includes("--https") || userArgs.includes("--http");
-  const proxyArgs = hasExplicitScheme ? userArgs : ["--https", ...userArgs];
+    filteredArgs.includes("--https") || filteredArgs.includes("--http");
+  const proxyArgs = hasExplicitScheme
+    ? filteredArgs
+    : ["--https", ...filteredArgs];
 
   const usesHttpOnly =
     proxyArgs.includes("--http") && !proxyArgs.includes("--https");
@@ -203,6 +207,7 @@ function resolveProxyConfig() {
   return {
     proxyArgs,
     usesHttps: !usesHttpOnly,
+    allowAllTargets,
   };
 }
 
@@ -338,18 +343,39 @@ function startProxy(proxyArgs) {
   // packaged CLI applies this convenience. Loopback/private targets remain blocked
   // regardless (SSRF guardrail in proxy-target-policy.mjs).
   const childEnv = { ...process.env };
-  const hasExplicitTargetPolicy =
-    (typeof childEnv.ALLOWED_TARGET_HOSTS === "string" &&
-      childEnv.ALLOWED_TARGET_HOSTS.trim().length > 0) ||
-    (typeof childEnv.ALLOW_ALL_TARGET_HOSTS === "string" &&
-      childEnv.ALLOW_ALL_TARGET_HOSTS.trim().length > "0");
-  if (!hasExplicitTargetPolicy) {
+
+  // --allow-all-targets flag forces permissive mode regardless of env vars.
+  if (proxyConfig.allowAllTargets) {
     childEnv.ALLOW_ALL_TARGET_HOSTS = "1";
     console.log(
-      "[pi-for-office-proxy] Target allowlist disabled (local helper mode). " +
-        "Loopback and private-network targets remain blocked. " +
-        "Set ALLOWED_TARGET_HOSTS or ALLOW_ALL_TARGET_HOSTS=0 to restrict.",
+      "[pi-for-office-proxy] Target allowlist disabled (--allow-all-targets flag).",
     );
+  } else {
+    // Only treat as "explicit" when the var is set to a meaningful restrictive value.
+    // Values like "0", "false", or empty string mean "not configured" — CLI should
+    // apply the permissive default in that case.
+    const targetHostsRaw = childEnv.ALLOWED_TARGET_HOSTS?.trim() ?? "";
+    const allowAllRaw =
+      childEnv.ALLOW_ALL_TARGET_HOSTS?.trim().toLowerCase() ?? "";
+    const hasExplicitTargetPolicy =
+      targetHostsRaw.length > 0 ||
+      allowAllRaw === "1" ||
+      allowAllRaw === "true";
+
+    if (hasExplicitTargetPolicy) {
+      console.log(
+        "[pi-for-office-proxy] Using explicit target policy from environment " +
+          `(ALLOWED_TARGET_HOSTS=${JSON.stringify(targetHostsRaw) || "(unset)"}, ` +
+          `ALLOW_ALL_TARGET_HOSTS=${JSON.stringify(allowAllRaw) || "(unset)"})`,
+      );
+    } else {
+      childEnv.ALLOW_ALL_TARGET_HOSTS = "1";
+      console.log(
+        "[pi-for-office-proxy] Target allowlist disabled (local helper mode). " +
+          "Loopback and private-network targets remain blocked. " +
+          "Set ALLOWED_TARGET_HOSTS or ALLOW_ALL_TARGET_HOSTS=0 to restrict.",
+      );
+    }
   }
 
   const child = spawn(process.execPath, [proxyScriptPath, ...proxyArgs], {
@@ -397,6 +423,9 @@ if (!fs.existsSync(proxyScriptPath)) {
 }
 
 const proxyConfig = resolveProxyConfig();
+if (proxyConfig.allowAllTargets) {
+  process.env.ALLOW_ALL_TARGET_HOSTS = "1";
+}
 if (proxyConfig.usesHttps) {
   await exitIfDefaultProxyAlreadyRunning(proxyConfig);
   ensureCertificates();
