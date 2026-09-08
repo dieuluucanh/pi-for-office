@@ -682,7 +682,9 @@ export async function renderConnectionsTab(args: {
     const cmd = t("ext-hub-connections.piBridgeSetupCmd");
     void navigator.clipboard?.writeText(cmd).then(() => {
       piBridgeCopyBtn.textContent = "✓";
-      setTimeout(() => { piBridgeCopyBtn.textContent = "📋"; }, 1400);
+      setTimeout(() => {
+        piBridgeCopyBtn.textContent = "📋";
+      }, 1400);
     });
   });
   piBridgeCmdRow.append(piBridgeCmdCode, piBridgeCopyBtn);
@@ -703,16 +705,24 @@ export async function renderConnectionsTab(args: {
     onClick: () => {
       piBridgeStatus.textContent = t("ext-hub-connections.piBridgeConnecting");
       const probeUrl = "ws://127.0.0.1:38617";
-      void fetch(probeUrl.replace("ws://", "http://").replace(/\/$/, "") + "/health").
-        .then((res: Response) => {
+      void fetch(
+        probeUrl.replace("ws://", "http://").replace(/\/$/, "") + "/health",
+      )
+        .then((res) => {
           if (res.ok) {
-            piBridgeStatus.textContent = t("ext-hub-connections.piBridgeConnected");
+            piBridgeStatus.textContent = t(
+              "ext-hub-connections.piBridgeConnected",
+            );
           } else {
-            piBridgeStatus.textContent = t("ext-hub-connections.piBridgeNotRunning");
+            piBridgeStatus.textContent = t(
+              "ext-hub-connections.piBridgeNotRunning",
+            );
           }
         })
         .catch(() => {
-          piBridgeStatus.textContent = t("ext-hub-connections.piBridgeProbeFailed");
+          piBridgeStatus.textContent = t(
+            "ext-hub-connections.piBridgeProbeFailed",
+          );
         });
     },
   });
