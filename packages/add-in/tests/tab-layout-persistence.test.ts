@@ -1,0 +1,116 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import {
+  createTabLayoutPersistence,
+} from "../src/taskpane/tab-layout-persistence.ts";
+import type { WorkbookTabLayout } from "../src/taskpane/tab-layout.ts";
+
+const SAMPLE_LAYOUT: WorkbookTabLayout = {
+  sessionIds: ["session-a", "session-b"],
+  activeSessionId: "session-b",
+};
+
+void test("tab layout persistence is disabled until enabled", async () => {
+  const saves: Array<{ workbookId: string | null; layout: WorkbookTabLayout }> = [];
+
+  const controller = createTabLayoutPersistence({
+    resolveWorkbookId: () => Promise.resolve("wb-1"),
+    saveLayout: (workbookId, layout) => {
+      saves.push({ workbookId, layout });
+      return Promise.resolve();
+    },
+  });
+
+  controller.persist(SAMPLE_LAYOUT);
+  await controller.flush();
+
+  assert.equal(saves.length, 0);
+});
+
+void test("tab layout persistence deduplicates same workbook+layout signature", async () => {
+  const saves: Array<{ workbookId: string | null; layout: WorkbookTabLayout }> = [];
+
+  const controller = createTabLayoutPersistence({
+    resolveWorkbookId: () => Promise.resolve("wb-1"),
+    saveLayout: (workbookId, layout) => {
+      saves.push({ workbookId, layout });
+      return Promise.resolve();
+    },
+  });
+
+  controller.enable();
+  controller.persist(SAMPLE_LAYOUT);
+  controller.persist(SAMPLE_LAYOUT);
+  await controller.flush();
+
+  assert.equal(saves.length, 1);
+  assert.equal(saves[0]?.workbookId, "wb-1");
+});
+
+void test("tab layout persistence does not dedupe across workbook ids", async () => {
+  const saves: Array<{ workbookId: string | null; layout: WorkbookTabLayout }> = [];
+  const workbookIds = ["wb-1", "wb-2"];
+  let nextWorkbookIndex = 0;
+
+  const controller = createTabLayoutPersistence({
+    resolveWorkbookId: () => {
+      const workbookId = workbookIds[nextWorkbookIndex] ?? null;
+      nextWorkbookIndex += 1;
+      return Promise.resolve(workbookId);
+    },
+    saveLayout: (workbookId, layout) => {
+      saves.push({ workbookId, layout });
+      return Promise.resolve();
+    },
+  });
+
+  controller.enable();
+  controller.persist(SAMPLE_LAYOUT);
+  controller.persist(SAMPLE_LAYOUT);
+  await controller.flush();
+
+  assert.equal(saves.length, 2);
+  assert.deepEqual(
+    saves.map((save) => save.workbookId),
+    ["wb-1", "wb-2"],
+  );
+});
+
+void test("tab layout persistence keeps queue alive after save failure", async () => {
+  const savedWorkbookIds: Array<string | null> = [];
+  const warnings: string[] = [];
+  let saveAttempts = 0;
+
+  const controller = createTabLayoutPersistence({
+    resolveWorkbookId: () => Promise.resolve("wb-1"),
+    saveLayout: (workbookId, _layout) => {
+      saveAttempts += 1;
+      if (saveAttempts === 1) {
+        return Promise.reject(new Error("disk full"));
+      }
+      savedWorkbookIds.push(workbookId);
+      return Promise.resolve();
+    },
+    warn: (message, error) => {
+      const suffix = error instanceof Error ? ` ${error.message}` : "";
+      warnings.push(`${message}${suffix}`);
+    },
+  });
+
+  controller.enable();
+  controller.persist({
+    sessionIds: ["session-a"],
+    activeSessionId: "session-a",
+  });
+  controller.persist({
+    sessionIds: ["session-a", "session-c"],
+    activeSessionId: "session-c",
+  });
+  await controller.flush();
+
+  assert.equal(saveAttempts, 2);
+  assert.deepEqual(savedWorkbookIds, ["wb-1"]);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0] ?? "", /Failed to persist tab layout/);
+});

@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+out/
+
+# Vite / dev
+*.local
+.vite/
+
+# Office add-in certs
+packages/add-in/certs/
+*.crt
+*.key
+*.pfx
+
+# Power BI visual build
+packages/*/powerbi-visual/*.pbiviz
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.pi

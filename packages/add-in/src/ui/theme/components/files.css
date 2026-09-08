@@ -1,0 +1,531 @@
+/* Files workspace dialog (Section 12 redesign) */
+
+.pi-files-dialog {
+  gap: 10px;
+}
+
+/* ── Actions row (Upload / Connect folder) ───────── */
+.pi-files-actions {
+  display: flex;
+  gap: 6px;
+  padding: 0 20px;
+  flex-wrap: wrap;
+}
+
+.pi-files-actions__icon {
+  font-size: var(--text-sm);
+  margin-right: 2px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.pi-files-actions__icon > svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* ── Filter input ────────────────────────────────── */
+.pi-files-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--alpha-8);
+  border-radius: var(--radius-sm);
+  background: var(--white-alpha-45);
+  padding: 6px 10px;
+  transition: border-color var(--duration-fast);
+}
+
+.pi-files-filter:focus-within {
+  border-color: var(--green-alpha-25);
+  box-shadow: 0 0 0 2px var(--pi-green-lighter);
+}
+
+.pi-files-filter__icon {
+  font-size: var(--text-sm);
+  flex-shrink: 0;
+  opacity: 0.5;
+  display: flex;
+  align-items: center;
+}
+
+.pi-files-filter__icon > svg {
+  width: 12px;
+  height: 12px;
+}
+
+.pi-files-filter__input {
+  flex: 1;
+  border: none;
+  background: none;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--foreground);
+  outline: none;
+  min-width: 0;
+}
+
+.pi-files-filter__input::placeholder {
+  color: var(--muted-foreground);
+}
+
+/* ── Section groups ──────────────────────────────── */
+.pi-files-section-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.pi-files-section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 2px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  font-family: var(--font-sans);
+  user-select: none;
+}
+
+.pi-files-section-head:hover .pi-files-section-head__label {
+  color: var(--foreground);
+}
+
+.pi-files-section-head__label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  transition: color var(--duration-fast);
+}
+
+.pi-files-section-head__count {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+  flex: 1;
+}
+
+.pi-files-section-head__chevron {
+  width: 14px;
+  height: 14px;
+  color: var(--muted-foreground);
+  flex-shrink: 0;
+  transition: transform var(--duration-fast);
+}
+
+.pi-files-section-head[aria-expanded="false"] .pi-files-section-head__chevron {
+  transform: rotate(-90deg);
+}
+
+.pi-files-section-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* ── Folder group ────────────────────────────────── */
+.pi-files-folder-group {
+  /* no extra spacing — sits inline with file items */
+}
+
+.pi-files-folder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  text-align: left;
+  border-radius: var(--radius-sm);
+  transition: background var(--duration-fast);
+}
+
+.pi-files-folder:hover {
+  background: var(--alpha-4);
+}
+
+.pi-files-folder__icon {
+  flex-shrink: 0;
+  width: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-foreground);
+}
+
+.pi-files-folder__icon > svg {
+  width: 16px;
+  height: 16px;
+}
+
+.pi-files-folder__name {
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--foreground);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pi-files-folder__count {
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+  flex-shrink: 0;
+}
+
+.pi-files-folder__chevron {
+  width: 14px;
+  height: 14px;
+  color: var(--muted-foreground);
+  flex-shrink: 0;
+  transition: transform var(--duration-fast);
+}
+
+.pi-files-folder[aria-expanded="false"] .pi-files-folder__chevron {
+  transform: rotate(-90deg);
+}
+
+.pi-files-folder__content {
+  padding-left: 16px;
+}
+
+/* ── File item row ───────────────────────────────── */
+.pi-files-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  font-family: var(--font-sans);
+  transition: background var(--duration-fast);
+}
+
+.pi-files-item:hover {
+  background: var(--alpha-4);
+}
+
+.pi-files-item--muted {
+  opacity: 0.7;
+}
+
+.pi-files-item--muted:hover {
+  opacity: 1;
+}
+
+.pi-files-item__icon {
+  flex-shrink: 0;
+  width: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-foreground);
+}
+
+.pi-files-item__icon > svg {
+  width: 16px;
+  height: 16px;
+}
+
+.pi-files-item__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pi-files-item__name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pi-files-item__name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.pi-files-item__meta {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pi-files-item__arrow {
+  flex-shrink: 0;
+  font-size: var(--text-md);
+  color: var(--muted-foreground);
+  opacity: 0;
+  transition: opacity var(--duration-fast);
+  font-weight: 300;
+}
+
+.pi-files-item:hover .pi-files-item__arrow {
+  opacity: 1;
+}
+
+/* ── Footer ──────────────────────────────────────── */
+.pi-files-footer {
+  padding: 8px 20px 12px;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+  border-top: var(--pi-divider);
+  text-align: center;
+}
+
+/* ── Empty state ─────────────────────────────────── */
+.pi-files-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 24px 16px 20px;
+  gap: 8px;
+}
+
+.pi-files-empty__icon {
+  font-size: 32px; /* decorative glyph */
+  opacity: 0.4;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-foreground);
+}
+
+.pi-files-empty__icon > svg {
+  width: 32px;
+  height: 32px;
+}
+
+.pi-files-empty__title {
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.pi-files-empty__desc {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+  line-height: 1.45;
+  max-width: 260px;
+}
+
+.pi-files-empty__hint {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+  margin-top: 4px;
+  opacity: 0.7;
+}
+
+/* ── Detail view ─────────────────────────────────── */
+.pi-files-detail-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.pi-files-detail__back {
+  appearance: none;
+  -webkit-appearance: none;
+  background: none;
+  border: 1px solid var(--alpha-10);
+  border-radius: var(--radius-xs);
+  color: var(--foreground);
+  font-size: var(--text-base);
+  padding: 4px 8px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background var(--duration-fast), border-color var(--duration-fast);
+  line-height: 1;
+}
+
+.pi-files-detail__back:hover {
+  background: var(--alpha-6);
+  border-color: var(--alpha-14);
+}
+
+/* Text preview with line numbers */
+.pi-files-detail-preview {
+  border: 1px solid var(--alpha-8);
+  border-radius: var(--radius-sm);
+  background: var(--white-alpha-45);
+  overflow: hidden;
+}
+
+/* Plain-text preview — wrapped prose, no line numbers (preview is for
+   reading, not code editing). */
+.pi-files-detail-preview--text {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.pi-files-detail-preview__body {
+  padding: 10px 12px;
+  color: var(--foreground);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Rendered markdown preview (.md files). Typography comes from the
+   shared markdown-block styles; container just scales it down a notch. */
+.pi-files-detail-preview--markdown {
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 4px 14px;
+  font-size: var(--text-sm);
+}
+
+/* Preview-scale headings — transcript heading sizes are too loud inside
+   a small preview panel. */
+.pi-files-detail-preview--markdown markdown-block h1 {
+  font-size: var(--text-md);
+}
+.pi-files-detail-preview--markdown markdown-block h2 {
+  font-size: var(--text-base);
+}
+.pi-files-detail-preview--markdown markdown-block h3,
+.pi-files-detail-preview--markdown markdown-block h4 {
+  font-size: var(--text-sm);
+}
+
+/* "More content below" cue — sticks to the bottom of the scroll viewport. */
+.pi-files-detail-preview__fade {
+  position: sticky;
+  bottom: 0;
+  height: 28px;
+  margin-top: -28px;
+  background: linear-gradient(to bottom, transparent, var(--white-alpha-90));
+  pointer-events: none;
+}
+
+/* Binary/image preview placeholder */
+.pi-files-detail-preview--binary {
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pi-files-detail-preview__placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 24px 16px;
+  text-align: center;
+}
+
+.pi-files-detail-preview__placeholder-icon {
+  font-size: 36px; /* decorative glyph */
+  opacity: 0.3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-foreground);
+}
+
+.pi-files-detail-preview__placeholder-icon > svg {
+  width: 36px;
+  height: 36px;
+}
+
+.pi-files-detail-preview__placeholder-label {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--foreground);
+}
+
+.pi-files-detail-preview__placeholder-size {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+}
+
+/* Image preview */
+.pi-files-detail-preview--image {
+  border: 1px solid var(--alpha-8);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--alpha-3);
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pi-files-detail-preview--image img {
+  display: block;
+  max-width: 100%;
+  max-height: 200px;
+}
+
+/* Actions bar in detail view */
+.pi-files-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pi-files-detail-actions__spacer {
+  flex: 1;
+}
+
+/* ── Badge overrides inside file items (#490) ────── */
+/* Badge is a row-level right-aligned column (after the flexible info
+   block) so every badge lands at the same x regardless of name length. */
+.pi-files-item .pi-overlay-badge {
+  border-radius: var(--radius-xs);
+  border: none;
+  padding: 1px 5px;
+  font-size: var(--text-xs);
+  flex-shrink: 0;
+}
+
+/* ── Text preview scroll fixes (#491) ────────────── */
+.pi-files-detail-preview--text {
+  max-height: min(400px, 50vh);
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.pi-files-detail-preview__code {
+  white-space: pre;
+  overflow-x: auto;
+  text-overflow: unset;
+}

@@ -1,0 +1,166 @@
+/* Provider / Resume / Shortcuts overlays */
+
+.pi-provider-picker-list {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+}
+
+.pi-resume-dialog {
+  max-height: 80vh;
+  overflow: hidden;
+}
+
+.pi-resume-body {
+  gap: 10px;
+}
+
+.pi-resume-section {
+  gap: 6px;
+}
+
+.pi-resume-section[data-resume-section="saved"] {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.pi-resume-section-hint {
+  margin: 0;
+}
+
+.pi-resume-target-controls {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 4px;
+  flex-shrink: 0;
+}
+
+.pi-resume-target-btn.is-active {
+  background: oklch(0.57 0.15 165 / 0.16);
+  border-color: oklch(0.57 0.15 165 / 0.45);
+}
+
+.pi-resume-target-hint {
+  margin: 0 0 4px;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+  flex-shrink: 0;
+}
+
+.pi-resume-workbook-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 4px;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+  user-select: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.pi-resume-workbook-filter__hint {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  opacity: 0.7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.pi-resume-list {
+  overflow-y: auto;
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pi-resume-list--recent {
+  overflow: visible;
+  flex: 0 0 auto;
+}
+
+.pi-resume-list-empty {
+  padding: 10px 2px;
+}
+
+.pi-resume-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.pi-resume-item__title {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: 500;
+}
+
+.pi-resume-item__meta {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+.pi-shortcuts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  max-height: min(520px, 62vh);
+  padding-right: 2px;
+}
+
+.pi-shortcuts-section {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.pi-shortcuts-section-header {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted-foreground);
+  opacity: 0.65;
+  padding-bottom: 2px;
+}
+
+.pi-shortcuts-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.pi-shortcuts-key {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  padding: 2px 6px;
+  background: var(--alpha-6);
+  border: 1px solid var(--alpha-10);
+  border-radius: var(--radius-xs);
+  box-shadow: 0 1px 0 var(--alpha-6);
+  color: var(--foreground);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.pi-shortcuts-desc {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  color: var(--muted-foreground);
+  text-align: right;
+}

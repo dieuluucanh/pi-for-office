@@ -1,0 +1,665 @@
+function isToolsPythonTransformRangePayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * python_transform_range — Read a range, run Python transform, write results back.
+ *
+ * High-level helper for common workflows:
+ * 1) read tabular values from Excel
+ * 2) execute Python (native bridge preferred, Pyodide fallback when available)
+ * 3) parse returned result JSON into a 2D grid
+ * 4) write transformed data back into Excel
+ */
+
+import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
+import { Type, type Static, type TSchema } from "@sinclair/typebox";
+
+import {
+  computeRangeAddress,
+  excelRun,
+  getRange,
+  padValues,
+  parseRangeRef,
+  qualifiedAddress,
+} from "../excel/helpers.js";
+import { buildWorkbookCellChangeSummary } from "../audit/cell-diff.js";
+import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
+import { dispatchWorkbookSnapshotCreated } from "../workbook/recovery-events.js";
+import { getWorkbookRecoveryLog, MAX_RECOVERY_CELLS } from "../workbook/recovery-log.js";
+import { getErrorMessage } from "../utils/errors.js";
+import { findErrors } from "../utils/format.js";
+import {
+  callDefaultPythonBridge,
+  getDefaultPythonBridgeConfig,
+  shouldFallbackToPyodideAfterBridgeError,
+  type PythonBridgeConfig,
+  type PythonBridgeRequest,
+  type PythonBridgeResponse,
+} from "./python-run.js";
+import { countOccupiedCells } from "./write-cells.js";
+import type { PythonTransformRangeDetails } from "./tool-details.js";
+import {
+  CHECKPOINT_SKIPPED_NOTE,
+  CHECKPOINT_SKIPPED_REASON,
+} from "./recovery-metadata.js";
+import { finalizeMutationOperation } from "./mutation/finalize.js";
+import type { MutationFinalizeDependencies } from "./mutation/types.js";
+import { appendMutationResultNote } from "./mutation/result-note.js";
+
+const MIN_TIMEOUT_MS = 100;
+const MAX_TIMEOUT_MS = 120_000;
+
+const schema = Type.Object({
+  range: Type.String({
+    description:
+      "Source range to read, e.g. \"A1:C20\" or \"Sheet2!B3:F200\".",
+  }),
+  code: Type.String({
+    minLength: 1,
+    maxLength: 40_000,
+    description:
+      "Python code to execute. Use `input_data` (range + values) and assign JSON-serializable output to `result`.",
+  }),
+  output_start_cell: Type.Optional(Type.String({
+    description:
+      "Top-left destination cell for transformed output. Defaults to source range top-left on the same sheet.",
+  })),
+  allow_overwrite: Type.Optional(Type.Boolean({
+    description:
+      "If false (default), write is blocked when destination contains existing values/formulas.",
+  })),
+  timeout_ms: Type.Optional(Type.Integer({
+    minimum: MIN_TIMEOUT_MS,
+    maximum: MAX_TIMEOUT_MS,
+    description: "Optional Python bridge timeout in ms.",
+  })),
+});
+
+type Params = Static<typeof schema>;
+
+interface InputRangeSnapshot {
+  sheetName: string;
+  /** Sheet-local address, e.g. A1:C10 */
+  address: string;
+  values: DynamicValue[][];
+}
+
+interface WriteOutputRequest {
+  outputStartCell: string;
+  values: DynamicValue[][];
+  allowOverwrite: boolean;
+}
+
+type WriteOutputResult =
+  | {
+    blocked: true;
+    outputAddress: string;
+    existingCount: number;
+  }
+  | {
+    blocked: false;
+    outputAddress: string;
+    rowsWritten: number;
+    colsWritten: number;
+    formulaErrorCount: number;
+    beforeValues?: DynamicValue[][];
+    beforeFormulas?: DynamicValue[][];
+    readBackValues?: DynamicValue[][];
+    readBackFormulas?: DynamicValue[][];
+    outputStartCell?: string;
+    outputSheetName?: string;
+  };
+
+export interface PythonTransformRangeToolDependencies {
+  getBridgeConfig?: () => Promise<PythonBridgeConfig | null>;
+  callBridge?: (
+    request: PythonBridgeRequest,
+    config: PythonBridgeConfig,
+    signal: AbortSignal | undefined,
+  ) => Promise<PythonBridgeResponse>;
+  readInputRange?: (rangeRef: string) => Promise<InputRangeSnapshot>;
+  writeOutputValues?: (request: WriteOutputRequest) => Promise<WriteOutputResult>;
+  /** Override Pyodide availability check (for testing). */
+  isPyodideAvailable?: () => boolean;
+  /** Override Pyodide runtime call (for testing). */
+  callPyodide?: (
+    request: PythonBridgeRequest,
+    signal: AbortSignal | undefined,
+  ) => Promise<PythonBridgeResponse>;
+}
+
+const mutationFinalizeDependencies: MutationFinalizeDependencies = {
+  appendAuditEntry: (entry) => getWorkbookChangeAuditLog().append(entry),
+};
+
+function cleanOptionalString(value: string | undefined): string | undefined {
+  if (typeof value !== "string") return undefined;
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function toOptionalInteger(value: DynamicValue): number | undefined {
+  if (typeof value !== "number") return undefined;
+  if (!Number.isFinite(value)) return undefined;
+  if (!Number.isInteger(value)) return undefined;
+  return value;
+}
+
+function parseParams(raw: DynamicValue): Params {
+  if (!isToolsPythonTransformRangePayloadShape(raw) || Array.isArray(raw)) {
+    throw new Error("Invalid python_transform_range params: expected an object.");
+  }
+
+  if (typeof raw.range !== "string" || raw.range.trim().length === 0) {
+    throw new Error("range is required.");
+  }
+
+  if (typeof raw.code !== "string" || raw.code.trim().length === 0) {
+    throw new Error("code is required.");
+  }
+
+  const params: Params = {
+    range: raw.range,
+    code: raw.code,
+  };
+
+  if (typeof raw.output_start_cell === "string") {
+    params.output_start_cell = raw.output_start_cell;
+  }
+
+  if (typeof raw.allow_overwrite === "boolean") {
+    params.allow_overwrite = raw.allow_overwrite;
+  }
+
+  const timeoutMs = toOptionalInteger(raw.timeout_ms);
+  if (timeoutMs !== undefined) {
+    params.timeout_ms = timeoutMs;
+  }
+
+  return params;
+}
+
+function validateParams(params: Params): void {
+  if (params.timeout_ms !== undefined && (params.timeout_ms < MIN_TIMEOUT_MS || params.timeout_ms > MAX_TIMEOUT_MS)) {
+    throw new Error(`timeout_ms must be between ${MIN_TIMEOUT_MS} and ${MAX_TIMEOUT_MS}`);
+  }
+}
+
+function stripSheetPrefix(address: string): string {
+  return address.includes("!") ? (address.split("!")[1] ?? address) : address;
+}
+
+function topLeftCellFromAddress(address: string): string {
+  const local = stripSheetPrefix(address).trim();
+  const first = local.split(":")[0];
+  return first ?? local;
+}
+
+function toSheetQualifiedCell(sheetName: string, cell: string): string {
+  if (cell.includes("!")) return cell;
+  return qualifiedAddress(sheetName, cell);
+}
+
+function defaultOutputStartCell(input: InputRangeSnapshot): string {
+  const startCell = topLeftCellFromAddress(input.address);
+  return qualifiedAddress(input.sheetName, startCell);
+}
+
+async function defaultReadInputRange(rangeRef: string): Promise<InputRangeSnapshot> {
+  return excelRun<InputRangeSnapshot>(async (context) => {
+    const { sheet, range } = getRange(context, rangeRef);
+    sheet.load("name");
+    range.load("address,values");
+    await context.sync();
+
+    return {
+      sheetName: sheet.name,
+      address: stripSheetPrefix(range.address),
+      values: range.values,
+    };
+  });
+}
+
+async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<WriteOutputResult> {
+  const { padded, rows, cols } = padValues(request.values);
+
+  if (rows === 0 || cols === 0) {
+    throw new Error("Transformed result is empty.");
+  }
+
+  return excelRun<WriteOutputResult>(async (context) => {
+    const { sheet, range } = getRange(context, request.outputStartCell);
+    sheet.load("name");
+    range.load("address");
+    await context.sync();
+
+    const startCell = topLeftCellFromAddress(range.address);
+    const outputAddressLocal = computeRangeAddress(startCell, rows, cols);
+    const outputAddress = qualifiedAddress(sheet.name, outputAddressLocal);
+
+    const targetRange = sheet.getRange(outputAddressLocal);
+
+    const outputCellCount = rows * cols;
+    const shouldLoadBeforeState = !request.allowOverwrite || outputCellCount <= MAX_RECOVERY_CELLS;
+
+    let beforeValues: DynamicValue[][] | undefined;
+    let beforeFormulas: DynamicValue[][] | undefined;
+
+    if (shouldLoadBeforeState) {
+      targetRange.load("values,formulas");
+      await context.sync();
+
+      beforeValues = targetRange.values;
+      beforeFormulas = targetRange.formulas;
+    }
+
+    if (!request.allowOverwrite) {
+      if (!beforeValues || !beforeFormulas) {
+        throw new Error("Failed to read destination range for overwrite protection.");
+      }
+
+      const existingCount = countOccupiedCells(beforeValues, beforeFormulas);
+      if (existingCount > 0) {
+        return {
+          blocked: true,
+          outputAddress,
+          existingCount,
+        };
+      }
+    }
+
+    targetRange.values = padded;
+    await context.sync();
+
+    const verify = sheet.getRange(outputAddressLocal);
+    verify.load("address,values,formulas");
+    await context.sync();
+
+    const formulaErrors = findErrors(verify.values, topLeftCellFromAddress(verify.address));
+
+    return {
+      blocked: false,
+      outputAddress: qualifiedAddress(sheet.name, stripSheetPrefix(verify.address)),
+      rowsWritten: rows,
+      colsWritten: cols,
+      formulaErrorCount: formulaErrors.length,
+      ...(beforeValues !== undefined ? { beforeValues } : {}),
+      ...(beforeFormulas !== undefined ? { beforeFormulas } : {}),
+      readBackValues: verify.values,
+      readBackFormulas: verify.formulas,
+      outputStartCell: startCell,
+      outputSheetName: sheet.name,
+    };
+  });
+}
+
+function isPythonTransformPayloadShape(value: DynamicValue): value is DynamicObject {
+  return isToolsPythonTransformRangePayloadShape(value) && !Array.isArray(value);
+}
+
+function normalizeTo2dValues(value: DynamicValue): DynamicValue[][] | null {
+  if (Array.isArray(value)) {
+    if (value.length === 0) return [];
+
+    const rows: DynamicValue[][] = [];
+    let allRows = true;
+
+    for (const item of value) {
+      if (!Array.isArray(item)) {
+        allRows = false;
+        break;
+      }
+
+      const row: DynamicValue[] = [];
+      for (const cell of item) {
+        row.push(cell);
+      }
+      rows.push(row);
+    }
+
+    if (allRows) {
+      return rows;
+    }
+
+    return [value];
+  }
+
+  if (isPythonTransformPayloadShape(value)) {
+    const valuesCandidate = value.values;
+    if (valuesCandidate !== undefined) {
+      return normalizeTo2dValues(valuesCandidate);
+    }
+
+    const rowsCandidate = value.rows;
+    if (rowsCandidate !== undefined) {
+      return normalizeTo2dValues(rowsCandidate);
+    }
+
+    return [[value]];
+  }
+
+  return [[value]];
+}
+
+function parseBridgeResultJson(resultJson: string | undefined): DynamicValue[][] {
+  const trimmed = resultJson?.trim();
+  if (!trimmed) {
+    throw new Error(
+      "Python bridge returned no result_json. Set `result = ...` in your Python code and return a 2D array (or object with values/rows).",
+    );
+  }
+
+  let parsed: DynamicValue;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    throw new Error("Python bridge returned invalid result_json payload.");
+  }
+
+  const normalized = normalizeTo2dValues(parsed);
+  if (!normalized) {
+    throw new Error("Could not normalize Python result to a 2D array.");
+  }
+
+  return normalized;
+}
+
+function formatBlockedMessage(inputAddress: string, outputAddress: string, existingCount: number): string {
+  return [
+    `⛔ **Transform blocked** — destination **${outputAddress}** contains ${existingCount} non-empty cell(s).`,
+    "",
+    `Source: **${inputAddress}**`,
+    "",
+    "To overwrite, confirm with the user and retry with `allow_overwrite: true`.",
+  ].join("\n");
+}
+
+function formatSuccessMessage(inputAddress: string, output: Exclude<WriteOutputResult, { blocked: true }>): string {
+  const lines: string[] = [];
+
+  lines.push(`✅ Transformed **${inputAddress}** and wrote results to **${output.outputAddress}**.`);
+  lines.push(`Rows × Cols written: ${output.rowsWritten} × ${output.colsWritten}.`);
+
+  if (output.formulaErrorCount > 0) {
+    lines.push(`⚠️ ${output.formulaErrorCount} formula error(s) detected in written output.`);
+  }
+
+  lines.push("Python input payload shape: `{ range, values }` (available as `input_data`).");
+
+  return lines.join("\n\n");
+}
+
+function withSkillHintLine(message: string, skillName: string): string {
+  return `${message}\nSkill: ${skillName}`;
+}
+
+function shouldAttachPythonBridgeSkillHint(message: string): boolean {
+  const normalized = message.toLowerCase();
+
+  return normalized.includes("python bridge")
+    || normalized.includes("python-bridge-url")
+    || normalized.includes("bridge url")
+    || normalized.includes("no_python_runtime")
+    || normalized.includes("webassembly workers")
+    || normalized.includes("bridge unavailable")
+    || normalized.includes("bridge request")
+    || normalized.includes("failed to fetch")
+    || normalized.includes("fetch failed")
+    || normalized.includes("network request failed")
+    || normalized.includes("econnrefused");
+}
+
+export function createPythonTransformRangeTool(
+  dependencies: PythonTransformRangeToolDependencies = {},
+): AgentTool<TSchema, PythonTransformRangeDetails> {
+  const getBridgeConfig = dependencies.getBridgeConfig ?? getDefaultPythonBridgeConfig;
+  const callBridge = dependencies.callBridge ?? callDefaultPythonBridge;
+  const readInputRange = dependencies.readInputRange ?? defaultReadInputRange;
+  const writeOutputValues = dependencies.writeOutputValues ?? defaultWriteOutputValues;
+  const checkPyodide = dependencies.isPyodideAvailable;
+  const pyodideCall = dependencies.callPyodide;
+
+  return {
+    name: "python_transform_range",
+    label: "Python Transform Range",
+    description:
+      "Read an Excel range, run Python transformation on `{ range, values }` (available as `input_data`), " +
+      "and write the result grid back. " +
+      "Runs in-browser via Pyodide by default; uses native Python bridge when configured.",
+    parameters: schema,
+    execute: async (
+      toolCallId: string,
+      rawParams: DynamicValue,
+      signal: AbortSignal | undefined,
+    ): Promise<AgentToolResult<PythonTransformRangeDetails>> => {
+      try {
+        const params = parseParams(rawParams);
+        validateParams(params);
+
+        const input = await readInputRange(params.range);
+        const sourceAddress = qualifiedAddress(input.sheetName, input.address);
+
+        const requestedOutputStartCell = cleanOptionalString(params.output_start_cell);
+        const outputStartCell = requestedOutputStartCell !== undefined
+          ? toSheetQualifiedCell(input.sheetName, requestedOutputStartCell)
+          : defaultOutputStartCell(input);
+
+        const bridgeConfig = await getBridgeConfig();
+
+        const bridgeRequest: PythonBridgeRequest = {
+          code: params.code,
+          input_json: JSON.stringify({
+            range: sourceAddress,
+            values: input.values,
+          }),
+          ...(params.timeout_ms !== undefined ? { timeout_ms: params.timeout_ms } : {}),
+        };
+
+        let bridgeResponse: PythonBridgeResponse | null = null;
+        let bridgeUrlUsed: string | undefined;
+
+        if (bridgeConfig) {
+          try {
+            bridgeResponse = await callBridge(bridgeRequest, bridgeConfig, signal);
+            bridgeUrlUsed = bridgeConfig.url;
+          } catch (error) {
+            if (!shouldFallbackToPyodideAfterBridgeError(error, bridgeConfig)) {
+              throw error;
+            }
+          }
+        }
+
+        if (!bridgeResponse) {
+          // Fall back to Pyodide
+          let pyodideAvailable: boolean;
+          if (checkPyodide) {
+            pyodideAvailable = checkPyodide();
+          } else {
+            const mod = await import("../python/pyodide-runtime.js");
+            pyodideAvailable = mod.isPyodideAvailable();
+          }
+
+          if (!pyodideAvailable) {
+            return {
+              content: [{
+                type: "text",
+                text: withSkillHintLine(
+                  "Python is unavailable in this environment. " +
+                    "The current browser/WebView does not support WebAssembly Workers (needed for in-browser Pyodide). " +
+                    "Power users can configure a native Python bridge in Settings → Experimental.",
+                  "python-bridge",
+                ),
+              }],
+              details: {
+                kind: "python_transform_range",
+                blocked: false,
+                inputAddress: sourceAddress,
+                error: "no_python_runtime",
+                skillHint: "python-bridge",
+              },
+            };
+          }
+
+          if (pyodideCall) {
+            bridgeResponse = await pyodideCall(bridgeRequest, signal);
+          } else {
+            const mod = await import("../python/pyodide-runtime.js");
+            bridgeResponse = await mod.callPyodideRuntime(bridgeRequest, signal ?? undefined);
+          }
+        }
+
+        if (!bridgeResponse.ok) {
+          throw new Error(bridgeResponse.error ?? "Python execution failed.");
+        }
+
+        const transformedValues = parseBridgeResultJson(bridgeResponse.result_json);
+
+        const writeResult = await writeOutputValues({
+          outputStartCell,
+          values: transformedValues,
+          allowOverwrite: params.allow_overwrite === true,
+        });
+
+        if (writeResult.blocked) {
+          const blockedResult: AgentToolResult<PythonTransformRangeDetails> = {
+            content: [{
+              type: "text",
+              text: formatBlockedMessage(sourceAddress, writeResult.outputAddress, writeResult.existingCount),
+            }],
+            details: {
+              kind: "python_transform_range",
+              blocked: true,
+              inputAddress: sourceAddress,
+              outputAddress: writeResult.outputAddress,
+              ...(bridgeUrlUsed !== undefined ? { bridgeUrl: bridgeUrlUsed } : {}),
+              existingCount: writeResult.existingCount,
+            },
+          };
+
+          await finalizeMutationOperation(mutationFinalizeDependencies, {
+            auditEntry: {
+              toolName: "python_transform_range",
+              toolCallId,
+              blocked: true,
+              inputAddress: sourceAddress,
+              outputAddress: writeResult.outputAddress,
+              changedCount: 0,
+              changes: [],
+            },
+          });
+
+          return blockedResult;
+        }
+
+        const parsedOutput = parseRangeRef(writeResult.outputAddress);
+        const outputDiffStartCell = writeResult.outputStartCell ?? topLeftCellFromAddress(parsedOutput.address);
+        const outputSheetName = writeResult.outputSheetName ?? parsedOutput.sheet ?? input.sheetName;
+
+        const changes =
+          writeResult.beforeValues &&
+          writeResult.beforeFormulas &&
+          writeResult.readBackValues &&
+          writeResult.readBackFormulas
+            ? buildWorkbookCellChangeSummary({
+              sheetName: outputSheetName,
+              startCell: outputDiffStartCell,
+              beforeValues: writeResult.beforeValues,
+              beforeFormulas: writeResult.beforeFormulas,
+              afterValues: writeResult.readBackValues,
+              afterFormulas: writeResult.readBackFormulas,
+            })
+            : undefined;
+
+        const successText =
+          changes && changes.changedCount > 0
+            ? `${formatSuccessMessage(sourceAddress, writeResult)}\n\nChanged cell(s): ${changes.changedCount}.`
+            : formatSuccessMessage(sourceAddress, writeResult);
+
+        const successResult: AgentToolResult<PythonTransformRangeDetails> = {
+          content: [{
+            type: "text",
+            text: successText,
+          }],
+          details: {
+            kind: "python_transform_range",
+            blocked: false,
+            inputAddress: sourceAddress,
+            outputAddress: writeResult.outputAddress,
+            ...(bridgeUrlUsed !== undefined ? { bridgeUrl: bridgeUrlUsed } : {}),
+            rowsWritten: writeResult.rowsWritten,
+            colsWritten: writeResult.colsWritten,
+            formulaErrorCount: writeResult.formulaErrorCount,
+            ...(changes !== undefined ? { changes } : {}),
+          },
+        };
+
+        const changedCount = changes?.changedCount ?? writeResult.rowsWritten * writeResult.colsWritten;
+
+        await finalizeMutationOperation(mutationFinalizeDependencies, {
+          auditEntry: {
+            toolName: "python_transform_range",
+            toolCallId,
+            blocked: false,
+            inputAddress: sourceAddress,
+            outputAddress: writeResult.outputAddress,
+            changedCount,
+            changes: changes?.sample ?? [],
+          },
+          recovery: {
+            result: successResult,
+            appendRecoverySnapshot: () => {
+              if (!writeResult.beforeValues || !writeResult.beforeFormulas) {
+                return Promise.resolve(null);
+              }
+
+              return getWorkbookRecoveryLog().append({
+                toolName: "python_transform_range",
+                toolCallId,
+                address: writeResult.outputAddress,
+                changedCount,
+                beforeValues: writeResult.beforeValues,
+                beforeFormulas: writeResult.beforeFormulas,
+              });
+            },
+            appendResultNote: appendMutationResultNote,
+            unavailableReason: CHECKPOINT_SKIPPED_REASON,
+            unavailableNote: CHECKPOINT_SKIPPED_NOTE,
+            dispatchSnapshotCreated: (checkpoint) => {
+              dispatchWorkbookSnapshotCreated({
+                snapshotId: checkpoint.id,
+                toolName: checkpoint.toolName,
+                address: checkpoint.address,
+                changedCount: checkpoint.changedCount,
+              });
+            },
+          },
+        });
+
+        return successResult;
+      } catch (error) {
+        const message = getErrorMessage(error);
+        const skillHint = shouldAttachPythonBridgeSkillHint(message)
+          ? "python-bridge"
+          : undefined;
+
+        return {
+          content: [{
+            type: "text",
+            text: skillHint
+              ? `Error: ${withSkillHintLine(message, skillHint)}`
+              : `Error: ${message}`,
+          }],
+          details: {
+            kind: "python_transform_range",
+            blocked: false,
+            error: message,
+            ...(skillHint !== undefined ? { skillHint } : {}),
+          },
+        };
+      }
+    },
+  };
+}
+

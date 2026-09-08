@@ -1,0 +1,1130 @@
+/**
+ * Runtime extension manager.
+ *
+ * Responsibilities:
+ * - load persisted extension registry
+ * - activate/deactivate extensions with failure isolation
+ * - track extension-owned commands and tools for clean unload
+ * - expose extension tool list so runtimes can refresh Agent toolsets
+ */
+
+import type { Agent, AgentEvent, AgentTool } from "@earendil-works/pi-agent-core";
+import { t } from "../language/index.js";
+
+import type { ConnectionManager } from "../connections/manager.js";
+import {
+  createExtensionAPI,
+  loadExtension,
+  type ExtensionCommand,
+  type ExtensionModelProviderDefinition,
+  type HttpRequestOptions,
+  type HttpResponse,
+  type LlmCompletionRequest,
+  type LlmCompletionResult,
+  type LoadedExtensionHandle,
+} from "../commands/extension-api.js";
+import { activateExtensionInSandbox } from "./sandbox-runtime.js";
+import {
+  describeExtensionRuntimeMode,
+  resolveExtensionRuntimeMode,
+  type ExtensionRuntimeMode,
+} from "./runtime-mode.js";
+import { commandRegistry } from "../commands/types.js";
+import {
+  describeExtensionCapability,
+  describeStoredExtensionTrust,
+  deriveStoredExtensionTrust,
+  getDefaultPermissionsForTrust,
+  isExtensionCapabilityAllowed,
+  listAllExtensionCapabilities,
+  listGrantedExtensionCapabilities,
+  setExtensionCapabilityAllowed,
+  type ExtensionCapability,
+  type StoredExtensionPermissions,
+  type StoredExtensionTrust,
+} from "./permissions.js";
+import {
+  loadStoredExtensions,
+  saveStoredExtensions,
+  type ExtensionSettingsStore,
+  type StoredExtensionEntry,
+  type StoredExtensionSource,
+} from "./store.js";
+import { isExperimentalFeatureEnabled } from "../experiments/flags.js";
+import { clearExtensionWidgets } from "./internal/widget-surface.js";
+import { showToast } from "../ui/toast.js";
+import { getEnabledProxyBaseUrl, resolveOutboundRequestUrl } from "../tools/external-fetch.js";
+import { clearExtensionStorage } from "./storage-store.js";
+import {
+  createExtensionLlmCompletionSessionId,
+  describeExtensionSource,
+  extractAssistantText,
+  getRuntimeManagerErrorMessage,
+  isApiModel,
+  isBlockedExtensionHostname,
+  normalizeDownloadFilename,
+  normalizeExtensionName,
+  normalizeHttpOptions,
+  normalizeInlineCode,
+  normalizeRemoteUrl,
+  parseLlmMessages,
+  readLimitedResponseBody,
+  resolveModelForCompletion,
+} from "./runtime-manager-helpers.js";
+import { buildRuntimeManagerActivationBridge } from "./runtime-manager-activation.js";
+import { getToolRequiredConnectionIds } from "../tools/connection-requirements.js";
+import type {
+  BrowserModelRuntime,
+  BrowserProviderRegistration,
+} from "../models/browser-model-runtime.js";
+
+type AnyAgentTool = AgentTool;
+
+type ManagerListener = () => void;
+
+function buildExtensionToolSourceNote(entry: StoredExtensionEntry): string {
+  return `Source: extension "${entry.name}" (${entry.id}).`;
+}
+
+function withExtensionToolDescription(tool: AnyAgentTool, entry: StoredExtensionEntry): string {
+  const baseDescription = typeof tool.description === "string" ? tool.description.trim() : "";
+  const sourceNote = buildExtensionToolSourceNote(entry);
+
+  if (baseDescription.length === 0) {
+    return sourceNote;
+  }
+
+  if (baseDescription.includes(sourceNote)) {
+    return baseDescription;
+  }
+
+  return `${baseDescription}\n\n${sourceNote}`;
+}
+
+function assertToolExecuteFunction(tool: AnyAgentTool, entry: StoredExtensionEntry): void {
+  if (typeof Reflect.get(tool, "execute") === "function") {
+    return;
+  }
+
+  throw new Error(
+    `Tool "${tool.name}" from extension "${entry.name}" is invalid: execute must be a function.`,
+  );
+}
+
+function qualifyExtensionProviderId(entryId: string, providerId: string): string {
+  const normalized = providerId.trim().toLowerCase();
+  if (!/^[a-z0-9][a-z0-9._-]*$/u.test(normalized)) {
+    throw new Error("Provider id may contain only letters, numbers, dots, underscores and hyphens.");
+  }
+
+  const ownerPrefix = `${entryId.toLowerCase()}.`;
+  return normalized.startsWith(ownerPrefix) ? normalized : `${ownerPrefix}${normalized}`;
+}
+
+function qualifyExtensionConnectionId(entryId: string, connectionId: string): string {
+  const normalized = connectionId.trim().toLowerCase();
+  if (normalized.length === 0) {
+    throw new Error("Connection id cannot be empty.");
+  }
+
+  const ownerPrefix = `${entryId.toLowerCase()}.`;
+  return normalized.startsWith(ownerPrefix) ? normalized : `${ownerPrefix}${normalized}`;
+}
+
+function endpointHostname(value: string, label: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`${label} must be a valid URL.`);
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`${label} must use http:// or https://.`);
+  }
+  return parsed.hostname.toLowerCase();
+}
+
+interface LoadedExtensionState {
+  entryId: string;
+  runtimeMode: ExtensionRuntimeMode;
+  commandNames: Set<string>;
+  toolNames: Set<string>;
+  modelProviderIds: Set<string>;
+  eventUnsubscribers: Set<() => void>;
+  handle: LoadedExtensionHandle | null;
+  inlineBlobUrl: string | null;
+}
+
+export interface ExtensionRuntimeStatus {
+  id: string;
+  name: string;
+  enabled: boolean;
+  loaded: boolean;
+  source: StoredExtensionSource;
+  sourceLabel: string;
+  trust: StoredExtensionTrust;
+  trustLabel: string;
+  runtimeMode: ExtensionRuntimeMode;
+  runtimeLabel: string;
+  permissions: StoredExtensionPermissions;
+  grantedCapabilities: ExtensionCapability[];
+  effectiveCapabilities: ExtensionCapability[];
+  permissionsEnforced: boolean;
+  commandNames: string[];
+  toolNames: string[];
+  modelProviderIds: string[];
+  lastError: string | null;
+}
+
+export interface ExtensionRuntimeManagerOptions {
+  settings: ExtensionSettingsStore;
+  connectionManager: ConnectionManager;
+  modelRuntime: BrowserModelRuntime;
+  getActiveAgent: () => Agent | null;
+  refreshRuntimeTools: () => Promise<void>;
+  refreshRuntimeModels: () => Promise<void>;
+  reservedToolNames: ReadonlySet<string>;
+  afterInjectAgentContext?: () => Promise<void> | void;
+  loadExtensionFromSource?: typeof loadExtension;
+  activateInSandbox?: typeof activateExtensionInSandbox;
+  showToastMessage?: typeof showToast;
+}
+
+export class ExtensionRuntimeManager {
+  private readonly settings: ExtensionSettingsStore;
+  private readonly connectionManager: ConnectionManager;
+  private readonly modelRuntime: BrowserModelRuntime;
+  private readonly getActiveAgent: () => Agent | null;
+  private readonly refreshRuntimeTools: () => Promise<void>;
+  private readonly refreshRuntimeModels: () => Promise<void>;
+  private readonly reservedToolNames: ReadonlySet<string>;
+  private readonly afterInjectAgentContext: (() => Promise<void> | void) | undefined;
+  private readonly loadExtensionFromSource: typeof loadExtension;
+  private readonly activateInSandbox: typeof activateExtensionInSandbox;
+  private readonly showToastMessage: typeof showToast;
+
+  private readonly listeners = new Set<ManagerListener>();
+  private readonly activeStates = new Map<string, LoadedExtensionState>();
+  private readonly extensionTools = new Map<string, AnyAgentTool>();
+  private readonly toolOwners = new Map<string, string>();
+  private readonly commandOwners = new Map<string, string>();
+  private readonly lastErrors = new Map<string, string>();
+
+  private entries: StoredExtensionEntry[] = [];
+  private initialized = false;
+  private extensionToolRevision = 0;
+
+  constructor(options: ExtensionRuntimeManagerOptions) {
+    this.settings = options.settings;
+    this.connectionManager = options.connectionManager;
+    this.modelRuntime = options.modelRuntime;
+    this.getActiveAgent = options.getActiveAgent;
+    this.refreshRuntimeTools = options.refreshRuntimeTools;
+    this.refreshRuntimeModels = options.refreshRuntimeModels;
+    this.reservedToolNames = options.reservedToolNames;
+    this.afterInjectAgentContext = options.afterInjectAgentContext;
+    this.loadExtensionFromSource = options.loadExtensionFromSource ?? loadExtension;
+    this.activateInSandbox = options.activateInSandbox ?? activateExtensionInSandbox;
+    this.showToastMessage = options.showToastMessage ?? showToast;
+  }
+
+  subscribe(listener: ManagerListener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  list(): ExtensionRuntimeStatus[] {
+    const permissionsEnforced = isExperimentalFeatureEnabled("extension_permission_gates");
+    const sandboxHostFallbackEnabled = isExperimentalFeatureEnabled("extension_sandbox_runtime");
+
+    return this.entries.map((entry) => {
+      const state = this.activeStates.get(entry.id);
+      const grantedCapabilities = listGrantedExtensionCapabilities(entry.permissions);
+      const effectiveCapabilities = permissionsEnforced
+        ? grantedCapabilities
+        : listAllExtensionCapabilities();
+      const runtimeMode = state
+        ? state.runtimeMode
+        : resolveExtensionRuntimeMode(entry.trust, sandboxHostFallbackEnabled);
+
+      return {
+        id: entry.id,
+        name: entry.name,
+        enabled: entry.enabled,
+        loaded: Boolean(state),
+        source: entry.source,
+        sourceLabel: describeExtensionSource(entry.source),
+        trust: entry.trust,
+        trustLabel: describeStoredExtensionTrust(entry.trust),
+        runtimeMode,
+        runtimeLabel: describeExtensionRuntimeMode(runtimeMode),
+        permissions: entry.permissions,
+        grantedCapabilities,
+        effectiveCapabilities,
+        permissionsEnforced,
+        commandNames: state ? Array.from(state.commandNames).sort() : [],
+        toolNames: state ? Array.from(state.toolNames).sort() : [],
+        modelProviderIds: state ? Array.from(state.modelProviderIds).sort() : [],
+        lastError: this.lastErrors.get(entry.id) ?? null,
+      };
+    });
+  }
+
+  getRegisteredTools(): AnyAgentTool[] {
+    return Array.from(this.extensionTools.values());
+  }
+
+  getToolRevision(): number {
+    return this.extensionToolRevision;
+  }
+
+  private bumpExtensionToolRevision(): void {
+    this.extensionToolRevision += 1;
+  }
+
+  async initialize(): Promise<void> {
+    if (this.initialized) {
+      return;
+    }
+
+    this.entries = await loadStoredExtensions(this.settings);
+
+    for (const entry of this.entries) {
+      if (!entry.enabled) {
+        continue;
+      }
+
+      await this.tryActivateEntry(entry);
+    }
+
+    this.initialized = true;
+    this.notify();
+  }
+
+  async reloadExtension(entryId: string): Promise<void> {
+    const entry = this.getEntryById(entryId);
+    if (!entry) {
+      throw new Error("Extension not found");
+    }
+
+    await this.deactivateEntry(entry.id);
+
+    if (entry.enabled) {
+      await this.tryActivateEntry(entry);
+    }
+
+    this.notify();
+  }
+
+  async setExtensionEnabled(entryId: string, enabled: boolean): Promise<void> {
+    const entry = this.getEntryById(entryId);
+    if (!entry) {
+      throw new Error("Extension not found");
+    }
+
+    if (entry.enabled === enabled) {
+      return;
+    }
+
+    entry.enabled = enabled;
+    entry.updatedAt = new Date().toISOString();
+    await this.persistEntries();
+
+    if (enabled) {
+      await this.tryActivateEntry(entry);
+    } else {
+      await this.deactivateEntry(entry.id);
+    }
+
+    this.notify();
+  }
+
+  async setExtensionCapability(
+    entryId: string,
+    capability: ExtensionCapability,
+    allowed: boolean,
+  ): Promise<void> {
+    const entry = this.getEntryById(entryId);
+    if (!entry) {
+      throw new Error("Extension not found");
+    }
+
+    const existing = isExtensionCapabilityAllowed(entry.permissions, capability);
+    if (existing === allowed) {
+      return;
+    }
+
+    entry.permissions = setExtensionCapabilityAllowed(entry.permissions, capability, allowed);
+    entry.updatedAt = new Date().toISOString();
+    await this.persistEntries();
+
+    if (entry.enabled) {
+      await this.reloadExtension(entry.id);
+      return;
+    }
+
+    this.notify();
+  }
+
+  async uninstallExtension(entryId: string): Promise<void> {
+    const entryIndex = this.entries.findIndex((entry) => entry.id === entryId);
+    if (entryIndex < 0) {
+      throw new Error("Extension not found");
+    }
+
+    await this.deactivateEntry(entryId);
+    this.connectionManager.unregisterDefinitionsByOwner(entryId);
+    await clearExtensionStorage(this.settings, entryId);
+    this.entries.splice(entryIndex, 1);
+    this.lastErrors.delete(entryId);
+
+    await this.persistEntries();
+    this.notify();
+  }
+
+  async installFromUrl(name: string, url: string): Promise<string> {
+    return this.installEntry({
+      name: normalizeExtensionName(name),
+      source: {
+        kind: "module",
+        specifier: normalizeRemoteUrl(url),
+      },
+    });
+  }
+
+  async installFromCode(name: string, code: string): Promise<string> {
+    return this.installEntry({
+      name: normalizeExtensionName(name),
+      source: {
+        kind: "inline",
+        code: normalizeInlineCode(code),
+      },
+    });
+  }
+
+  async installFromModuleSpecifier(name: string, specifier: string): Promise<string> {
+    const normalizedSpecifier = specifier.trim();
+    if (normalizedSpecifier.length === 0) {
+      throw new Error("Module specifier cannot be empty");
+    }
+
+    return this.installEntry({
+      name: normalizeExtensionName(name),
+      source: {
+        kind: "module",
+        specifier: normalizedSpecifier,
+      },
+    });
+  }
+
+  private notify(): void {
+    for (const listener of this.listeners) {
+      try {
+        listener();
+      } catch (error) {
+        console.warn("[pi] Extension manager listener failed:", getRuntimeManagerErrorMessage(error));
+      }
+    }
+  }
+
+  private getEntryById(entryId: string): StoredExtensionEntry | null {
+    return this.entries.find((entry) => entry.id === entryId) ?? null;
+  }
+
+  private async persistEntries(): Promise<void> {
+    await saveStoredExtensions(this.settings, this.entries);
+  }
+
+  private getRequiredActiveAgent(): Agent {
+    const activeAgent = this.getActiveAgent();
+    if (!activeAgent) {
+      throw new Error("No active runtime available for extension activation");
+    }
+
+    return activeAgent;
+  }
+
+  private async runExtensionLlmCompletion(
+    entry: StoredExtensionEntry,
+    request: LlmCompletionRequest,
+  ): Promise<LlmCompletionResult> {
+    const agent = this.getRequiredActiveAgent();
+
+    if (!isApiModel(agent.state.model)) {
+      throw new Error("Active model is unavailable for extension LLM completion.");
+    }
+
+    const model = resolveModelForCompletion({
+      models: this.modelRuntime.models,
+      fallbackModel: agent.state.model,
+      ...(request.model !== undefined ? { requestedModel: request.model } : {}),
+    });
+
+    const apiKey = agent.getApiKey ? await agent.getApiKey(model.provider) : undefined;
+    if (!apiKey) {
+      throw new Error(t("runtime.error.noApiKey", { provider: model.provider }));
+    }
+
+    if (!Array.isArray(request.messages)) {
+      throw new Error("llm.complete requires a messages array.");
+    }
+
+    const stream = await agent.streamFunction(
+      model,
+      {
+        ...(request.systemPrompt !== undefined ? { systemPrompt: request.systemPrompt } : {}),
+        messages: parseLlmMessages(request.messages, model),
+      },
+      {
+        apiKey,
+        sessionId: createExtensionLlmCompletionSessionId({
+          agentSessionId: agent.sessionId,
+          extensionId: entry.id,
+        }),
+        ...(request.maxTokens !== undefined ? { maxTokens: request.maxTokens } : {}),
+      },
+    );
+
+    const result = await stream.result();
+    if (result.stopReason === "error" || result.stopReason === "aborted") {
+      throw new Error(result.errorMessage ?? "LLM completion failed.");
+    }
+
+    return {
+      content: extractAssistantText(result),
+      model: `${result.provider}/${result.model}`,
+      usage: {
+        inputTokens: result.usage.input,
+        outputTokens: result.usage.output,
+      },
+    };
+  }
+
+  private async runExtensionHttpFetch(url: string, options?: HttpRequestOptions): Promise<HttpResponse> {
+    let parsedUrl: URL;
+
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      throw new Error("Invalid URL.");
+    }
+
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+      throw new Error("Only http:// and https:// URLs are supported.");
+    }
+
+    if (isBlockedExtensionHostname(parsedUrl.hostname)) {
+      throw new Error("Blocked target host: local and private-network addresses are not allowed.");
+    }
+
+    const normalizedOptions = normalizeHttpOptions(options);
+    const proxyBaseUrl = await getEnabledProxyBaseUrl(this.settings);
+    const resolved = resolveOutboundRequestUrl({
+      targetUrl: parsedUrl.toString(),
+      ...(proxyBaseUrl !== undefined ? { proxyBaseUrl } : {}),
+    });
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), normalizedOptions.timeoutMs);
+
+    try {
+      const requestInit: RequestInit = {
+        method: normalizedOptions.method,
+        headers: normalizedOptions.headers,
+        signal: controller.signal,
+        ...(normalizedOptions.body !== undefined ? { body: normalizedOptions.body } : {}),
+      };
+
+      const response = await fetch(resolved.requestUrl, requestInit);
+
+      const responseBody = await readLimitedResponseBody(response);
+      const headers: Record<string, string> = {};
+      response.headers.forEach((value, key) => {
+        headers[key] = value;
+      });
+
+      return {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+        body: responseBody,
+      };
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        throw new Error(`HTTP request timed out after ${normalizedOptions.timeoutMs}ms.`);
+      }
+
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  private async writeExtensionClipboard(text: string): Promise<void> {
+    if (typeof navigator === "undefined" || !navigator.clipboard) {
+      throw new Error("Clipboard API is unavailable.");
+    }
+
+    await navigator.clipboard.writeText(text);
+  }
+
+  private triggerExtensionDownload(filename: string, content: string, mimeType?: string): void {
+    const normalizedFilename = normalizeDownloadFilename(filename);
+    const blob = new Blob([content], {
+      type: mimeType && mimeType.trim().length > 0 ? mimeType : "text/plain;charset=utf-8",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = normalizedFilename;
+    anchor.style.display = "none";
+
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 0);
+  }
+
+  private resolveRuntimeMode(entry: StoredExtensionEntry): ExtensionRuntimeMode {
+    return resolveExtensionRuntimeMode(
+      entry.trust,
+      isExperimentalFeatureEnabled("extension_sandbox_runtime"),
+    );
+  }
+
+  private async installEntry(input: {
+    name: string;
+    source: StoredExtensionSource;
+  }): Promise<string> {
+    const now = new Date().toISOString();
+    const id = `ext.${crypto.randomUUID()}`;
+
+    const trust = deriveStoredExtensionTrust(id, input.source);
+    const entry: StoredExtensionEntry = {
+      id,
+      name: input.name,
+      enabled: true,
+      source: input.source,
+      trust,
+      permissions: getDefaultPermissionsForTrust(trust),
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.entries.push(entry);
+    await this.persistEntries();
+
+    await this.tryActivateEntry(entry);
+    this.notify();
+    return id;
+  }
+
+  private async tryActivateEntry(entry: StoredExtensionEntry): Promise<void> {
+    try {
+      await this.activateEntry(entry);
+      this.lastErrors.delete(entry.id);
+    } catch (error) {
+      const message = getRuntimeManagerErrorMessage(error);
+      this.lastErrors.set(entry.id, message);
+      console.warn(`[pi] Failed to load extension "${entry.name}": ${message}`);
+    }
+  }
+
+  private async activateEntry(entry: StoredExtensionEntry): Promise<void> {
+    await this.deactivateEntry(entry.id);
+    this.connectionManager.unregisterDefinitionsByOwner(entry.id);
+
+    const state: LoadedExtensionState = {
+      entryId: entry.id,
+      runtimeMode: this.resolveRuntimeMode(entry),
+      commandNames: new Set<string>(),
+      toolNames: new Set<string>(),
+      modelProviderIds: new Set<string>(),
+      eventUnsubscribers: new Set<() => void>(),
+      handle: null,
+      inlineBlobUrl: null,
+    };
+
+    let activationPhase = true;
+    let toolsChangedDuringActivation = false;
+    let modelsChangedDuringActivation = false;
+    const pendingToolConnectionChecks = new Map<string, readonly string[]>();
+    const pendingModelProviderChecks = new Map<string, ExtensionModelProviderDefinition>();
+
+    const assertToolConnectionOwnership = (
+      toolName: string,
+      requiredConnectionIds: readonly string[],
+    ): void => {
+      for (const connectionId of requiredConnectionIds) {
+        try {
+          this.connectionManager.assertConnectionOwnedBy(entry.id, connectionId);
+        } catch (error) {
+          const message = getRuntimeManagerErrorMessage(error);
+          throw new Error(`Tool "${toolName}" requires an invalid connection "${connectionId}": ${message}`);
+        }
+      }
+    };
+
+    const validatePendingToolConnectionChecks = (): void => {
+      for (const [toolName, requiredConnectionIds] of pendingToolConnectionChecks.entries()) {
+        assertToolConnectionOwnership(toolName, requiredConnectionIds);
+      }
+    };
+
+    const assertModelProviderConnection = (definition: ExtensionModelProviderDefinition): void => {
+      const connectionId = definition.connection;
+      if (!connectionId) {
+        if (definition.allowKeyless !== true) {
+          throw new Error(`Model provider "${definition.id}" requires a connection or allowKeyless: true.`);
+        }
+        return;
+      }
+
+      const apiKeySecret = definition.apiKeySecret?.trim();
+      if (!apiKeySecret) {
+        throw new Error(`Model provider "${definition.id}" requires apiKeySecret when connection is set.`);
+      }
+
+      this.connectionManager.assertConnectionOwnedBy(entry.id, connectionId);
+      const connection = this.connectionManager.getDefinition(connectionId);
+      if (!connection) {
+        throw new Error(`Model provider "${definition.id}" references an unknown connection.`);
+      }
+      if (!connection.secretFields.some((field) => field.id === apiKeySecret)) {
+        throw new Error(`Model provider "${definition.id}" references unknown secret field "${apiKeySecret}".`);
+      }
+
+      const allowedHosts = connection.httpAuth?.allowedHosts.map((host) => host.toLowerCase()) ?? [];
+      const endpointHosts = [endpointHostname(definition.baseUrl, "Provider baseUrl")];
+      if (definition.modelsUrl) {
+        endpointHosts.push(endpointHostname(definition.modelsUrl, "Provider modelsUrl"));
+      }
+      for (const host of endpointHosts) {
+        if (!allowedHosts.includes(host)) {
+          throw new Error(
+            `Model provider "${definition.id}" host "${host}" is not allowed by connection "${connectionId}".`,
+          );
+        }
+      }
+    };
+
+    const validatePendingModelProviderChecks = (): void => {
+      for (const definition of pendingModelProviderChecks.values()) {
+        assertModelProviderConnection(definition);
+      }
+    };
+
+    const refreshToolsForDynamicChange = (): void => {
+      void this.refreshRuntimeTools().catch((error: DynamicValue) => {
+        console.warn(`[pi] Failed to refresh tools after extension tool update: ${getRuntimeManagerErrorMessage(error)}`);
+      });
+    };
+
+    const registerCommand = (name: string, cmd: ExtensionCommand) => {
+      const existing = commandRegistry.get(name);
+      if (existing) {
+        throw new Error(`Command /${name} is already registered (${existing.source})`);
+      }
+
+      commandRegistry.register({
+        name,
+        description: cmd.description,
+        source: "extension",
+        execute: cmd.handler,
+        busyAllowed: cmd.busyAllowed ?? true,
+      });
+
+      this.commandOwners.set(name, entry.id);
+      state.commandNames.add(name);
+    };
+
+    const registerTool = (tool: AnyAgentTool) => {
+      if (this.reservedToolNames.has(tool.name)) {
+        throw new Error(`Tool name "${tool.name}" conflicts with a built-in tool`);
+      }
+
+      const existingOwner = this.toolOwners.get(tool.name);
+      if (existingOwner && existingOwner !== entry.id) {
+        throw new Error(`Tool name "${tool.name}" is already registered by another extension`);
+      }
+
+      if (state.toolNames.has(tool.name)) {
+        throw new Error(`Tool name "${tool.name}" is registered multiple times by this extension`);
+      }
+
+      assertToolExecuteFunction(tool, entry);
+
+      const requiredConnectionIds = getToolRequiredConnectionIds(tool);
+      if (activationPhase) {
+        pendingToolConnectionChecks.set(tool.name, requiredConnectionIds);
+      } else {
+        assertToolConnectionOwnership(tool.name, requiredConnectionIds);
+      }
+
+      const wrappedTool: AnyAgentTool = {
+        ...tool,
+        description: withExtensionToolDescription(tool, entry),
+        execute: async (toolCallId, params, signal, onUpdate) => {
+          try {
+            return await tool.execute(toolCallId, params, signal, onUpdate);
+          } catch (error) {
+            const message = getRuntimeManagerErrorMessage(error);
+            throw new Error(
+              `[Extension ${entry.name}] Tool "${tool.name}" failed: ${message}`,
+            );
+          }
+        },
+      };
+
+      if (requiredConnectionIds.length > 0) {
+        Reflect.set(wrappedTool, "requiresConnection", requiredConnectionIds);
+      }
+
+      this.toolOwners.set(wrappedTool.name, entry.id);
+      this.extensionTools.set(wrappedTool.name, wrappedTool);
+      this.bumpExtensionToolRevision();
+      state.toolNames.add(wrappedTool.name);
+
+      if (activationPhase) {
+        toolsChangedDuringActivation = true;
+      } else {
+        refreshToolsForDynamicChange();
+      }
+    };
+
+    const unregisterTool = (toolName: string): void => {
+      const normalizedName = toolName.trim();
+      if (normalizedName.length === 0) {
+        throw new Error("Tool name cannot be empty");
+      }
+
+      if (!state.toolNames.has(normalizedName)) {
+        throw new Error(`Tool name "${normalizedName}" is not registered by this extension`);
+      }
+
+      const owner = this.toolOwners.get(normalizedName);
+      if (owner !== entry.id) {
+        throw new Error(`Tool name "${normalizedName}" is not owned by this extension`);
+      }
+
+      state.toolNames.delete(normalizedName);
+      this.toolOwners.delete(normalizedName);
+      const deleted = this.extensionTools.delete(normalizedName);
+      if (deleted) {
+        this.bumpExtensionToolRevision();
+      }
+      pendingToolConnectionChecks.delete(normalizedName);
+
+      if (!activationPhase) {
+        refreshToolsForDynamicChange();
+      }
+    };
+
+    const refreshModelsForDynamicChange = (): void => {
+      void this.refreshRuntimeModels().catch((error: DynamicValue) => {
+        console.warn(`[pi] Failed to refresh models after extension provider update: ${getRuntimeManagerErrorMessage(error)}`);
+      });
+    };
+
+    const registerModelProvider = (rawDefinition: ExtensionModelProviderDefinition): string => {
+      const providerId = qualifyExtensionProviderId(entry.id, rawDefinition.id);
+      if (state.modelProviderIds.has(providerId)) {
+        throw new Error(`Model provider "${providerId}" is registered multiple times by this extension.`);
+      }
+
+      const connection = rawDefinition.connection
+        ? qualifyExtensionConnectionId(entry.id, rawDefinition.connection)
+        : undefined;
+      const definition: ExtensionModelProviderDefinition = {
+        ...rawDefinition,
+        id: providerId,
+        ...(connection !== undefined ? { connection } : {}),
+      };
+
+      if (activationPhase) {
+        pendingModelProviderChecks.set(providerId, definition);
+      } else {
+        assertModelProviderConnection(definition);
+      }
+
+      const registration: BrowserProviderRegistration = {
+        id: providerId,
+        name: definition.name,
+        api: definition.api,
+        baseUrl: definition.baseUrl,
+        models: definition.models,
+        resolveApiKey: async () => {
+          if (!connection || !definition.apiKeySecret) return undefined;
+          const snapshot = await this.connectionManager.getSnapshot(connection);
+          if (!snapshot || snapshot.status !== "connected") return undefined;
+          const secrets = await this.connectionManager.getSecretsForOwner(entry.id, connection);
+          return secrets?.[definition.apiKeySecret];
+        },
+        ...(definition.modelsUrl !== undefined ? { modelsUrl: definition.modelsUrl } : {}),
+        ...(definition.allowKeyless !== undefined ? { allowKeyless: definition.allowKeyless } : {}),
+      };
+
+      this.modelRuntime.registerExtensionProvider(entry.id, registration);
+      state.modelProviderIds.add(providerId);
+
+      if (activationPhase) {
+        modelsChangedDuringActivation = true;
+      } else {
+        refreshModelsForDynamicChange();
+      }
+      return providerId;
+    };
+
+    const unregisterModelProvider = (rawProviderId: string): void => {
+      const providerId = qualifyExtensionProviderId(entry.id, rawProviderId);
+      if (!state.modelProviderIds.has(providerId)) {
+        throw new Error(`Model provider "${providerId}" is not registered by this extension.`);
+      }
+
+      state.modelProviderIds.delete(providerId);
+      pendingModelProviderChecks.delete(providerId);
+      void this.modelRuntime.unregisterExtensionProvider(entry.id, providerId)
+        .then(() => {
+          if (!activationPhase) refreshModelsForDynamicChange();
+        })
+        .catch((error: DynamicValue) => {
+          console.warn(`[pi] Failed to unregister extension model provider: ${getRuntimeManagerErrorMessage(error)}`);
+        });
+    };
+
+    const refreshModelProviders = (): Promise<void> => this.refreshRuntimeModels();
+
+    const subscribeAgentEvents = (handler: (ev: AgentEvent) => void): (() => void) => {
+      const unsubscribe = this.getRequiredActiveAgent().subscribe(handler);
+      state.eventUnsubscribers.add(unsubscribe);
+
+      return () => {
+        if (!state.eventUnsubscribers.has(unsubscribe)) {
+          return;
+        }
+        state.eventUnsubscribers.delete(unsubscribe);
+        unsubscribe();
+      };
+    };
+
+    const isCapabilityEnabled = (capability: ExtensionCapability): boolean => {
+      if (!isExperimentalFeatureEnabled("extension_permission_gates")) {
+        return true;
+      }
+
+      return isExtensionCapabilityAllowed(entry.permissions, capability);
+    };
+
+    const formatCapabilityError = (capability: ExtensionCapability): string => {
+      const capabilityLabel = describeExtensionCapability(capability);
+      return (
+        `Permission denied for extension "${entry.name}": cannot ${capabilityLabel}. `
+        + "Disable /experimental extension-permissions or adjust extension permissions."
+      );
+    };
+
+    const widgetApiV2Enabled = isExperimentalFeatureEnabled("extension_widget_v2");
+    const activationBridge = buildRuntimeManagerActivationBridge({
+      entry,
+      settings: this.settings,
+      connectionManager: this.connectionManager,
+      getRequiredActiveAgent: () => this.getRequiredActiveAgent(),
+      ...(this.afterInjectAgentContext !== undefined
+        ? { afterInjectAgentContext: this.afterInjectAgentContext }
+        : {}),
+      runExtensionLlmCompletion: (request) => this.runExtensionLlmCompletion(entry, request),
+      runExtensionHttpFetch: (url, options) => this.runExtensionHttpFetch(url, options),
+      writeExtensionClipboard: (text) => this.writeExtensionClipboard(text),
+      triggerExtensionDownload: (filename, content, mimeType) => {
+        this.triggerExtensionDownload(filename, content, mimeType);
+      },
+      registerModelProvider,
+      unregisterModelProvider,
+      refreshModelProviders,
+      isCapabilityEnabled,
+      formatCapabilityError,
+      showToastMessage: this.showToastMessage,
+      widgetApiV2Enabled,
+    });
+
+    try {
+      if (state.runtimeMode === "sandbox-iframe") {
+        const source = entry.source.kind === "inline"
+          ? {
+            kind: "inline" as const,
+            code: entry.source.code,
+          }
+          : {
+            kind: "module" as const,
+            specifier: entry.source.specifier,
+          };
+
+        state.handle = await this.activateInSandbox({
+          instanceId: `${entry.id}.${crypto.randomUUID()}`,
+          extensionName: entry.name,
+          source,
+          registerCommand,
+          registerTool,
+          unregisterTool,
+          subscribeAgentEvents,
+          ...activationBridge.sandbox,
+        });
+      } else {
+        const api = createExtensionAPI({
+          registerCommand,
+          registerTool,
+          unregisterTool,
+          subscribeAgentEvents,
+          ...activationBridge.host,
+        });
+
+        let loadSource: string;
+        if (entry.source.kind === "inline") {
+          const blob = new Blob([entry.source.code], { type: "text/javascript" });
+          state.inlineBlobUrl = URL.createObjectURL(blob);
+          loadSource = state.inlineBlobUrl;
+        } else {
+          loadSource = entry.source.specifier;
+        }
+
+        state.handle = await this.loadExtensionFromSource(api, loadSource);
+      }
+
+      validatePendingToolConnectionChecks();
+      validatePendingModelProviderChecks();
+      pendingToolConnectionChecks.clear();
+      pendingModelProviderChecks.clear();
+
+      activationPhase = false;
+      this.activeStates.set(entry.id, state);
+
+      if (toolsChangedDuringActivation) {
+        await this.refreshRuntimeTools();
+      }
+      if (modelsChangedDuringActivation) {
+        await this.refreshRuntimeModels();
+      }
+    } catch (error) {
+      try {
+        await this.cleanupState(state);
+      } catch (cleanupError) {
+        console.warn(
+          `[pi] Extension cleanup after failed activation also failed: ${getRuntimeManagerErrorMessage(cleanupError)}`,
+        );
+      }
+
+      throw error;
+    }
+  }
+
+  private async deactivateEntry(entryId: string): Promise<void> {
+    const state = this.activeStates.get(entryId);
+    if (!state) {
+      return;
+    }
+
+    this.activeStates.delete(entryId);
+    await this.cleanupState(state);
+  }
+
+  private async cleanupState(state: LoadedExtensionState): Promise<void> {
+    const failures: string[] = [];
+
+    if (state.handle) {
+      try {
+        await state.handle.deactivate();
+      } catch (error) {
+        failures.push(getRuntimeManagerErrorMessage(error));
+      }
+    }
+
+    try {
+      clearExtensionWidgets(state.entryId);
+    } catch (error) {
+      failures.push(getRuntimeManagerErrorMessage(error));
+    }
+
+    for (const unsubscribe of state.eventUnsubscribers) {
+      try {
+        unsubscribe();
+      } catch (error) {
+        failures.push(getRuntimeManagerErrorMessage(error));
+      }
+    }
+    state.eventUnsubscribers.clear();
+
+    for (const commandName of state.commandNames) {
+      const owner = this.commandOwners.get(commandName);
+      if (owner === state.entryId) {
+        commandRegistry.unregister(commandName);
+        this.commandOwners.delete(commandName);
+      }
+    }
+    state.commandNames.clear();
+
+    let toolsChanged = false;
+    for (const toolName of state.toolNames) {
+      const owner = this.toolOwners.get(toolName);
+      if (owner !== state.entryId) {
+        continue;
+      }
+
+      this.toolOwners.delete(toolName);
+      const deleted = this.extensionTools.delete(toolName);
+      toolsChanged = toolsChanged || deleted;
+    }
+    if (toolsChanged) {
+      this.bumpExtensionToolRevision();
+    }
+    state.toolNames.clear();
+
+    let modelsChanged = false;
+    for (const providerId of state.modelProviderIds) {
+      try {
+        await this.modelRuntime.unregisterExtensionProvider(state.entryId, providerId);
+        modelsChanged = true;
+      } catch (error) {
+        failures.push(getRuntimeManagerErrorMessage(error));
+      }
+    }
+    state.modelProviderIds.clear();
+
+    try {
+      this.connectionManager.unregisterDefinitionsByOwner(state.entryId);
+    } catch (error) {
+      failures.push(getRuntimeManagerErrorMessage(error));
+    }
+
+    if (state.inlineBlobUrl) {
+      URL.revokeObjectURL(state.inlineBlobUrl);
+      state.inlineBlobUrl = null;
+    }
+
+    if (toolsChanged) {
+      try {
+        await this.refreshRuntimeTools();
+      } catch (error) {
+        failures.push(getRuntimeManagerErrorMessage(error));
+      }
+    }
+
+    if (modelsChanged) {
+      try {
+        await this.refreshRuntimeModels();
+      } catch (error) {
+        failures.push(getRuntimeManagerErrorMessage(error));
+      }
+    }
+
+    if (failures.length > 0) {
+      throw new Error(`Extension teardown failed:\n- ${failures.join("\n- ")}`);
+    }
+  }
+}

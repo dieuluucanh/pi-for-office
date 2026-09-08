@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pi for Excel — Login</title>
+  <link rel="icon" href="/assets/icon-32.png" type="image/png" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #111;
+      color: #e5e5e5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .card {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 16px;
+      padding: 40px 36px;
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+    }
+    .logo {
+      font-size: 48px;
+      font-weight: 700;
+      color: #4a9;
+      margin-bottom: 16px;
+    }
+    h1 {
+      font-size: 22px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #fff;
+    }
+    .subtitle {
+      font-size: 15px;
+      color: #999;
+      margin-bottom: 28px;
+      line-height: 1.5;
+    }
+    .url-box {
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 16px;
+      text-align: left;
+    }
+    .url-box label {
+      display: block;
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .url-text {
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 13px;
+      color: #d4d4d4;
+      word-break: break-all;
+      line-height: 1.5;
+      user-select: all;
+    }
+    .copy-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 28px;
+      border: none;
+      border-radius: 10px;
+      background: #4a9;
+      color: #111;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+    }
+    .copy-btn:hover { background: #5cb; }
+    .copy-btn:active { transform: scale(0.97); }
+    .copy-btn.copied { background: #5a5; }
+    .copy-btn svg { width: 18px; height: 18px; }
+    .steps {
+      margin-top: 28px;
+      padding-top: 24px;
+      border-top: 1px solid #333;
+      text-align: left;
+    }
+    .steps p {
+      font-size: 14px;
+      color: #999;
+      margin-bottom: 6px;
+      line-height: 1.6;
+    }
+    .steps strong { color: #ccc; }
+    .no-params {
+      color: #f88;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card" id="card">
+    <div class="logo">π</div>
+    <h1 id="title">Login successful!</h1>
+    <p class="subtitle" id="subtitle">Copy the URL below and paste it back in Pi for Excel.</p>
+    <div class="url-box" id="url-box">
+      <label>Your login URL</label>
+      <div class="url-text" id="url-text"></div>
+    </div>
+    <button class="copy-btn" id="copy-btn" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      Copy URL
+    </button>
+    <div class="steps">
+      <p><strong>Step 1:</strong> Click the button above to copy the URL.</p>
+      <p><strong>Step 2:</strong> Switch back to Excel.</p>
+      <p><strong>Step 3:</strong> Paste the URL into the login prompt and click Continue.</p>
+    </div>
+  </div>
+  <script>
+    (function () {
+      var fullUrl = window.location.href;
+      var params = new URLSearchParams(window.location.search);
+      var hasCode = params.has('code');
+
+      var urlTextEl = document.getElementById('url-text');
+      var copyBtn = document.getElementById('copy-btn');
+      var titleEl = document.getElementById('title');
+      var subtitleEl = document.getElementById('subtitle');
+
+      if (!hasCode) {
+        titleEl.textContent = 'Waiting for login…';
+        subtitleEl.textContent = 'If you see this page, your login redirect arrived but no authorization code was found. Try logging in again from Pi for Excel.';
+        document.getElementById('url-box').style.display = 'none';
+        copyBtn.style.display = 'none';
+        return;
+      }
+
+      urlTextEl.textContent = fullUrl;
+
+      copyBtn.addEventListener('click', function () {
+        navigator.clipboard.writeText(fullUrl).then(function () {
+          copyBtn.innerHTML =
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' +
+            ' Copied!';
+          copyBtn.classList.add('copied');
+          setTimeout(function () {
+            copyBtn.innerHTML =
+              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>' +
+              ' Copy URL';
+            copyBtn.classList.remove('copied');
+          }, 2000);
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

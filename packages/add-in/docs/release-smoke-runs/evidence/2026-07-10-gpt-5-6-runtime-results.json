@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 2,
+  "capturedAt": "2026-07-10",
+  "privacy": "Sanitized release evidence. The final host fixture was a new blank workbook; workbook content, prompt/response bodies, session/runtime IDs, credentials, and account identifiers are omitted.",
+  "build": {
+    "threeModelPassImplementationCommit": "0f43f4d656c9507cae17bf226c2e5c9306e1eab1",
+    "postReviewExactCodeCommit": "57ebeab7d8f121c95311c588d55b411575631299",
+    "postCodeqlPinnedTargetCommit": "22a36961149f4b1ff608c5badaf19188841bd4a0",
+    "piAiVersion": "0.80.6",
+    "piAgentCoreVersion": "0.80.6",
+    "proxyPackageVersion": "0.2.5-pre"
+  },
+  "excelMac": {
+    "hostVersion": "16.110.2",
+    "host": "real sideloaded Microsoft Excel for Mac taskpane",
+    "fixture": {
+      "kind": "new unsaved blank workbook",
+      "worksheetNames": [
+        "Sheet1"
+      ],
+      "selectedRange": "Sheet1!A1",
+      "selectedRangeWasBlank": true
+    },
+    "bridge": "tokened loopback background verification bridge",
+    "proxy": {
+      "urlOmitted": true,
+      "advertisedProxyCapability": true,
+      "advertisedCodexWebSocketCapability": true,
+      "targetRestriction": "exact ChatGPT Codex responses endpoint"
+    },
+    "selections": [
+      {
+        "provider": "openai-codex",
+        "id": "gpt-5.6-sol",
+        "name": "GPT-5.6 Sol",
+        "api": "openai-codex-responses",
+        "selectorMatch": "gpt-5.6-sol / openai-codex / 372k ctx / 128k out",
+        "contextWindow": 372000,
+        "maxTokens": 128000,
+        "thinkingLevel": "high",
+        "selected": true
+      },
+      {
+        "provider": "openai-codex",
+        "id": "gpt-5.6-terra",
+        "name": "GPT-5.6 Terra",
+        "api": "openai-codex-responses",
+        "selectorMatch": "gpt-5.6-terra / openai-codex / 372k ctx / 128k out",
+        "contextWindow": 372000,
+        "maxTokens": 128000,
+        "thinkingLevel": "high",
+        "selected": true
+      },
+      {
+        "provider": "openai-codex",
+        "id": "gpt-5.6-luna",
+        "name": "GPT-5.6 Luna",
+        "api": "openai-codex-responses",
+        "selectorMatch": "gpt-5.6-luna / openai-codex / 372k ctx / 128k out",
+        "contextWindow": 372000,
+        "maxTokens": 128000,
+        "thinkingLevel": "high",
+        "selected": true
+      }
+    ],
+    "completions": [
+      {
+        "provider": "openai-codex",
+        "model": "gpt-5.6-sol",
+        "api": "openai-codex-responses",
+        "stopReason": "stop",
+        "assistantTextLength": 12,
+        "fixedSentinelMatched": true,
+        "elapsedMs": 2009
+      },
+      {
+        "provider": "openai-codex",
+        "model": "gpt-5.6-terra",
+        "api": "openai-codex-responses",
+        "stopReason": "stop",
+        "assistantTextLength": 14,
+        "fixedSentinelMatched": true,
+        "elapsedMs": 2008
+      },
+      {
+        "provider": "openai-codex",
+        "model": "gpt-5.6-luna",
+        "api": "openai-codex-responses",
+        "transport": "browser HTTP/SSE facade to upstream Codex WebSocket",
+        "stopReason": "stop",
+        "assistantTextLength": 23,
+        "fixedSentinelMatched": true,
+        "elapsedMs": 2255
+      }
+    ],
+    "officeWriteProbe": {
+      "createdScratchSheet": true,
+      "formula": "SUM of two fixed numeric cells",
+      "formulaResult": 5,
+      "deletedScratchSheet": true,
+      "finalBlankFixtureRestored": true
+    },
+    "postReviewExactCodeRecheck": {
+      "commit": "57ebeab7d8f121c95311c588d55b411575631299",
+      "provider": "openai-codex",
+      "model": "gpt-5.6-luna",
+      "contextWindow": 372000,
+      "maxTokens": 128000,
+      "stopReason": "stop",
+      "assistantTextLength": 18,
+      "fixedSentinelMatched": true,
+      "elapsedMs": 2259,
+      "fixture": "new blank Book3 / Sheet1!A1"
+    },
+    "browserCorsProbe": {
+      "pageOrigin": "https://localhost:3141",
+      "status": 200,
+      "body": "ok",
+      "proxyHeaderVisibleToJavaScript": true,
+      "codexBridgeHeaderVisibleToJavaScript": true
+    },
+    "hostDiscipline": {
+      "frontmostSameApp": true,
+      "frontmostSameWindow": true,
+      "frontmostApp": "cmux"
+    }
+  },
+  "transportDiagnosis": {
+    "nativePiVersion": "0.80.6",
+    "originalBoundary": "Luna failed on the forced ChatGPT SSE route but completed through native Pi auto/WebSocket.",
+    "requiredParity": [
+      "native Pi upstream user-agent",
+      "UUIDv7 transport session identifier",
+      "response.create WebSocket envelope",
+      "responses_websockets=2026-02-06 beta header"
+    ],
+    "result": "The adapted Excel WebView path completed Luna successfully without changing the canonical provider or model ID."
+  }
+}

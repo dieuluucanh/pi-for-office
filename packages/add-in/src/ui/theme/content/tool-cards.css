@@ -1,0 +1,324 @@
+/* ── Tool cards — compact, collapsed by default ──────────── */
+
+/* Card base — used for inprogress + error; complete overrides below */
+.pi-tool-card {
+  border-radius: var(--pill-radius);
+  border: var(--pill-border);
+  background: var(--pill-bg);
+  box-shadow: var(--pill-shadow);
+  overflow: hidden;
+  min-width: 0;
+  transition: border-color var(--duration-normal), box-shadow var(--duration-normal), background var(--duration-normal);
+}
+.pi-tool-card:hover {
+  border-color: var(--pill-hover-border);
+}
+/* Error state — red tint */
+.pi-tool-card[data-state="error"] {
+  border: var(--pill-red-border);
+  background: var(--pill-red-bg);
+}
+.pi-tool-card[data-state="error"]:hover {
+  border-color: var(--pill-red-hover-border);
+}
+
+/* Complete standalone — green tint */
+.pi-tool-card[data-state="complete"] {
+  border: var(--pill-green-border);
+  background: var(--pill-green-bg);
+  box-shadow: none;
+}
+.pi-tool-card[data-state="complete"]:hover {
+  border-color: var(--pill-green-hover-border);
+}
+
+/* Complete inside group — strip card chrome (group provides the container) */
+.pi-tool-group .pi-tool-card[data-state="complete"] {
+  border: none;
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+  margin-right: 0;
+}
+.pi-tool-group .pi-tool-card[data-state="complete"]:hover {
+  border-color: transparent;
+}
+/* Grouped rows: inset 4px from the group border so the hover highlight
+   reads concentric (16px group − 4px inset = 12px row radius) and row
+   text aligns with the group-header label (4px + 8px = 12px pill x). */
+.pi-tool-group .pi-tool-card[data-state="complete"] .pi-tool-card__toggle {
+  width: calc(100% - 8px);
+  margin: 0 4px;
+  padding: 3px 8px;
+  border-radius: var(--radius-md);
+}
+.pi-tool-group .pi-tool-card[data-state="complete"] .pi-tool-card__toggle:hover {
+  background: var(--alpha-4);
+}
+/* Grouped: inner pill needs margins since card chrome is stripped */
+.pi-tool-group .pi-tool-card[data-state="complete"] .pi-tool-card__inner {
+  margin: 4px 8px 6px;
+}
+
+/* Header — local tool-card toggle markup */
+.pi-tool-card__toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+  padding: var(--pill-padding-y) var(--pill-padding-x);
+  font-size: var(--text-base);
+  color: var(--muted-foreground);
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pi-tool-card__toggle-main {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.pi-tool-card__toggle-chevron {
+  display: inline-flex;
+  align-items: center;
+  color: var(--muted-foreground);
+  flex-shrink: 0;
+}
+
+.pi-tool-card__toggle--static {
+  cursor: default;
+}
+
+.pi-tool-card__spinner {
+  display: inline-flex;
+  align-items: center;
+  color: var(--foreground);
+  flex-shrink: 0;
+  animation: pi-think-spin 0.7s linear infinite;
+}
+
+/* Title — match thinking block: same font, muted → foreground on hover */
+.pi-tool-card__title {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: 400;
+  color: var(--muted-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  transition: color var(--duration-fast);
+}
+
+.pi-tool-card__toggle:hover .pi-tool-card__title {
+  color: var(--foreground);
+}
+.pi-tool-card__title strong {
+  font-weight: 400;
+}
+.pi-tool-card__detail-text {
+  font-size: var(--text-sm);
+  opacity: 0.7;
+}
+.pi-tool-card[data-state="complete"] .pi-tool-card__title {
+  color: var(--muted-foreground);
+}
+.pi-tool-card[data-state="error"] .pi-tool-card__title {
+  color: var(--destructive);
+}
+
+/* Body — revealed on expand.
+   Collapse state is first-party: templates render the body with
+   .pi-tool-card__body--collapsed and JS toggles that class
+   (tool-card-header.ts click toggle, keyboard-shortcuts.ts expand-all). */
+.pi-tool-card__body {
+  max-height: 2000px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  transition: max-height 300ms ease;
+  scrollbar-width: thin;
+}
+
+.pi-tool-card__body--collapsed {
+  max-height: 0;
+}
+/* Inner pill — white content area nested inside green/white outer pill */
+.pi-tool-card__inner {
+  padding: 10px 14px 14px;
+  margin: 0 8px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--pi-inner-bg);
+}
+
+/* Tool identifier — subtle mono label */
+.pi-tool-card__detail {
+  padding: 8px 0 2px;
+}
+.pi-tool-card__tool-id {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+  opacity: 0.55;
+  letter-spacing: 0.02em;
+}
+
+/* Sections (Input / Output) */
+.pi-tool-card__section {
+  margin-top: 10px;
+}
+.pi-tool-card__section-label {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+
+/* ── Humanized param list ─────────────────────────────────── */
+
+.pi-params {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1px 10px;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  padding: 2px 0;
+}
+
+.pi-params__row {
+  display: contents;
+}
+
+.pi-params__label {
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  padding-top: 1px;
+}
+
+.pi-params__value {
+  color: var(--foreground);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pi-params__more {
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+}
+
+.pi-params__code {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  background: var(--muted);
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+}
+
+/* Color chip — small inline circle swatch */
+.pi-color-chip {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--alpha-15);
+  vertical-align: middle;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+.pi-color-chip-label {
+  vertical-align: middle;
+}
+
+/* Clickable cell references — navigate to the range in Excel */
+.pi-cell-ref {
+  cursor: pointer;
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: oklch(0.45 0.12 160 / 0.35);
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+  transition: text-decoration-color var(--duration-fast), color var(--duration-fast);
+}
+.pi-cell-ref:hover {
+  color: var(--pi-green);
+  text-decoration-color: oklch(0.45 0.12 160 / 0.6);
+}
+
+/* Data preview — mini table for write_cells values */
+.pi-data-preview {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  border-collapse: collapse;
+  margin-top: 3px;
+  line-height: 1.4;
+}
+
+.pi-data-preview td {
+  padding: 1px 8px 1px 0;
+  white-space: nowrap;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pi-data-preview__fade {
+  color: var(--muted-foreground);
+  font-style: italic;
+  font-size: var(--text-xs);
+}
+
+
+/* ── Tool result images (charts, screenshots) ── */
+
+.pi-tool-images {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.pi-tool-image-frame {
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--background);
+}
+
+.pi-tool-images .pi-tool-image-frame {
+  margin-top: 0;
+}
+
+.pi-tool-image {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.pi-tool-image-link {
+  font-size: var(--text-sm);
+}
+
+.pi-tool-image-link__anchor {
+  text-decoration: underline;
+}
+
+.pi-tool-image-link__path {
+  margin-top: 4px;
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--muted-foreground);
+  word-break: break-all;
+}

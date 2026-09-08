@@ -1,0 +1,24 @@
+/**
+ * Component-level UI styles.
+ *
+ * This file is an import-only entrypoint so modules can stay focused and
+ * maintainable without changing final cascade order.
+ */
+
+@import "./components/tabs.css";
+@import "./components/input.css";
+@import "./components/empty-state.css";
+@import "./components/working-indicator.css";
+@import "./components/widgets.css";
+@import "./components/status-bar.css";
+@import "./components/toasts.css";
+@import "./components/menus.css";
+@import "./components/welcome.css";
+@import "./components/files.css";
+@import "./components/welcome-login.css";
+@import "./components/toggle.css";
+@import "./components/disclosure-bar.css";
+@import "./components/proxy-banner.css";
+@import "./components/web-search-setup.css";
+@import "./components/bridge-setup.css";
+@import "./components/extensions-hub.css";

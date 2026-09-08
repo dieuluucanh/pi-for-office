@@ -1,0 +1,120 @@
+/* ═══════════════════════════════════════════════════════
+   12. DIALOGS — first-party model selector + provider connect
+   Components: src/ui/model-selector-dialog.ts, src/ui/api-key-dialog.ts.
+   Both mount inside .pi-welcome-overlay via createOverlayDialog().
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Model selector ── */
+
+.pi-model-selector-card {
+  display: flex;
+  flex-direction: column;
+  width: min(340px, 92vw);
+  height: min(500px, 78vh);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--glass-shadow-lg);
+  border: var(--glass-border);
+  background: var(--glass-bg-solid);
+  overflow: hidden;
+}
+
+.pi-model-selector-card .pi-overlay-header {
+  padding: 16px 16px 0;
+}
+
+.pi-model-selector-search {
+  margin: 12px 16px;
+  flex-shrink: 0;
+}
+
+.pi-model-selector-list {
+  flex: 1;
+  overflow-y: auto;
+  border-top: 1px solid var(--alpha-6);
+  scrollbar-width: thin;
+  scrollbar-color: var(--alpha-12) transparent;
+}
+
+.pi-model-selector-item {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--alpha-4);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pi-model-selector-item--selected {
+  background: var(--pi-green-lighter);
+}
+
+.pi-model-selector-item-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.pi-model-selector-item-id {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pi-model-selector-item-check {
+  color: var(--pi-green-strong);
+  font-size: var(--text-sm);
+  flex-shrink: 0;
+}
+
+.pi-model-selector-item-provider {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.01em;
+  color: var(--muted-foreground);
+  border: 1px solid var(--alpha-6);
+  background: var(--alpha-3);
+  border-radius: var(--radius-xs);
+  padding: 1px 6px;
+}
+
+.pi-model-selector-item-meta {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+}
+
+.pi-model-selector-empty {
+  padding: 24px 16px;
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+/* ── Provider connect (API key / OAuth) ── */
+
+.pi-api-key-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(340px, 92vw);
+  max-height: 78vh;
+  overflow-y: auto;
+  padding: 16px;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--glass-shadow-lg);
+  border: var(--glass-border);
+  background: var(--glass-bg-solid);
+  scrollbar-width: thin;
+  scrollbar-color: var(--alpha-12) transparent;
+}

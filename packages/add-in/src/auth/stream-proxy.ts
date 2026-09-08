@@ -1,0 +1,631 @@
+/**
+ * Office taskpanes run in a browser webview.
+ *
+ * Many LLM providers (and especially subscription / OAuth-based flows) either:
+ * - block browser requests via CORS, or
+ * - require the "anthropic-dangerous-direct-browser-access" header, which some orgs disable.
+ *
+ * We route requests through a user-configured local CORS proxy when enabled.
+ */
+
+import { uuidv7 } from "@earendil-works/pi-agent-core";
+import type {
+  Api,
+  AssistantMessageEventStream,
+  Context,
+  Model,
+  Models,
+  StreamOptions,
+} from "@earendil-works/pi-ai";
+
+import { isDebugEnabled } from "../debug/debug.js";
+import { selectToolBundle, type ToolBundleId } from "../context/tool-disclosure.js";
+import { modelRecencyScore } from "../models/model-ordering.js";
+import { OPENAI_GATEWAY_PROVIDER_PREFIX } from "./custom-gateways.js";
+import {
+  createPrefixFingerprint,
+  type PrefixChangeReason,
+  PrefixChangeTracker,
+} from "./prefix-churn.js";
+import {
+  normalizeProxyUrl,
+  probeCodexWebSocketBridge,
+  validateOfficeProxyUrl,
+} from "./proxy-validation.js";
+
+export type GetProxyUrl = () => Promise<string | undefined>;
+type OfficeStreamFn = (
+  model: Model<Api>,
+  context: Context,
+  options?: StreamOptions,
+) => Promise<AssistantMessageEventStream>;
+
+function shouldProxyProvider(
+  provider: string,
+  apiKey?: string,
+  isRuntimeProvider?: (providerId: string) => boolean,
+): boolean {
+  if (isRuntimeProvider?.(provider)) {
+    return true;
+  }
+
+  const p = provider.toLowerCase();
+
+  if (p.startsWith(OPENAI_GATEWAY_PROVIDER_PREFIX.toLowerCase())) {
+    return true;
+  }
+
+  switch (p) {
+    // Known to require proxy in browser webviews (CORS blocked)
+    case "openai-codex":
+      return true;
+
+    // Anthropic OAuth tokens are blocked by CORS; some orgs also block direct browser access.
+    // We proxy OAuth tokens (sk-ant-oat-*) unconditionally.
+    case "anthropic":
+      return typeof apiKey === "string" && apiKey.startsWith("sk-ant-oat");
+
+    // Google Cloud Code Assist providers frequently require proxy in Office webviews.
+    case "google-gemini-cli":
+    case "google-antigravity":
+      return true;
+
+    // Z-AI always requires proxy (matches pi-web-ui default)
+    case "zai":
+      return true;
+
+    default:
+      return false;
+  }
+}
+
+type OfficeProxyTransport = "codex-websocket";
+
+function applyProxy(
+  model: Model<Api>,
+  proxyUrl: string,
+  transport?: OfficeProxyTransport,
+): Model<Api> {
+  if (!model.baseUrl) return model;
+  if (!/^https?:\/\//i.test(model.baseUrl)) return model;
+
+  const normalizedProxy = normalizeProxyUrl(proxyUrl);
+
+  // Avoid double-proxying
+  if (model.baseUrl.startsWith(`${normalizedProxy}/?`)) return model;
+
+  const transportQuery = transport ? `pi_transport=${transport}&` : "";
+  return {
+    ...model,
+    baseUrl: `${normalizedProxy}/?${transportQuery}url=${encodeURIComponent(model.baseUrl)}`,
+  };
+}
+
+export function requiresCodexWebSocketBridge(model: Pick<Model<Api>, "id" | "provider">): boolean {
+  return model.provider === "openai-codex" && model.id === "gpt-5.6-luna";
+}
+
+type GoogleOAuthProvider = "google-gemini-cli" | "google-antigravity";
+
+const GOOGLE_CODE_ASSIST_DEFAULT_BASE_URL = "https://cloudcode-pa.googleapis.com";
+
+function isGoogleOAuthProvider(provider: string): provider is GoogleOAuthProvider {
+  return provider === "google-gemini-cli" || provider === "google-antigravity";
+}
+
+function pickPreferredGoogleOAuthModel(
+  modelsRuntime: Models,
+  provider: GoogleOAuthProvider,
+): Model<Api> | null {
+  const models = [...modelsRuntime.getModels(provider)];
+
+  const stablePro = models
+    .filter((m) => /^gemini-(?!.*preview).*?-pro/i.test(m.id))
+    .sort((a, b) => modelRecencyScore(a.id) - modelRecencyScore(b.id));
+  if (stablePro.length > 0) {
+    return stablePro[stablePro.length - 1] ?? null;
+  }
+
+  const stableAny = models
+    .filter((m) => /^gemini-(?!.*preview)/i.test(m.id))
+    .sort((a, b) => modelRecencyScore(a.id) - modelRecencyScore(b.id));
+  if (stableAny.length > 0) {
+    return stableAny[stableAny.length - 1] ?? null;
+  }
+
+  const geminiAny = models
+    .filter((m) => /^gemini-/i.test(m.id))
+    .sort((a, b) => modelRecencyScore(a.id) - modelRecencyScore(b.id));
+  return geminiAny[geminiAny.length - 1] ?? null;
+}
+
+function normalizeGoogleOAuthModel(modelsRuntime: Models, model: Model<Api>): Model<Api> {
+  const provider = model.provider;
+  if (!isGoogleOAuthProvider(provider)) {
+    return model;
+  }
+
+  let normalized: Model<Api> = model;
+
+  if (/preview/i.test(normalized.id)) {
+    const fallbackModel = pickPreferredGoogleOAuthModel(modelsRuntime, provider);
+    if (fallbackModel) {
+      normalized = fallbackModel;
+    }
+  }
+
+  if (provider === "google-antigravity" && !normalized.baseUrl) {
+    normalized = {
+      ...normalized,
+      baseUrl: GOOGLE_CODE_ASSIST_DEFAULT_BASE_URL,
+    };
+  }
+
+  return normalized;
+}
+
+/**
+ * Is this call a tool-result continuation?
+ *
+ * Used for debug/telemetry (payload snapshots and status pills), not for
+ * capability gating. Continuations still receive a deterministic tool bundle
+ * so the agent can complete multi-step tool loops in a single turn.
+ */
+function isToolContinuation(messages: Context["messages"]): boolean {
+  if (messages.length === 0) return false;
+  const last = messages[messages.length - 1];
+  if (!last) return false;
+  return last.role === "toolResult";
+}
+
+// ---------------------------------------------------------------------------
+// Payload stats — lightweight counters for debug pill in status bar.
+// ---------------------------------------------------------------------------
+
+export interface PayloadStats {
+  /** LLM calls since app start. */
+  calls: number;
+  /** Chars of system prompt on last call. */
+  systemChars: number;
+  /** Chars of tool schemas (compact JSON) on last call, 0 if no tools. */
+  toolSchemaChars: number;
+  /** Number of tool definitions on last call, 0 if no tools. */
+  toolCount: number;
+  /** Number of messages on last call. */
+  messageCount: number;
+  /** Total chars of all messages (JSON-serialized) on last call. */
+  messageChars: number;
+  /** Number of calls where cached prefix fingerprint changed within a session. */
+  prefixChanges: number;
+  /** Prefix changes attributed to model identity changes. */
+  prefixModelChanges: number;
+  /** Prefix changes attributed to system prompt changes. */
+  prefixSystemPromptChanges: number;
+  /** Prefix changes attributed to tool schema changes. */
+  prefixToolChanges: number;
+}
+
+export interface PayloadShapeSummary {
+  rootType: "object" | "array" | "primitive" | "null";
+  topLevelKeys: string[];
+  rootArrayLength?: number;
+  arrayFields: Array<{ key: string; length: number }>;
+}
+
+export interface PayloadSnapshot {
+  call: number;
+  timestamp: number;
+  sessionId?: string;
+  provider: string;
+  modelId: string;
+  isToolContinuation: boolean;
+  toolBundle: ToolBundleId;
+  toolsIncluded: boolean;
+  systemChars: number;
+  toolSchemaChars: number;
+  messageChars: number;
+  totalChars: number;
+  toolCount: number;
+  messageCount: number;
+  prefixChanged: boolean;
+  prefixChangeReasons: PrefixChangeReason[];
+  payloadShape?: PayloadShapeSummary;
+}
+
+const stats: PayloadStats = {
+  calls: 0,
+  systemChars: 0,
+  toolSchemaChars: 0,
+  toolCount: 0,
+  messageCount: 0,
+  messageChars: 0,
+  prefixChanges: 0,
+  prefixModelChanges: 0,
+  prefixSystemPromptChanges: 0,
+  prefixToolChanges: 0,
+};
+
+/**
+ * Debug retention limits.
+ *
+ * Why 24?
+ * - Large enough to inspect recent multi-step tool loops in one session
+ *   (typically several user turns with follow-up calls).
+ * - Small enough to keep memory bounded in long-lived taskpane sessions.
+ *
+ * If we need deeper forensic traces, we can raise this temporarily,
+ * but should keep it bounded to avoid silent memory growth.
+ */
+const MAX_PAYLOAD_SNAPSHOTS = 24;
+
+/**
+ * Number of session-scoped contexts kept for debug inspection.
+ *
+ * This is separate from the per-call ring buffer above and is capped for
+ * the same reason: preserve useful visibility without unbounded retention.
+ */
+const MAX_SESSION_CONTEXTS = 24;
+
+const payloadSnapshots: PayloadSnapshot[] = [];
+
+/** Snapshot of the last LLM context (only kept when debug is on). */
+let lastContext: Context | undefined;
+const lastContextBySession = new Map<string, Context>();
+const prefixChangeTracker = new PrefixChangeTracker({
+  maxTrackedSessions: MAX_SESSION_CONTEXTS,
+});
+
+export function getPayloadStats(): Readonly<PayloadStats> {
+  return stats;
+}
+
+export function getPayloadSnapshots(): readonly PayloadSnapshot[] {
+  if (!isDebugEnabled()) return [];
+  return payloadSnapshots;
+}
+
+export function getLastContext(sessionId?: string): Context | undefined {
+  if (!isDebugEnabled()) return undefined;
+  if (sessionId) return lastContextBySession.get(sessionId);
+  return lastContext;
+}
+
+function getSessionId(options: StreamOptions | undefined): string | undefined {
+  const sessionId = options?.sessionId;
+  if (typeof sessionId !== "string") return undefined;
+  if (sessionId.trim().length === 0) return undefined;
+  return sessionId;
+}
+
+function isAuthStreamProxyPayloadShape(value: DynamicValue): value is DynamicObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function summarizePayloadShape(payload: DynamicValue): PayloadShapeSummary {
+  if (payload === null) {
+    return {
+      rootType: "null",
+      topLevelKeys: [],
+      arrayFields: [],
+    };
+  }
+
+  if (Array.isArray(payload)) {
+    return {
+      rootType: "array",
+      topLevelKeys: [],
+      rootArrayLength: payload.length,
+      arrayFields: [],
+    };
+  }
+
+  if (!isAuthStreamProxyPayloadShape(payload)) {
+    return {
+      rootType: "primitive",
+      topLevelKeys: [],
+      arrayFields: [],
+    };
+  }
+
+  const entries = Object.entries(payload);
+  const arrayFields: Array<{ key: string; length: number }> = [];
+  for (const [key, value] of entries) {
+    if (Array.isArray(value)) {
+      arrayFields.push({ key, length: value.length });
+    }
+  }
+
+  return {
+    rootType: "object",
+    topLevelKeys: entries.map(([key]) => key).sort(),
+    arrayFields,
+  };
+}
+
+function pushSnapshot(snapshot: PayloadSnapshot): void {
+  payloadSnapshots.push(snapshot);
+  if (payloadSnapshots.length > MAX_PAYLOAD_SNAPSHOTS) {
+    const overflow = payloadSnapshots.length - MAX_PAYLOAD_SNAPSHOTS;
+    payloadSnapshots.splice(0, overflow);
+  }
+}
+
+function setSessionContext(sessionId: string, context: Context): void {
+  // Refresh insertion order to behave like an LRU cache.
+  if (lastContextBySession.has(sessionId)) {
+    lastContextBySession.delete(sessionId);
+  }
+  lastContextBySession.set(sessionId, context);
+
+  if (lastContextBySession.size <= MAX_SESSION_CONTEXTS) return;
+
+  const oldestEntry = lastContextBySession.keys().next();
+  if (!oldestEntry.done) {
+    lastContextBySession.delete(oldestEntry.value);
+  }
+}
+
+function upsertPayloadShape(call: number, payload: DynamicValue): void {
+  let index = -1;
+  for (let i = payloadSnapshots.length - 1; i >= 0; i -= 1) {
+    const snapshot = payloadSnapshots[i];
+    if (snapshot?.call === call) {
+      index = i;
+      break;
+    }
+  }
+  if (index < 0) return;
+
+  const snapshot = payloadSnapshots[index];
+  if (!snapshot) return;
+
+  payloadSnapshots[index] = {
+    ...snapshot,
+    payloadShape: summarizePayloadShape(payload),
+  };
+
+  document.dispatchEvent(new Event("pi:status-update"));
+}
+
+function recordCall(
+  model: Model<Api>,
+  context: Context,
+  options: StreamOptions | undefined,
+  continuation: boolean,
+  toolBundle: ToolBundleId,
+): { call: number; captureSnapshot: boolean } {
+  stats.calls += 1;
+  stats.systemChars = context.systemPrompt?.length ?? 0;
+  stats.messageCount = context.messages.length;
+
+  let msgChars = 0;
+  for (const m of context.messages) msgChars += JSON.stringify(m).length;
+  stats.messageChars = msgChars;
+
+  if (context.tools) {
+    stats.toolCount = context.tools.length;
+    let chars = 0;
+    for (const t of context.tools) chars += JSON.stringify(t).length;
+    stats.toolSchemaChars = chars;
+  } else {
+    stats.toolCount = 0;
+    stats.toolSchemaChars = 0;
+  }
+
+  const sessionId = getSessionId(options);
+  const prefixFingerprint = createPrefixFingerprint(model, context);
+  const prefixChangeReasons = prefixChangeTracker.observe(sessionId, prefixFingerprint);
+  const prefixChanged = prefixChangeReasons.length > 0;
+
+  if (prefixChanged) {
+    stats.prefixChanges += 1;
+    for (const reason of prefixChangeReasons) {
+      if (reason === "model") {
+        stats.prefixModelChanges += 1;
+        continue;
+      }
+
+      if (reason === "systemPrompt") {
+        stats.prefixSystemPromptChanges += 1;
+        continue;
+      }
+
+      stats.prefixToolChanges += 1;
+    }
+  }
+
+  const call = stats.calls;
+  const captureSnapshot = isDebugEnabled();
+
+  if (captureSnapshot) {
+    lastContext = context;
+
+    if (sessionId) {
+      setSessionContext(sessionId, context);
+    }
+
+    const totalChars = stats.systemChars + stats.toolSchemaChars + stats.messageChars;
+    const snapshot: PayloadSnapshot = {
+      call,
+      timestamp: Date.now(),
+      provider: model.provider,
+      modelId: model.id,
+      isToolContinuation: continuation,
+      toolBundle,
+      toolsIncluded: stats.toolCount > 0,
+      systemChars: stats.systemChars,
+      toolSchemaChars: stats.toolSchemaChars,
+      messageChars: stats.messageChars,
+      totalChars,
+      toolCount: stats.toolCount,
+      messageCount: stats.messageCount,
+      prefixChanged,
+      prefixChangeReasons: prefixChangeReasons.slice(),
+    };
+    if (sessionId !== undefined) {
+      snapshot.sessionId = sessionId;
+    }
+    pushSnapshot(snapshot);
+  }
+
+  document.dispatchEvent(new Event("pi:status-update"));
+  return { call, captureSnapshot };
+}
+
+function withPayloadHook(
+  options: StreamOptions | undefined,
+  call: number,
+  captureSnapshot: boolean,
+): StreamOptions | undefined {
+  const originalOnPayload = options?.onPayload;
+  if (!captureSnapshot && !originalOnPayload) return options;
+
+  const onPayload: NonNullable<StreamOptions["onPayload"]> = (payload, model) => {
+    if (captureSnapshot) {
+      upsertPayloadShape(call, payload);
+    }
+    return originalOnPayload?.(payload, model);
+  };
+
+  if (options) return { ...options, onPayload };
+  return { onPayload };
+}
+
+/**
+ * Create a StreamFn compatible with Agent that proxies provider base URLs when needed.
+ */
+interface CodexBridgeCapabilityCacheEntry {
+  checkedAt: number;
+  supported: boolean;
+}
+
+const CODEX_BRIDGE_SUPPORTED_TTL_MS = 60_000;
+const CODEX_BRIDGE_UNAVAILABLE_TTL_MS = 3_000;
+const MAX_CODEX_BRIDGE_SESSION_IDS = 256;
+const UUID_V7_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+const codexBridgeCapabilityCache = new Map<string, CodexBridgeCapabilityCacheEntry>();
+const codexBridgeSessionIds = new Map<string, string>();
+
+export function resolveCodexWebSocketBridgeSessionId(sessionId?: string): string {
+  if (sessionId && UUID_V7_PATTERN.test(sessionId)) {
+    return sessionId;
+  }
+
+  const cacheKey = sessionId?.trim();
+  if (!cacheKey) {
+    return uuidv7();
+  }
+
+  const cached = codexBridgeSessionIds.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const generated = uuidv7();
+  codexBridgeSessionIds.set(cacheKey, generated);
+  if (codexBridgeSessionIds.size > MAX_CODEX_BRIDGE_SESSION_IDS) {
+    const oldestKey = codexBridgeSessionIds.keys().next().value;
+    if (typeof oldestKey === "string") {
+      codexBridgeSessionIds.delete(oldestKey);
+    }
+  }
+  return generated;
+}
+
+async function proxySupportsCodexWebSocketBridge(proxyUrl: string): Promise<boolean> {
+  const normalized = normalizeProxyUrl(proxyUrl);
+  const cached = codexBridgeCapabilityCache.get(normalized);
+  const cacheTtlMs = cached?.supported
+    ? CODEX_BRIDGE_SUPPORTED_TTL_MS
+    : CODEX_BRIDGE_UNAVAILABLE_TTL_MS;
+  if (cached && Date.now() - cached.checkedAt < cacheTtlMs) {
+    return cached.supported;
+  }
+
+  const supported = await probeCodexWebSocketBridge(normalized);
+  codexBridgeCapabilityCache.set(normalized, { checkedAt: Date.now(), supported });
+  return supported;
+}
+
+export function createOfficeStreamFn(
+  getProxyUrl: GetProxyUrl,
+  modelsRuntime: Models,
+  isRuntimeProvider?: (providerId: string) => boolean,
+): OfficeStreamFn {
+  return async (model: Model<Api>, context: Context, options?: StreamOptions) => {
+    const continuation = isToolContinuation(context.messages);
+
+    // Always expose tools (via deterministic bundle selection), including
+    // continuation calls after tool results. This preserves full agent loops.
+    const toolSelection = selectToolBundle(context);
+
+    const effectiveContext = (() => {
+      if (toolSelection.tools === context.tools) {
+        return context;
+      }
+
+      if (toolSelection.tools !== undefined) {
+        return { ...context, tools: toolSelection.tools };
+      }
+
+      const { tools: _tools, ...contextWithoutTools } = context;
+      return contextWithoutTools;
+    })();
+
+    const normalizedModel = normalizeGoogleOAuthModel(modelsRuntime, model);
+
+    const callRecord = recordCall(
+      normalizedModel,
+      effectiveContext,
+      options,
+      continuation,
+      toolSelection.bundleId,
+    );
+    const effectiveOptions = withPayloadHook(options, callRecord.call, callRecord.captureSnapshot);
+
+    const proxyUrl = await getProxyUrl();
+    const needsCodexBridge = requiresCodexWebSocketBridge(normalizedModel);
+    if (!proxyUrl) {
+      if (needsCodexBridge) {
+        throw new Error(
+          "GPT-5.6 Luna currently requires the latest Pi for Excel proxy for ChatGPT WebSocket transport. " +
+          "Enable Proxy in Settings and run: npx -y pi-for-excel-proxy@latest",
+        );
+      }
+      return modelsRuntime.streamSimple(normalizedModel, effectiveContext, effectiveOptions);
+    }
+
+    if (!shouldProxyProvider(normalizedModel.provider, options?.apiKey, isRuntimeProvider)) {
+      return modelsRuntime.streamSimple(normalizedModel, effectiveContext, effectiveOptions);
+    }
+
+    // Guardrails: fail fast for known-bad proxy configs (e.g., HTTP proxy from HTTPS taskpane).
+    const validated = validateOfficeProxyUrl(proxyUrl);
+    let proxyTransport: OfficeProxyTransport | undefined;
+    if (needsCodexBridge) {
+      const bridgeSupported = await proxySupportsCodexWebSocketBridge(validated);
+      if (!bridgeSupported) {
+        throw new Error(
+          "GPT-5.6 Luna requires a newer Pi for Excel proxy with ChatGPT WebSocket support. " +
+          "Restart with: npx -y pi-for-excel-proxy@latest (central deployments: ask your administrator to upgrade the proxy).",
+        );
+      }
+      proxyTransport = "codex-websocket";
+    }
+
+    const proxiedOptions: StreamOptions | undefined = proxyTransport
+      ? {
+          ...effectiveOptions,
+          // Native Pi sessions use UUIDv7. ChatGPT's Codex router can assign an
+          // unavailable Luna rollout alias to older UUIDv4 session identifiers.
+          sessionId: resolveCodexWebSocketBridgeSessionId(effectiveOptions?.sessionId),
+          transport: "sse",
+        }
+      : effectiveOptions;
+    return modelsRuntime.streamSimple(
+      applyProxy(normalizedModel, validated, proxyTransport),
+      effectiveContext,
+      proxiedOptions,
+    );
+  };
+}

@@ -1,0 +1,22 @@
+{
+  "name": "pi-for-excel-tmux-bridge",
+  "version": "0.1.1-pre",
+  "description": "One-command local HTTPS tmux bridge helper for Pi for Excel.",
+  "type": "module",
+  "bin": {
+    "pi-for-excel-tmux-bridge": "./cli.mjs"
+  },
+  "files": [
+    "cli.mjs",
+    "scripts/*.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "prepack": "node ../../scripts/sync-tmux-bridge-package.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}

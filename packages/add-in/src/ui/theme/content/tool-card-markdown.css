@@ -1,0 +1,198 @@
+/* ── Markdown in tool cards ────────────────────────────── */
+
+/* Scrollable container for wide markdown tables */
+.pi-tool-card__markdown {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Tighter typography inside tool result cards */
+.pi-tool-card__markdown markdown-block { font-size: var(--text-sm) !important; line-height: 1.5; }
+.pi-tool-card__markdown markdown-block p { font-size: var(--text-sm) !important; margin: 0 0 6px; }
+
+/* Heading scale — compact for sidebar tool cards */
+.pi-tool-card__markdown h1 { font-size: var(--text-sm) !important; font-weight: 700; line-height: 1.3; margin: 10px 0 4px; }
+.pi-tool-card__markdown h2 { font-size: var(--text-sm) !important; font-weight: 700; line-height: 1.35; margin: 8px 0 4px; }
+.pi-tool-card__markdown h3 { font-size: var(--text-sm) !important; font-weight: 700; line-height: 1.4; margin: 6px 0 3px; }
+.pi-tool-card__markdown h4,
+.pi-tool-card__markdown h5,
+.pi-tool-card__markdown h6 { font-size: var(--text-sm) !important; font-weight: 600; line-height: 1.4; margin: 6px 0 3px; }
+.pi-tool-card__markdown h1:first-child,
+.pi-tool-card__markdown h2:first-child,
+.pi-tool-card__markdown h3:first-child { margin-top: 0; }
+
+/* Tables: compact sizing for sidebar width */
+.pi-tool-card__markdown table {
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+  line-height: 1.35;
+}
+.pi-tool-card__markdown th {
+  font-size: var(--text-sm);
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+.pi-tool-card__markdown td {
+  padding: 3px 8px;
+}
+
+/* Plain text fallback (no markdown syntax detected) */
+.pi-tool-card__plain-text {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  color: var(--foreground);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+/* Echo result — redundant success message replaced with compact "✓ Done" */
+.pi-tool-card__echo-result {
+  color: var(--pi-green);
+  font-weight: 500;
+  white-space: normal;
+}
+
+/* Cell-level diff summary for mutation tools */
+.pi-tool-card__diff {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pi-tool-card__diff-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1.35;
+  color: var(--foreground);
+}
+
+.pi-tool-card__diff-table th,
+.pi-tool-card__diff-table td {
+  border: 1px solid var(--alpha-8);
+  padding: 4px 6px;
+  vertical-align: top;
+}
+
+.pi-tool-card__diff-table th {
+  background: var(--alpha-2);
+  text-align: left;
+  font-weight: 600;
+}
+
+.pi-tool-card__diff-cell {
+  white-space: nowrap;
+}
+
+.pi-tool-card__diff-value {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.pi-tool-card__diff-formula {
+  margin-top: 3px;
+  color: var(--muted-foreground);
+  font-size: var(--text-xs);
+}
+
+.pi-tool-card__diff-note {
+  margin-top: 6px;
+  color: var(--muted-foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+}
+
+/* Optional explanation drawer for mutation cards */
+.pi-tool-card__explain {
+  border: 1px solid var(--alpha-8);
+  border-radius: var(--radius-sm);
+  background: var(--alpha-2);
+}
+
+.pi-tool-card__explain-toggle {
+  cursor: pointer;
+  list-style: none;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--foreground);
+  padding: 7px 9px;
+}
+
+.pi-tool-card__explain-toggle::-webkit-details-marker {
+  display: none;
+}
+
+.pi-tool-card__explain[open] .pi-tool-card__explain-toggle {
+  border-bottom: 1px solid var(--alpha-8);
+}
+
+.pi-tool-card__explain-body {
+  padding: 8px 9px 9px;
+}
+
+.pi-tool-card__explain-citations {
+  margin-top: 7px;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+  line-height: 1.45;
+}
+
+.pi-tool-card__explain-citations-label {
+  margin-right: 5px;
+  font-weight: 600;
+}
+
+.pi-tool-card__explain-citations-empty {
+  font-style: italic;
+}
+
+/* Explain formula block */
+.pi-formula-explain {
+  display: grid;
+  gap: 8px;
+}
+
+.pi-formula-explain__label {
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+  font-weight: 600;
+}
+
+.pi-formula-explain__formula {
+  display: grid;
+  gap: 4px;
+}
+
+.pi-formula-explain__formula code {
+  display: block;
+  padding: 4px 6px;
+  border: 1px solid var(--alpha-8);
+  border-radius: var(--radius-xs);
+  background: var(--alpha-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.pi-formula-explain__list {
+  margin: 0;
+  padding-left: 16px;
+  display: grid;
+  gap: 4px;
+  font-size: var(--text-sm);
+}
+
+.pi-formula-explain__preview {
+  color: var(--muted-foreground);
+  font-size: var(--text-xs);
+}
+
+/* Flex overflow fix for tool cards */
+tool-message {
+  min-width: 0;
+}
+

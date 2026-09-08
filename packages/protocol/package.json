@@ -1,0 +1,16 @@
+{
+  "name": "@dieulc/pi-office-protocol",
+  "version": "0.1.0",
+  "description": "Shared bridge wire protocol between the pi-office-bridge Pi extension and the pi-for-office task-pane add-in.",
+  "type": "module",
+  "license": "MIT",
+  "main": "./src/protocol.ts",
+  "types": "./src/protocol.ts",
+  "exports": {
+    ".": "./src/protocol.ts"
+  },
+  "files": ["src/protocol.ts", "README.md"],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

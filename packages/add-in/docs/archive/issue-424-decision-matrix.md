@@ -1,0 +1,35 @@
+# Issue #424 — consolidated keep/implement/defer decisions
+
+## Scope
+
+This memo consolidates all six investigation areas from #424 after the landed slices:
+- #428 (`fix(model): fork non-empty sessions on model switch`)
+- #431 (`feat(cache): add prefix churn observability counters`)
+- #434 (`docs(context): document compaction call-shape decision`)
+- #436 (`fix(context): skip no-op runtime tool refreshes`)
+- #439 (`docs(context): add prefix-churn baseline runbook`)
+- #442 (`fix(model): default model switch to in-place, keep fork as opt-in`)
+
+## Decision matrix
+
+| Area | Decision | Outcome |
+|---|---|---|
+| 1) Compaction call-shape | **Defer** | Keep current isolated summarizer call for now. See `issue-424-compaction-call-shape.md` for guardrails required before revisiting cache-safe fork compaction. |
+| 2) Mid-session model switching | **Implement** | Shipped in #428, then refined in #442: default now switches in-place (pi-mono parity), with non-empty fork behavior as an advanced opt-in. |
+| 3) Mid-session toolset churn | **Implement** | Shipped in #436, refined in #444: no-op tool-refresh suppression via metadata fingerprinting plus extension tool revision tracking for schema-stable handler reloads. |
+| 4) Mid-session system-prompt churn | **Keep now, defer deeper refactor** | Keep dynamic safety-critical prompt sections in system prompt (rules, execution mode, connection/integration/skills state). Defer stable-base + volatile-message split until telemetry indicates material churn pain. |
+| 5) Side LLM operations (`llm.complete`) | **Keep independent** | Treat extension side-completions as intentionally separate from the primary runtime prefix. Extension calls now use extension-scoped side session keys so side-call churn is isolated from primary runtime telemetry. |
+| 6) Cache observability policy | **Implement v1 policy** | Use existing prefix-churn counters + payload snapshots as mandatory PR/release investigation signals for context-shape changes (workflow policy, not CI hard gate yet). |
+
+## Rationale highlights
+
+- **Safety over purity for system prompt layering:** several dynamic prompt blocks are policy/safety controls, not optional convenience text.
+- **No-op churn removal is high-leverage and low-risk:** tool refresh suppression is landed (#436); model switching was iterated to upstream-parity default with optional fork (#442).
+- **Compaction fork remains high-risk without guardrails:** transform-context replay and budget behavior need explicit design before implementation.
+- **Extension side LLM calls should stay scoped:** side completions are useful, but should not masquerade as the primary session loop.
+
+## Follow-up queue (ordered)
+
+1. ✅ **Telemetry-driven validation pass** (no behavior change): baseline runbook + template shipped in #439.
+2. ✅ **Extension side-call isolation enhancement:** `llm.complete` now uses extension-scoped side session keys to avoid mixing side-call churn with main runtime churn signals.
+3. **Compaction fork design spike** (deferred): only after explicit guardrails are accepted (tool-call fallback, budget tests, replay consistency).

@@ -1,0 +1,125 @@
+/* ── CSV table (read_range mode=csv) ───────────────── */
+
+.pi-csv-table {
+  position: relative;
+}
+
+/* Toolbar — copy button aligned right */
+.pi-csv-table__toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 6px;
+}
+
+.pi-csv-table__copy {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--muted-foreground);
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
+}
+.pi-csv-table__copy:hover {
+  background: var(--pi-green-lighter);
+  color: var(--foreground);
+  border-color: var(--green-alpha-20);
+}
+.pi-csv-table__copy--done {
+  color: var(--pi-green);
+  border-color: var(--green-alpha-30);
+}
+
+/* Scrollable wrapper for wide tables */
+.pi-csv-table__scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* The data grid */
+.pi-csv-table__grid {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1.35;
+  border-collapse: collapse;
+  white-space: nowrap;
+  width: max-content;
+  min-width: 100%;
+}
+
+/* Column headers (A, B, C…) */
+.pi-csv-table__col-hdr {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--muted-foreground);
+  text-align: center;
+  padding: 2px 8px 4px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--pi-inner-bg, white);
+}
+
+/* Row headers (1, 2, 3…) */
+.pi-csv-table__row-hdr {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--muted-foreground);
+  text-align: right;
+  padding: 2px 6px 2px 0;
+  border-right: 1px solid var(--border);
+  position: sticky;
+  left: 0;
+  background: var(--pi-inner-bg, white);
+  user-select: none;
+}
+
+/* Corner cell (intersection of row/col headers) */
+.pi-csv-table__corner {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  background: var(--pi-inner-bg, white);
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+}
+
+/* Data cells */
+.pi-csv-table__grid td {
+  padding: 2px 8px;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--foreground);
+}
+
+/* Numeric cells — right-aligned */
+.pi-csv-table__num {
+  text-align: right;
+}
+
+/* Error cells — red */
+.pi-csv-table__err {
+  color: var(--destructive, #e5484d);
+  font-weight: 500;
+}
+
+/* Subtle row hover */
+.pi-csv-table__grid tbody tr:hover td {
+  background: var(--alpha-2);
+}
+
+/* Alternating row stripes — very subtle */
+.pi-csv-table__grid tbody tr:nth-child(even) td {
+  background: oklch(0 0 0 / 0.015);
+}
+.pi-csv-table__grid tbody tr:nth-child(even):hover td {
+  background: oklch(0 0 0 / 0.035);
+}
+

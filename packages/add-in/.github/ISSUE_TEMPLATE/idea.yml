@@ -1,0 +1,39 @@
+name: Idea
+description: Propose a change or feature
+title: "Idea: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep this short. If it doesn't fit on one screen, it's too long.
+        Write in your own voice.
+
+  - type: textarea
+    id: change
+    attributes:
+      label: What do you want to change?
+      description: Be specific and concise.
+      placeholder: |
+        Example: Add a /feedback command that opens the issue chooser.
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why?
+      description: What problem does this solve?
+      placeholder: |
+        Example: It's hard to report bugs from inside Excel.
+    validations:
+      required: true
+
+  - type: textarea
+    id: how
+    attributes:
+      label: How? (optional)
+      description: Brief technical approach if you have one in mind.
+      placeholder: |
+        Example: Reuse existing overlay styles and open a GitHub issue URL.

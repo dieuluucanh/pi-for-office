@@ -1,0 +1,41 @@
+name: Problem
+description: Report something that's broken
+title: "Problem: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Be specific. Include error messages if any.
+      placeholder: |
+        Example: When I run /settings and click Proxy, the dialog is blank.
+        Error message: "Failed to fetch"
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How can I make it happen in my add-in?
+      description: Minimal steps to trigger the bug. If I can't reproduce it, I can't fix it!
+      placeholder: |
+        1. Open Excel
+        2. Open Pi for Excel
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened instead?
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: e.g. 0.1.0
+      placeholder: 0.1.0

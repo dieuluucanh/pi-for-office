@@ -1,0 +1,153 @@
+/**
+ * Proxy warning banner.
+ *
+ * State-driven inline banner shown above chat messages when the local proxy is
+ * unavailable. Expands inline with quick setup guidance.
+ */
+
+import { t } from "../language/index.js";
+import { AlertTriangle, Check, Copy, lucide } from "./lucide-icons.js";
+
+const PROXY_COMMAND = "npx pi-for-excel-proxy";
+const INSTALL_GUIDE_URL = "https://pi.dev/excel#connect";
+
+export type ProxyBannerState = "detected" | "not-detected" | "unknown";
+
+export interface ProxyBannerHandle {
+  root: HTMLElement;
+  update: (state: ProxyBannerState) => void;
+}
+
+function selectElementText(element: HTMLElement): void {
+  const selection = window.getSelection();
+  if (!selection) return;
+
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+export function createProxyBanner(): ProxyBannerHandle {
+  const root = document.createElement("section");
+  root.className = "pi-proxy-banner";
+  root.hidden = true;
+
+  const topRow = document.createElement("div");
+  topRow.className = "pi-proxy-banner__row";
+
+  const text = document.createElement("p");
+  text.className = "pi-proxy-banner__text";
+
+  const warningIcon = lucide(AlertTriangle);
+  warningIcon.classList.add("pi-proxy-banner__text-icon");
+  warningIcon.setAttribute("aria-hidden", "true");
+
+  const textLabel = document.createElement("span");
+  textLabel.textContent = t("proxy-banner.warning");
+
+  text.append(warningIcon, textLabel);
+
+  const action = document.createElement("button");
+  action.type = "button";
+  action.className = "pi-proxy-banner__action";
+  action.textContent = t("proxy-banner.action");
+
+  topRow.append(text, action);
+
+  const details = document.createElement("div");
+  details.className = "pi-proxy-banner__details";
+  details.hidden = true;
+
+  const detailsIntro = document.createElement("p");
+  detailsIntro.className = "pi-proxy-banner__details-text";
+  detailsIntro.textContent = t("proxy-banner.intro");
+
+  const codeRow = document.createElement("div");
+  codeRow.className = "pi-proxy-banner__code";
+
+  const code = document.createElement("code");
+  code.textContent = PROXY_COMMAND;
+
+  const copyButton = document.createElement("button");
+  copyButton.type = "button";
+  copyButton.className = "pi-proxy-banner__copy";
+
+  let resetCopyIconTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  const renderCopyIcon = (): void => {
+    copyButton.replaceChildren(lucide(Copy));
+    copyButton.title = t("proxy-banner.copyCommand");
+    copyButton.setAttribute("aria-label", t("proxy-banner.copyCommand"));
+  };
+
+  const renderCopiedIcon = (): void => {
+    copyButton.replaceChildren(lucide(Check));
+    copyButton.title = t("proxy-banner.copied");
+    copyButton.setAttribute("aria-label", t("proxy-banner.copied"));
+  };
+
+  renderCopyIcon();
+
+  copyButton.addEventListener("click", () => {
+    if (!navigator.clipboard?.writeText) {
+      selectElementText(code);
+      return;
+    }
+
+    void navigator.clipboard.writeText(PROXY_COMMAND).then(
+      () => {
+        renderCopiedIcon();
+        if (resetCopyIconTimeout) {
+          clearTimeout(resetCopyIconTimeout);
+        }
+        resetCopyIconTimeout = setTimeout(() => {
+          renderCopyIcon();
+          resetCopyIconTimeout = null;
+        }, 1400);
+      },
+      () => {
+        selectElementText(code);
+      },
+    );
+  });
+
+  codeRow.append(code, copyButton);
+
+  const hint = document.createElement("p");
+  hint.className = "pi-proxy-banner__hint";
+  hint.textContent = t("proxy-banner.hint");
+
+  const guideLink = document.createElement("a");
+  guideLink.className = "pi-proxy-banner__link";
+  guideLink.href = INSTALL_GUIDE_URL;
+  guideLink.target = "_blank";
+  guideLink.rel = "noopener noreferrer";
+  guideLink.textContent = t("proxy-banner.guideLink");
+
+  details.append(detailsIntro, codeRow, hint, guideLink);
+
+  action.addEventListener("click", () => {
+    // TS6 DOM lib types `hidden` as `boolean | "until-found"`; we only ever
+    // assign booleans here, so coerce for classList.toggle.
+    const shouldOpen = details.hidden === true;
+    details.hidden = !shouldOpen;
+    root.classList.toggle("is-open", shouldOpen);
+    action.textContent = shouldOpen ? t("proxy-banner.hideSteps") : t("proxy-banner.action");
+  });
+
+  root.append(topRow, details);
+
+  const update = (state: ProxyBannerState): void => {
+    const shouldShow = state === "not-detected";
+    root.hidden = !shouldShow;
+
+    if (!shouldShow) {
+      details.hidden = true;
+      root.classList.remove("is-open");
+      action.textContent = t("proxy-banner.action");
+    }
+  };
+
+  return { root, update };
+}

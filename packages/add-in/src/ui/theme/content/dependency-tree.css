@@ -1,0 +1,140 @@
+/* ── Dependency tree (trace_dependencies) ──────────── */
+
+.pi-dep-tree {
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.pi-dep-node {
+  padding: 4px 0 2px;
+}
+
+.pi-dep-node--root {
+  padding-top: 0;
+}
+
+/* Value + address row */
+.pi-dep-node__row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.pi-dep-node__meta {
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+  opacity: 0.75;
+}
+
+/* Value — primary element, prominent through position + mono */
+.pi-dep-node__val {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--foreground);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Error values — red */
+.pi-dep-node__val--err {
+  color: var(--destructive, #e5484d);
+}
+
+/* Cell address — secondary, small, muted */
+.pi-dep-node__addr {
+  font-size: var(--text-xs);
+  opacity: 0.45;
+}
+.pi-dep-node__addr .pi-cell-ref {
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+}
+
+/* Formula — subtle code style, truncated with hover tooltip */
+.pi-dep-node__formula {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+  color: var(--muted-foreground);
+  opacity: 0.5;
+  margin: 1px 0 2px 0;
+  padding: 1px 5px;
+  background: var(--alpha-2);
+  border-radius: var(--radius-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: fit-content;
+  max-width: 100%;
+}
+
+/* Branch nodes are collapsible for on-demand deep expansion. */
+.pi-dep-node--branch {
+  margin: 0;
+  padding: 2px 0 0;
+}
+
+.pi-dep-node__summary {
+  list-style: none;
+  cursor: pointer;
+  display: block;
+}
+
+.pi-dep-node__summary::-webkit-details-marker {
+  display: none;
+}
+
+.pi-dep-node__summary::before {
+  content: "▸";
+  color: var(--muted-foreground);
+  margin-right: 6px;
+  font-size: var(--text-xs);
+  vertical-align: middle;
+}
+
+.pi-dep-node--branch[open] > .pi-dep-node__summary::before {
+  content: "▾";
+}
+
+/* ── Tree connectors ─────────────────────────────────── */
+
+/* Children container — vertical line via border-left */
+.pi-dep-node__children {
+  margin-left: 6px;
+  padding-left: 16px;
+  border-left: 1.5px solid var(--alpha-12);
+  margin-top: 2px;
+}
+
+/* Each child gets a horizontal connector to the vertical line */
+.pi-dep-node__children > .pi-dep-node {
+  position: relative;
+}
+.pi-dep-node__children > .pi-dep-node::before {
+  content: "";
+  position: absolute;
+  left: -16px;
+  top: 11px;
+  width: 12px;
+  border-top: 1.5px solid var(--alpha-12);
+}
+
+/* Last child — mask the vertical line below its connector */
+.pi-dep-node__children > .pi-dep-node:last-child::after {
+  content: "";
+  position: absolute;
+  left: -17px;
+  top: 12.5px;
+  bottom: -3px;
+  width: 3px;
+  background: var(--pi-inner-bg, white);
+}
+
+/* Leaf nodes — dimmer address */
+.pi-dep-node--leaf > .pi-dep-node__row > .pi-cell-ref {
+  opacity: 0.7;
+}
+

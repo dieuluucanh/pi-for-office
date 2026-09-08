@@ -1,0 +1,38 @@
+name: Dependency Review
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Dependency review (pull request)
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: high
+          fail-on-scopes: runtime
+
+      - name: Dependency review (push diff)
+        if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
+        uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: high
+          fail-on-scopes: runtime
+          base-ref: ${{ github.event.before }}
+          head-ref: ${{ github.sha }}
+
+      - name: Skip dependency review for initial branch push
+        if: github.event_name == 'push' && github.event.before == '0000000000000000000000000000000000000000'
+        run: echo 'No previous commit for diff; skipping dependency review.'

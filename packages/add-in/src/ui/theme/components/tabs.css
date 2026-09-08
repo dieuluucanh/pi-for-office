@@ -1,0 +1,443 @@
+/* ═══════════════════════════════════════════════════════
+   3. PI-SIDEBAR — tabs + messages area + input area
+   ═══════════════════════════════════════════════════════ */
+
+pi-sidebar {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pi-session-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 8px 6px;
+  /* Reserve space for Office's ⓘ button (injected, ~36px wide, top-right) */
+  padding-right: 44px;
+
+  /* ── Liquid glass surface ── */
+  background: transparent;
+
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
+}
+
+/* Liquid glass fade — tab strip dissolves into content below */
+.pi-session-tabs::after {
+  content: '';
+  position: absolute;
+  bottom: -24px;
+  left: 0;
+  right: 0;
+  height: 24px;
+  background: linear-gradient(
+    to bottom,
+    oklch(0.98 0.002 90 / 0.5),
+    oklch(0.98 0.002 90 / 0.2) 40%,
+    transparent
+  );
+  pointer-events: none;
+}
+
+.pi-session-tabs__scroller-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.pi-session-tabs__scroller {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  overflow-y: visible;
+  scrollbar-width: thin;
+  min-width: 0;
+  flex: 1;
+}
+
+.pi-session-tabs__scroll {
+  border: 1px solid var(--alpha-10);
+  background: var(--white-alpha-45);
+  color: var(--muted-foreground);
+  border-radius: var(--radius-xs);
+  width: 20px;
+  height: 22px;
+  flex-shrink: 0;
+  cursor: pointer;
+  font-size: var(--text-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast), opacity var(--duration-fast);
+}
+
+.pi-session-tabs__scroll:hover {
+  background: var(--white-alpha-65);
+  border-color: var(--alpha-14);
+  color: var(--foreground);
+}
+
+.pi-session-tabs__scroll[hidden] {
+  display: none;
+}
+
+.pi-session-tab {
+  display: flex;
+  align-items: center;
+  position: relative;
+  border: 1px solid var(--alpha-10);
+  border-radius: var(--radius-sm);
+  background: var(--white-alpha-25);
+  color: var(--muted-foreground);
+  min-width: 0;
+  transition:
+    background var(--duration-fast),
+    border-color var(--duration-fast),
+    box-shadow var(--duration-fast);
+}
+
+.pi-session-tab:hover {
+  background: var(--white-alpha-40);
+  border-color: var(--alpha-14);
+}
+
+.pi-session-tab.is-active {
+  background: oklch(0.45 0.12 160 / 0.18);
+  border-color: var(--green-alpha-25);
+  color: var(--foreground);
+}
+
+.pi-session-tab.is-menu-open {
+  border-color: var(--green-alpha-30);
+  box-shadow: 0 0 0 2px var(--green-alpha-12);
+}
+
+.pi-session-tab:focus-within {
+  border-color: var(--green-alpha-30);
+  box-shadow: 0 0 0 2px var(--green-alpha-12);
+}
+
+.pi-session-tab.is-active:focus-within {
+  border-color: var(--pi-green);
+  box-shadow: 0 0 0 2px var(--green-alpha-14);
+}
+
+.pi-session-tab__main {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: inherit;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  padding: 4px 8px;
+  cursor: pointer;
+  -webkit-appearance: none;
+  outline: none;
+  user-select: none;
+  -webkit-user-select: none;
+  caret-color: transparent;
+}
+
+.pi-session-tab__main:focus {
+  outline: none;
+}
+
+.pi-session-tab__main:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--green-alpha-12);
+}
+
+.pi-session-tab__title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 110px;
+}
+
+.pi-session-tab__busy {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: white;
+  box-shadow: 0 0 0 3px var(--white-alpha-25);
+  flex-shrink: 0;
+}
+
+.pi-session-tab__lock {
+  font-size: var(--text-xs);
+  color: var(--white-alpha-70);
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+}
+
+.pi-session-tab__close {
+  border: 1px solid var(--alpha-12);
+  background: var(--white-alpha-55);
+  color: var(--muted-foreground);
+  font-size: var(--text-base);
+  line-height: 1;
+  width: 22px;
+  height: 22px;
+  margin-right: 3px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background var(--duration-fast),
+    color var(--duration-fast),
+    border-color var(--duration-fast),
+    opacity var(--duration-fast);
+}
+
+.pi-session-tab.is-active .pi-session-tab__close {
+  background: oklch(1 0 0 / 0.58);
+  border-color: var(--green-alpha-20);
+  color: oklch(0.43 0.02 160);
+}
+
+.pi-session-tab__close:hover {
+  background: oklch(0.58 0.22 27 / 0.95);
+  border-color: oklch(0.58 0.22 27 / 0.75);
+  color: white;
+}
+
+.pi-session-tab__close:focus,
+.pi-session-tab__close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--green-alpha-12);
+}
+
+.pi-session-tabs__new {
+  border: 1px dashed var(--alpha-15);
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: var(--text-md);
+  font-weight: 400;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
+}
+
+.pi-session-tabs__new:hover {
+  background: var(--pi-green-light);
+  border-color: var(--green-alpha-30);
+  color: var(--pi-green);
+}
+
+.pi-session-tab__close:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pi-session-tab__close:disabled:hover {
+  background: var(--white-alpha-55);
+  border-color: var(--alpha-12);
+  color: var(--muted-foreground);
+}
+
+.pi-session-tab.is-active .pi-session-tab__close:disabled:hover {
+  background: oklch(1 0 0 / 0.58);
+  border-color: var(--green-alpha-20);
+  color: oklch(0.43 0.02 160);
+}
+
+.pi-session-tab-context-menu {
+  min-width: 170px;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--alpha-12);
+  background: var(--glass-bg-solid);
+  backdrop-filter: var(--glass-blur-dropdown);
+  -webkit-backdrop-filter: var(--glass-blur-dropdown);
+  box-shadow: var(--glass-shadow-lg), var(--glass-highlight), var(--glass-inner-shadow);
+}
+
+.pi-session-tab-context-menu--floating {
+  position: fixed;
+  z-index: 260;
+}
+
+.pi-session-tab-context-menu__item {
+  width: 100%;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  text-align: left;
+  padding: 6px 8px;
+  cursor: pointer;
+  transition: background var(--duration-fast), color var(--duration-fast), opacity var(--duration-fast);
+}
+
+.pi-session-tab-context-menu__item:hover:not(:disabled) {
+  background: var(--white-alpha-45);
+}
+
+.pi-session-tab-context-menu__item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pi-session-tab-context-menu__item--danger {
+  color: oklch(0.58 0.2 27);
+}
+
+.pi-session-tab-context-menu__divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: linear-gradient(
+    90deg,
+    var(--white-alpha-40),
+    var(--alpha-6),
+    var(--white-alpha-40)
+  );
+}
+
+/* ── Utilities menu trigger (gear in tab strip) ── */
+
+.pi-utilities-anchor {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.pi-utilities-btn {
+  border: 1px solid var(--alpha-12);
+  background:
+    linear-gradient(170deg, var(--white-alpha-70), var(--white-alpha-35));
+  color: var(--muted-foreground);
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  flex-shrink: 0;
+  box-shadow: var(--glass-shadow), var(--glass-highlight), var(--glass-inner-shadow);
+  transition:
+    background var(--duration-fast),
+    color var(--duration-fast),
+    box-shadow var(--duration-fast),
+    border-color var(--duration-fast),
+    transform var(--duration-fast);
+}
+
+.pi-utilities-btn__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pi-utilities-btn__icon svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.15;
+}
+
+.pi-utilities-btn:hover {
+  background: linear-gradient(170deg, var(--white-alpha-80), var(--white-alpha-50));
+  color: var(--foreground);
+  border-color: var(--alpha-20);
+  box-shadow: var(--glass-shadow-lg), var(--glass-highlight), var(--glass-inner-shadow);
+  transform: translateY(-1px);
+}
+
+.pi-utilities-btn:active {
+  transform: translateY(0);
+}
+
+.pi-utilities-btn:focus-visible {
+  outline: none;
+  border-color: var(--green-alpha-30);
+  box-shadow: 0 0 0 2px var(--green-alpha-14), var(--glass-shadow), var(--glass-highlight), var(--glass-inner-shadow);
+}
+
+.pi-utilities-btn[aria-expanded="true"] {
+  background: linear-gradient(170deg, var(--white-alpha-80), var(--white-alpha-55));
+  color: var(--foreground);
+  border-color: var(--green-alpha-30);
+  box-shadow: 0 0 0 1px var(--green-alpha-20), var(--glass-shadow), var(--glass-highlight), var(--glass-inner-shadow);
+}
+
+
+.pi-messages {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  position: relative;
+  /* We drive chat stick-to-bottom in JS; disable browser anchoring jitter. */
+  overflow-anchor: none;
+}
+
+.pi-messages__inner {
+  padding: 12px 4px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Footer surfaces (widget slot + input footer) */
+:is(.pi-input-area, .pi-widget-slot) {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  position: relative;
+  z-index: 10;
+  background: transparent;
+}
+
+/* Input footer — soft fade into content above */
+.pi-input-area::before {
+  content: '';
+  position: absolute;
+  top: -10px;
+  left: 0;
+  right: 0;
+  height: 10px;
+  background: linear-gradient(to top, var(--alpha-4), transparent);
+  pointer-events: none;
+}
+
+@media (max-height: 520px) {
+  .pi-session-tabs {
+    padding-top: 4px;
+    padding-bottom: 3px;
+  }
+
+  .pi-messages__inner {
+    padding-top: 6px;
+    padding-bottom: 14px;
+  }
+
+  :is(.pi-input-area, .pi-widget-slot) {
+    padding: 4px 8px;
+  }
+}
+
+

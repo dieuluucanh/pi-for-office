@@ -1,0 +1,307 @@
+import type {
+  Agent,
+  AgentEvent,
+  AgentTool,
+  AgentToolResult,
+  AgentToolUpdateCallback,
+} from "@earendil-works/pi-agent-core";
+import type { Static, TSchema } from "typebox";
+
+import type {
+  ConnectionAuthKind,
+  ConnectionState,
+  ConnectionStatus,
+} from "../connections/types.js";
+import type { ExtensionCapability } from "../extensions/permissions.js";
+import type { ExtensionWidgetPlacement } from "../extensions/internal/widget-surface.js";
+
+export interface ExtensionCommand {
+  description: string;
+  /**
+   * Allow running this command while the active runtime is busy/streaming.
+   * Defaults to true for extension commands.
+   */
+  busyAllowed?: boolean;
+  handler: (args: string) => void | Promise<void>;
+}
+
+export type ExtensionCleanup = () => void | Promise<void>;
+
+export interface ExtensionToolDefinition<TParameters extends TSchema = TSchema, TDetails = DynamicValue> {
+  description: string;
+  parameters: TParameters;
+  label?: string;
+  /**
+   * One or more registered connection ids that must be configured before this
+   * tool can execute.
+   */
+  requiresConnection?: string | readonly string[];
+  execute: (
+    params: Static<TParameters>,
+    signal?: AbortSignal,
+    onUpdate?: AgentToolUpdateCallback<TDetails>,
+  ) => Promise<AgentToolResult<TDetails>> | AgentToolResult<TDetails>;
+}
+
+export interface ExtensionConnectionSecretField {
+  id: string;
+  label: string;
+  required: boolean;
+  maskInUi?: boolean;
+}
+
+export interface ExtensionConnectionHttpAuthDefinition {
+  placement: "header";
+  headerName: string;
+  valueTemplate: string;
+  allowedHosts: readonly string[];
+}
+
+export interface ExtensionConnectionDefinition {
+  id: string;
+  title: string;
+  capability: string;
+  authKind: ConnectionAuthKind;
+  secretFields: readonly ExtensionConnectionSecretField[];
+  httpAuth?: ExtensionConnectionHttpAuthDefinition;
+  setupHint?: string;
+}
+
+export interface ExtensionConnectionsAPI {
+  register(definition: ExtensionConnectionDefinition): string;
+  unregister(connectionId: string): void;
+  list(): Promise<ConnectionState[]>;
+  get(connectionId: string): Promise<ConnectionState | null>;
+  getSecrets(connectionId: string): Promise<Record<string, string> | null>;
+  setSecrets(connectionId: string, secrets: Record<string, string>): Promise<void>;
+  clearSecrets(connectionId: string): Promise<void>;
+  markValidated(connectionId: string): Promise<void>;
+  markInvalid(connectionId: string, reason: string): Promise<void>;
+  markStatus(connectionId: string, status: ConnectionStatus, reason?: string): Promise<void>;
+}
+
+export type ExtensionModelProviderApi =
+  | "openai-completions"
+  | "openai-responses"
+  | "anthropic-messages";
+
+export interface ExtensionModelDefinition {
+  id: string;
+  name?: string;
+  reasoning?: boolean;
+  input?: readonly ("text" | "image")[];
+  contextWindow?: number;
+  maxTokens?: number;
+}
+
+/** Declarative provider registration; credentials stay in the host connection store. */
+export interface ExtensionModelProviderDefinition {
+  id: string;
+  name: string;
+  api: ExtensionModelProviderApi;
+  baseUrl: string;
+  models: readonly ExtensionModelDefinition[];
+  modelsUrl?: string;
+  /** Extension-owned connection whose secret is injected by the host. */
+  connection?: string;
+  /** Secret-field id containing the provider API key. Required with connection. */
+  apiKeySecret?: string;
+  /** Allow a provider with no credential, typically a local model server. */
+  allowKeyless?: boolean;
+}
+
+export interface ExtensionModelsAPI {
+  registerProvider(definition: ExtensionModelProviderDefinition): string;
+  unregisterProvider(providerId: string): void;
+  refresh(): Promise<void>;
+}
+
+export interface OverlayAPI {
+  /** Show an HTML element as a full-screen overlay */
+  show(el: HTMLElement): void;
+  /** Remove the overlay */
+  dismiss(): void;
+}
+
+export type WidgetPlacement = ExtensionWidgetPlacement;
+
+export interface WidgetUpsertSpec {
+  id: string;
+  el: HTMLElement;
+  title?: string;
+  placement?: WidgetPlacement;
+  order?: number;
+  collapsible?: boolean;
+  collapsed?: boolean;
+  minHeightPx?: number | null;
+  maxHeightPx?: number | null;
+}
+
+export interface WidgetAPI {
+  /** Show an HTML element as an inline widget above the input area */
+  show(el: HTMLElement): void;
+  /** Remove the legacy widget */
+  dismiss(): void;
+  /** Add or update a named widget (Widget API v2; gated by experiment). */
+  upsert(spec: WidgetUpsertSpec): void;
+  /** Remove a specific named widget (Widget API v2; gated by experiment). */
+  remove(id: string): void;
+  /** Remove all widgets owned by the extension (Widget API v2; gated by experiment). */
+  clear(): void;
+}
+
+export interface LlmCompletionMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface LlmCompletionRequest {
+  model?: string;
+  systemPrompt?: string;
+  messages: LlmCompletionMessage[];
+  maxTokens?: number;
+}
+
+export interface LlmCompletionResult {
+  content: string;
+  model: string;
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+  };
+}
+
+export interface LlmAPI {
+  complete(request: LlmCompletionRequest): Promise<LlmCompletionResult>;
+}
+
+export interface HttpRequestOptions {
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD";
+  headers?: Record<string, string>;
+  body?: string;
+  timeoutMs?: number;
+  /** Optional owner-qualified or local connection id for host-injected auth. */
+  connection?: string;
+}
+
+export interface HttpResponse {
+  status: number;
+  statusText: string;
+  headers: Record<string, string>;
+  body: string;
+}
+
+export interface HttpAPI {
+  fetch(url: string, options?: HttpRequestOptions): Promise<HttpResponse>;
+}
+
+export interface StorageAPI {
+  get(key: string): Promise<DynamicValue>;
+  set(key: string, value: DynamicValue): Promise<void>;
+  delete(key: string): Promise<void>;
+  keys(): Promise<string[]>;
+}
+
+export interface ClipboardAPI {
+  writeText(text: string): Promise<void>;
+}
+
+export interface ExtensionAgentAPI {
+  readonly raw: Agent;
+  injectContext(content: string): void;
+  steer(content: string): void;
+  followUp(content: string): void;
+}
+
+export interface SkillSummary {
+  name: string;
+  description: string;
+  sourceKind: string;
+}
+
+export interface SkillsAPI {
+  list(): Promise<SkillSummary[]>;
+  read(name: string): Promise<string>;
+  install(name: string, markdown: string): Promise<void>;
+  uninstall(name: string): Promise<void>;
+}
+
+export interface DownloadAPI {
+  download(filename: string, content: string, mimeType?: string): void;
+}
+
+export interface ExcelExtensionAPI {
+  /** Register a slash command */
+  registerCommand(name: string, cmd: ExtensionCommand): void;
+  /** Register a custom tool callable by the agent */
+  registerTool(name: string, tool: ExtensionToolDefinition): void;
+  /** Remove a previously registered custom tool */
+  unregisterTool(name: string): void;
+  /** Register/list/update connection requirements and status. */
+  connections: ExtensionConnectionsAPI;
+  /** Register declarative model providers; the host owns credentials and transport. */
+  models: ExtensionModelsAPI;
+  /** Agent access and steering APIs */
+  readonly agent: ExtensionAgentAPI;
+  /** LLM completion API via host mediation */
+  llm: LlmAPI;
+  /** HTTP fetch API via host mediation */
+  http: HttpAPI;
+  /** Persistent extension-scoped key/value storage */
+  storage: StorageAPI;
+  /** Clipboard operations */
+  clipboard: ClipboardAPI;
+  /** Skill catalog read/write helpers */
+  skills: SkillsAPI;
+  /** Trigger browser downloads */
+  download: DownloadAPI;
+  /** Show/dismiss full-screen overlay UI */
+  overlay: OverlayAPI;
+  /** Show/dismiss inline widget above input (messages still visible above) */
+  widget: WidgetAPI;
+  /** Show a toast notification */
+  toast(message: string): void;
+  /** Subscribe to agent events */
+  onAgentEvent(handler: (ev: AgentEvent) => void): () => void;
+}
+
+export interface CreateExtensionAPIOptions {
+  getAgent: () => Agent;
+  registerCommand?: (name: string, cmd: ExtensionCommand) => void;
+  registerTool?: (tool: AgentTool) => void;
+  unregisterTool?: (name: string) => void;
+  registerConnection?: (definition: ExtensionConnectionDefinition) => string;
+  unregisterConnection?: (connectionId: string) => void;
+  listConnections?: () => Promise<ConnectionState[]>;
+  getConnection?: (connectionId: string) => Promise<ConnectionState | null>;
+  getConnectionSecrets?: (connectionId: string) => Promise<Record<string, string> | null>;
+  setConnectionSecrets?: (connectionId: string, secrets: Record<string, string>) => Promise<void>;
+  clearConnectionSecrets?: (connectionId: string) => Promise<void>;
+  markConnectionValidated?: (connectionId: string) => Promise<void>;
+  markConnectionInvalid?: (connectionId: string, reason: string) => Promise<void>;
+  markConnectionStatus?: (connectionId: string, status: ConnectionStatus, reason?: string) => Promise<void>;
+  registerModelProvider?: (definition: ExtensionModelProviderDefinition) => string;
+  unregisterModelProvider?: (providerId: string) => void;
+  refreshModelProviders?: () => Promise<void>;
+  subscribeAgentEvents?: (handler: (ev: AgentEvent) => void) => () => void;
+  llmComplete?: (request: LlmCompletionRequest) => Promise<LlmCompletionResult>;
+  httpFetch?: (url: string, options?: HttpRequestOptions) => Promise<HttpResponse>;
+  storageGet?: (key: string) => Promise<DynamicValue>;
+  storageSet?: (key: string, value: DynamicValue) => Promise<void>;
+  storageDelete?: (key: string) => Promise<void>;
+  storageKeys?: () => Promise<string[]>;
+  clipboardWriteText?: (text: string) => Promise<void>;
+  injectAgentContext?: (content: string) => void;
+  steerAgent?: (content: string) => void;
+  followUpAgent?: (content: string) => void;
+  listSkills?: () => Promise<SkillSummary[]>;
+  readSkill?: (name: string) => Promise<string>;
+  installSkill?: (name: string, markdown: string) => Promise<void>;
+  uninstallSkill?: (name: string) => Promise<void>;
+  downloadFile?: (filename: string, content: string, mimeType?: string) => void;
+  toast?: (message: string) => void;
+  isCapabilityEnabled?: (capability: ExtensionCapability) => boolean;
+  formatCapabilityError?: (capability: ExtensionCapability) => string;
+  extensionOwnerId?: string;
+  widgetApiV2Enabled?: boolean;
+}

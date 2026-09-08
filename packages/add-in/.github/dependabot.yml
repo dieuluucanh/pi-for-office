@@ -1,0 +1,40 @@
+version: 2
+
+updates:
+  # Keep npm dependencies fresh (security + bugfixes).
+  # Dependabot only allows one npm update config per directory/target-branch, so
+  # Pi stack grouping and general npm grouping must live in the same entry.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 10
+    ignore:
+      - dependency-name: "eslint"
+        update-types:
+          - "version-update:semver-major"
+    groups:
+      pi-stack:
+        patterns:
+          - "@earendil-works/pi-ai"
+          - "@earendil-works/pi-web-ui"
+          - "@earendil-works/pi-agent-core"
+        update-types:
+          - "minor"
+          - "patch"
+      npm-minor-and-patch:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "@earendil-works/pi-ai"
+          - "@earendil-works/pi-web-ui"
+          - "@earendil-works/pi-agent-core"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Keep GitHub Actions versions fresh
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

@@ -1,0 +1,19 @@
+{
+  "name": "pi-for-office",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Monorepo — Pi-powered AI agent for Microsoft Office (Excel, Word, PowerPoint, Power BI)",
+  "type": "module",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24"
+  }
+}

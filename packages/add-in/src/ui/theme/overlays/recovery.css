@@ -1,0 +1,96 @@
+/* Backups page (inside the settings shell) */
+
+/* Search + filter row */
+
+.pi-recovery-search {
+  flex: 1;
+  min-width: 120px;
+}
+
+.pi-recovery-filter-select {
+  min-width: 110px;
+  max-width: 170px;
+}
+
+.pi-recovery-sort-btn {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Retention — collapsible <details> */
+
+.pi-recovery-retention-details {
+  margin-top: 2px;
+}
+
+.pi-recovery-retention-summary {
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  user-select: none;
+  padding: 4px 0;
+}
+
+.pi-recovery-retention {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+  margin-top: 8px;
+}
+
+.pi-recovery-retention__input {
+  width: 60px;
+  padding: 4px 6px;
+  font-family: var(--font-mono);
+  text-align: center;
+}
+
+.pi-recovery-list {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.pi-recovery-item {
+  gap: 8px;
+}
+
+.pi-recovery-item__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pi-recovery-item__title {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.pi-recovery-item__time {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+
+.pi-recovery-item__meta {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+}
+
+.pi-recovery-item__restored {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+  opacity: 0.75;
+}
