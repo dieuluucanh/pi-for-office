@@ -1,6 +1,6 @@
 # Draft: YOLO workflow + workbook recovery (issue #27)
 
-Issue: https://github.com/tmustier/pi-for-excel/issues/27
+Issue: <https://github.com/tmustier/pi-for-excel/issues/27>
 
 ## Goal
 
@@ -13,11 +13,13 @@ Replace cumbersome up-front approval selectors with a low-friction workflow:
 ## Alternatives considered
 
 ### 1) Pre-execution approval selector (safe mode)
+
 - **Pros:** explicit consent before mutation
 - **Cons:** high interaction cost for multi-step edits; interrupts flow; hard to keep concise in narrow sidebar
 - **Decision:** not primary UX for now
 
 ### 2) Full-file snapshots / Save As each step
+
 - **Pros:** strongest recovery semantics
 - **Cons:** expensive; potentially heavy/slow; awkward lifecycle (storage, naming, cleanup)
 - **Feasibility findings (2026-02):**
@@ -27,11 +29,13 @@ Replace cumbersome up-front approval selectors with a low-friction workflow:
 - **Decision:** do not use per-mutation full-file snapshots as baseline; if needed later, consider optional/manual desktop-oriented export + open-new-workbook flow
 
 ### 3) Range-level pre-write checkpoints (selected)
+
 - **Pros:** cheap, deterministic, aligns with tool-level mutations
 - **Cons:** initial scope only covers tools that write a contiguous range
 - **Decision:** implement now
 
 ### 4) Operation log only (diff/audit without restore)
+
 - **Pros:** transparency and exportable history
 - **Cons:** does not solve “undo mistake now” by itself
 - **Decision:** keep (issue #28), but pair with restorable checkpoints

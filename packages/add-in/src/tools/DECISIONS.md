@@ -1,8 +1,9 @@
-# Tool Behavior Decisions (Pi for Excel)
+# Tool Behavior Decisions (Pi for Office)
 
 Concise record of recent tool behavior choices to avoid regressions. Update this as we tweak tooling.
 
 ## WPS registry seam and Phase 2 overrides (NEXSELL-370)
+
 - **Tool list:** keep `CORE_TOOL_NAMES` as the single ordered source of truth and keep core tool schemas/metadata stable across hosts.
 - **WPS Phase 2 override mechanism:** `host-selection.ts` owns `WPS_CORE_TOOL_EXECUTE_OVERRIDES`, a narrow execute-only map for WPS-backed core tools. Supported WPS tools are composed as `{ ...officeTool, execute: wpsExecute }`, so `name`/`label`/`description`/`parameters` remain byte-for-byte identical to the Office tool object for prompt-cache stability.
 - **Supported WPS core slice:** `get_workbook_overview`, `read_range`, and `write_cells` run against the synchronous WPS ET JSAPI. Other workbook tools keep the typed fail-fast wrapper.
@@ -14,6 +15,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Rationale:** preserving the tool list avoids prompt-cache/schema churn and keeps disclosure/UI mappings deterministic, while honest runtime failures prevent pretending unsupported WPS workbook features exist.
 
 ## Column width (`format_cells.column_width`)
+
 - **User-facing unit:** Excel character-width units (same as Excel UI).
 - **Conversion:** assume **Arial 10** and convert to points with `1 char ≈ 7.2 points`.
 - **Application:** apply to **entire columns** via `getEntireColumn()`.
@@ -22,6 +24,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Rationale:** Excel column width is font-dependent and Office.js `columnWidth` is in points. A fixed Arial 10 baseline is predictable and simpler than per-sheet calibration.
 
 ## Borders (`format_cells.borders`)
+
 - **Accepted values:** canonical `thin | medium | thick | none` (weight, not style).
 - **Input normalization:** `borders` / `border_*` values are normalized case-insensitively and accept `Border*`/`Borders*` prefixes (`None`, `BordersNone`, etc.) before applying.
 - **Implementation:**
@@ -30,17 +33,20 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Rationale:** Office.js `BorderLineStyle` does not include Thin/Medium/Thick; those are weights.
 
 ## Multi-range formatting (`format_cells.range`)
+
 - **Supported syntax:** comma/semicolon separated ranges **on a single sheet**.
 - **Implementation:** uses `worksheet.getRanges()` (RangeAreas).
 - **Limitations:** multi-sheet ranges are rejected.
 - **Rationale:** reduces repetitive calls for non-contiguous header styling.
 
 ## Overwrite protection (`write_cells.allow_overwrite`)
+
 - **Blocks only on existing data:** values or formulas.
 - **Does NOT block** on formatting, conditional formats, or data validation rules.
 - **Rationale:** formatting-only cells are not meaningful "content" and shouldn't block writes.
 
 ## Fill formulas (`fill_formula`)
+
 - **Purpose:** avoid large 2D formula arrays by using Excel AutoFill.
 - **Behavior:** sets formula in top-left cell, then `autoFill` across the range.
 - **Validation:** uses `validateFormula()` (same as `write_cells`).
@@ -48,6 +54,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Rationale:** major productivity win for large formula blocks.
 
 ## Tool consolidation (14 → 10)
+
 - `get_range_as_csv` merged into `read_range` as `mode: 'csv'`
 - `read_selection` removed - auto-context already reads the selection every turn
 - `get_all_objects` absorbed into `get_workbook_overview` via optional `sheet` param
@@ -57,15 +64,18 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Rationale:** one tool per distinct verb, modes over multiplied tools. Progressive disclosure for future tools (charts, tables, etc.)
 
 ## Range reading (`read_range`)
+
 - **Compact/detailed tables:** render an Excel-style markdown grid with **column letters** and **row numbers** (instead of treating the first data row as a table header).
 - **Empty ranges:** if a range has **no values, formulas, or errors**, return `_All cells are empty._` (omit the table) to avoid confusing "blank header" visuals.
 - **Rationale:** improves readability in the sidebar UI and avoids ambiguous tables for 1-row or empty ranges.
 
 ## Default formatting assumption
+
 - **System prompt:** "Default font for formatting is Arial 10 unless user specifies otherwise."
 - **Rationale:** keeps column width conversions consistent with the chosen baseline.
 
 ## Named styles and format presets (`format_cells.style`)
+
 - **Style param:** `string | string[]` — single name or composable array (left-to-right merge).
 - **Built-in format styles:** `number` (2dp), `integer` (0dp), `currency` ($, 2dp), `percent` (1dp), `ratio` (1dp, x suffix), `text`.
 - **Built-in structural styles:** `header`, `total-row`, `subtotal`, `input`, `blank-section`.
@@ -80,17 +90,20 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Rationale:** agents say `"currency"` instead of pasting fragile 40-char format strings. Composition reduces multi-param calls. See `.research/conventions-design.md` for full design.
 
 ## Individual border edges (`format_cells.border_top/bottom/left/right`)
+
 - **New params:** `border_top`, `border_bottom`, `border_left`, `border_right` — each accepts `thin | medium | thick | none`.
 - **Priority:** individual edge params > style-resolved edges > `borders` shorthand.
 - **Shorthand preserved:** `borders` still applies to all edges + inside (existing behavior, backward compatible).
 - **Rationale:** enables `total-row` style (top border only) and other edge-specific formatting without the all-edges shorthand.
 
 ## `view_settings` scope boundary (view vs print)
+
 - **Included (view/navigation):** gridlines, headings, freeze panes, tab color, sheet visibility (`Visible/Hidden/VeryHidden`), activate sheet, standard column width.
 - **Excluded (print/page layout):** zoom, margins, orientation, print area, and other `pageLayout` concerns.
 - **Rationale:** keep `view_settings` focused on what the user sees/navigates in-sheet. Print concerns belong in a separate future `page_layout` tool.
 
 ## Conventions tool (`conventions`)
+
 - **Actions:** `get` (view current), `set` (partial update), `reset` (restore defaults).
 - **Storage:** `SettingsStore` key `conventions.v1` (user-level only for now).
 - **Schema:** `StoredConventions` now stores:
@@ -108,6 +121,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Rationale:** power users can set exact Excel format strings while still keeping optional quick-toggle ergonomics for generated presets.
 
 ## Instructions tool (`instructions`)
+
 - **Scopes:** `user` (global, local machine) and `workbook` (scoped by workbook identity hash).
 - **Actions:** `append` and `replace`.
 - **Storage:** `SettingsStore` keys:
@@ -117,6 +131,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Rationale:** AGENTS.md-style persistent guidance without creating a separate workbook mutation path.
 
 ## Global tool output truncation (Pi-style guardrail)
+
 - **Scope:** applied as a runtime wrapper around all registered tools (core + integrations + extensions) before tool results are persisted to message history.
 - **Limits:** **50KB** UTF-8 bytes and **2000 lines** (whichever is hit first), aligned with pi-coding-agent defaults. For models with context windows **below 128k**, limits scale linearly with the window (floors: **8KB** / **200 lines**) — resolved per execution from the active model via `src/context/window-budgets.ts` (#566).
 - **Strategy:**
@@ -127,6 +142,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Rationale:** enforce predictable context-safe bounds independent of per-tool implementation details; keep `shapeToolResultsForLlm` as a secondary history-shaping layer.
 
 ## Tool card input/output humanization (UI)
+
 - **Input:** tool parameters are rendered as a clean key-value list instead of raw JSON. Each tool has a per-tool humanizer in `src/ui/humanize-params.ts` that maps params to readable labels (e.g. "Range", "Fill ● White", "Font ● Gray, italic").
 - **Output:** hex color codes (`#RRGGBB`) in tool result text are replaced with human-readable names via nearest-match against a ~45-color palette (`src/ui/color-names.ts`). Section label changed from "Output" to "Result".
 - **Color chips:** inline colored circles (`pi-color-chip`) shown next to fill/font colors.
@@ -135,18 +151,21 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Rationale:** raw JSON and hex codes are unintuitive for Excel-savvy, less-technical users. The humanized view keeps all info but presents it in Excel vocabulary.
 
 ## Format humanization (`read_range` detailed mode)
+
 - **Behavior:** known format strings are displayed with human-readable labels alongside the raw string (e.g. `**currency (£, 2dp)** (\`£* #,##0.00...\`)`).
 - **Unknown formats:** displayed as raw strings (no change from before).
 - **Implementation:** `src/conventions/humanize.ts` pre-generates a lookup table from all preset+dp+symbol combinations.
 - **Rationale:** raw format strings in read-back are opaque; labels make them immediately understandable.
 
 ## CSV table rendering (`read_range` mode=csv)
+
 - **UI:** CSV results are rendered as an HTML table with Excel-style column letters (A, B, …) and row numbers, plus a "Copy CSV" button.
 - **Agent text:** unchanged — still the markdown code-fenced CSV block.
 - **Implementation:** `ReadRangeCsvDetails` passes `values[][]`, `startCol`, `startRow`, and `csv` string to the UI. `src/ui/render-csv-table.ts` renders the table.
 - **Rationale:** the syntax-highlighted code block (language "csv") produced garbled output with numbers in red and keywords in blue. A proper table with row/column headers is immediately readable.
 
 ## Dependency tree rendering (`trace_dependencies`)
+
 - **Modes:** `trace_dependencies` supports both `mode: "precedents"` (upstream inputs) and `mode: "dependents"` (downstream impact).
 - **UI:** dependency trees are rendered as structured HTML with clickable cell refs, code-styled formulas, and collapsible branch nodes for on-demand deep expansion.
 - **Agent text:** unchanged — still the ASCII tree with `├──`/`└──`/`│` connectors.
@@ -155,6 +174,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Rationale:** ASCII art via `<markdown-block>` lacked interactivity and visual hierarchy. Clickable addresses + collapsible branches make formula navigation significantly more usable.
 
 ## Formula explanation workflow (`explain_formula`)
+
 - **Scope:** `explain_formula` targets a single cell and returns a concise natural-language explanation, current value preview, formula text, and direct reference citations.
 - **Reference preview policy:** loads and previews a bounded set of direct references (`max_references`, default 8, max 20) to keep response latency predictable.
 - **Fallback behavior:** if the target is not a formula cell, returns an explicit static-value explanation instead of failing silently.
@@ -162,12 +182,13 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Rationale:** users need plain-English interpretation without losing inspectability; bounded reference previews preserve responsiveness on dense workbooks.
 
 ## Tmux bridge tool (`tmux`)
+
 - **Availability:** non-core tool, always registered via `createAllTools()`; execution is gated by `applyExperimentalToolGates()`.
 - **Gate model:** requires a healthy bridge URL (`tmux.bridge.url` override, else default `https://localhost:3341`) and successful `/health` probe.
 - **Gate failure contract:** blocked gate checks return structured `AgentToolResult` payloads (`details.gateReason`, `details.skillHint`) instead of throwing, enabling inline setup UX and deterministic agent recovery.
 - **Execution policy:** classified as `read/none` in workbook coordinator (no workbook lock writes or blueprint invalidation).
 - **Bridge implementation:** local helper script `scripts/tmux-bridge-server.mjs`.
-  - one-command helper (`npx pi-for-excel-tmux-bridge`) defaults to real `tmux` mode
+  - one-command helper (`npx pi-for-office-tmux-bridge`) defaults to real `tmux` mode
   - raw server script default remains `stub` for local development/tests
 - **Bridge contract:** POST JSON to `https://localhost:<port>/v1/tmux` with actions:
   - `list_sessions`
@@ -182,6 +203,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Rationale:** stable local adapter contract now (issue #3) with one-command real execution and incremental hardening.
 
 ## Python / LibreOffice execution tools (`python_run`, `libreoffice_convert`, `python_transform_range`)
+
 - **Availability:** always registered via `createAllTools()`.
 - **Default runtime (Pyodide):** `python_run` and `python_transform_range` run in-browser via Pyodide (WebAssembly) with zero setup. Standard library and pure-Python packages (numpy, pandas, scipy, etc.) auto-install via micropip. ~15MB cold-start on first use, cached by the browser thereafter.
 - **Power-user upgrade (native bridge):** when a bridge URL is configured (Settings → Experimental) — or when a bridge is reachable at the default URL (`https://localhost:3340`) — Python tools use the local `python3` process. This unlocks C extensions, filesystem access, and long-running scripts. `libreoffice_convert` requires the native bridge (no Pyodide equivalent).
@@ -197,7 +219,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
   - `python_run` + `libreoffice_convert` → `read/none` (no direct workbook mutation)
   - `python_transform_range` → `mutate/content` (writes transformed values into workbook)
 - **Bridge implementation:** local helper script `scripts/python-bridge-server.mjs`.
-  - one-command helper (`npx pi-for-excel-python-bridge`) defaults to real mode
+  - one-command helper (`npx pi-for-office-python-bridge`) defaults to real mode
   - raw server script default remains `stub` for local development/tests
 - **Bridge contract:**
   - `POST /v1/python-run` — execute Python snippet with optional `input_json`, return stdout/stderr/result JSON
@@ -207,6 +229,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Rationale:** Python works out of the box for most users via Pyodide. The native bridge is now plug-and-play when the local helper is running, while Pyodide remains a resilient fallback. The system prompt makes the agent aware of both tiers so it can use Python confidently without suggesting unnecessary setup.
 
 ## External tool integrations (`web_search`, `fetch_page`, `mcp`)
+
 - **Packaging:** exposed as opt-in **integrations** instead of always-on core tools.
 - **Scopes:** integrations can be enabled per-**session** and/or per-**workbook**; effective integrations are the union (ordered by catalog).
 - **Global gate:** `external.tools.enabled` defaults to **off** and blocks all external integration tools until explicitly enabled.
@@ -217,6 +240,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Rationale:** satisfy issue #24 with explicit consent, clear attribution, and minimal overlap with the extension system.
 
 ## Direct Office.js tool (`execute_office_js`)
+
 - **Availability:** always available (not behind `/experimental`), always registered via `createAllTools()`.
 - **Contract:** accepts `code` (async function body receiving `context: Excel.RequestContext`) plus a short user-facing `explanation`.
 - **Safety guards:** blocks nested `Excel.run(...)` usage (host already provides context), enforces explanation/code length limits, and fails closed if confirmation UI is unavailable when approval is required.
@@ -227,6 +251,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Rationale:** unlock advanced Office.js scenarios when structured tools are insufficient while preserving explicit consent.
 
 ## Extension manager tool (`extensions_manager`)
+
 - **Availability:** always registered via `createAllTools()`.
 - **Purpose:** lets the agent manage extension lifecycle from chat (`list`, `install_code`, `set_enabled`, `reload`, `uninstall`).
 - **Default install policy:** `install_code` replaces existing extensions with the same name unless `replace_existing=false` is provided.
@@ -234,6 +259,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Rationale:** supports non-engineer extension authoring by allowing users to ask Pi to generate + install an extension directly.
 
 ## Extension sandbox UI bridge (default-on for untrusted)
+
 - **Default routing:** inline-code + remote-url extensions run in iframe sandbox runtime by default; built-in/local modules remain host-side.
 - **Rollback switch:** maintainers can temporarily route untrusted extensions back to host runtime via `/experimental on extension-sandbox-rollback`.
 - **Surface:** sandbox runtime bridges command/tool/event/UI calls through explicit host contracts rather than exposing host internals directly.
@@ -242,6 +268,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Rationale:** graduate sandbox hardening into default behavior while preserving a guarded rollback path.
 
 ## Extension host capability bridge expansion (`ExcelExtensionAPI`)
+
 - **New mediated APIs:** `llm.complete`, `http.fetch`, `storage`, `clipboard`, `agent.injectContext/steer/followUp`, `skills`, and `download`.
 - **Permission model:** capability gates now include `llm.complete`, `http.fetch`, `storage.readwrite`, `clipboard.write`, `agent.context.write`, `agent.steer`, `agent.followup`, `skills.read`, `skills.write`, and `download.file`.
 - **Dynamic tools:** extensions can now remove tools at runtime via `unregisterTool(name)`; runtime refreshes toolset after dynamic add/remove.
@@ -250,6 +277,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Rationale:** unlock practical extension workflows (sub-agents, external APIs, persistence, skill install) while keeping sandbox mediation and permission controls.
 
 ## Feature-flagged extension widget API v2 (`extension-widget-v2`)
+
 - **Activation:** opt-in via `/experimental on extension-widget-v2`; default behavior stays on legacy `widget.show/dismiss` semantics.
 - **API:** additive `widget.upsert/remove/clear` methods with stable widget ids.
 - **Placement/order:** widgets sort deterministically by `(order asc, createdAt asc, id asc)` within `above-input` / `below-input` buckets.
@@ -261,6 +289,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Rationale:** establish predictable multi-widget lifecycle semantics before richer layout controls.
 
 ## Feature-flagged files tool (`files`)
+
 - **Availability:** non-core tool, always registered. `list`/`read` stay available even when `files-workspace` is off; `write`/`delete` remain gated by `files-workspace`.
 - **Built-in assistant docs:** a read-only `assistant-docs/` namespace ships with the app (README + key docs) and is always visible to both UI and tool.
 - **Backend strategy:** native folder handle (when permitted) → OPFS → in-memory fallback.
@@ -277,6 +306,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Rationale:** keep one shared artifact space while preserving workbook context/transparency, while making core assistant docs available without extra setup.
 
 ## Workbook mutation change previews + audit log (slice)
+
 - **Cell-diff scope:** `write_cells`, `fill_formula`, and `python_transform_range` compute before/after cell diffs.
 - **Structured details:** these tools return `changes` metadata (`changedCount` + sampled cell-level before/after, including formula deltas) for tool-card rendering.
 - **UI rendering:** tool cards include a dedicated **Changes** section with clickable cell addresses.
@@ -290,6 +320,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Rationale:** improve user trust with concrete, navigable deltas while keeping implementation incremental and low-risk.
 
 ## Charts tool (`charts`)
+
 - **Actions:** `list`, `create`, `update`, `delete`, `get_image` in one action-based core tool.
 - **Chart type scope:** v1 exposes common ExcelApi 1.1 chart families only (column/bar/line/area/pie/doughnut/scatter/radar), mapped from friendly names to Office.js `ChartType` values.
 - **Image contract:** `get_image` returns a short text receipt plus an image content block; base64 PNG bytes and dimensions live in `details.image`, not in text output.
@@ -300,6 +331,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Rationale:** cover common chart workflows with typed params and visual verification while avoiding a false promise of faithful deleted-chart recreation.
 
 ## Workbook backups (`workbook_history`)
+
 - **Goal:** prefer low-friction workflows over pre-execution approval selectors by making rollback easy and reliable.
 - **Execution mode toggle:** `/yolo` switches between:
   - `YOLO` (default): mutate tools run without extra pre-execution confirmations.

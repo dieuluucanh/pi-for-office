@@ -29,7 +29,7 @@ All run at repo root on `ebe4f27`:
 - Taskpane boots outside Excel via Office.js fallback; no console/page errors.
   (First load raced a vite dependency re-optimization reload after `npm install`;
   clean on reload — not a product issue.)
-- Welcome + proxy-down banner shows **local-build copy** (`npx pi-for-excel-proxy`
+- Welcome + proxy-down banner shows **local-build copy** (`npx pi-for-office-proxy`
   helper steps), confirming `DEFAULT_PROXY_IS_REMOTE=false` copy branching from #593.
 - Settings → Providers: full provider list rendered (allowlist default = all
   providers, fail-open confirmed); proxy section shows local recommended URL
@@ -40,7 +40,7 @@ All run at repo root on `ebe4f27`:
 - Local CORS proxy (`node scripts/cors-proxy-server.mjs --https`): boots with
   post-#593 defaults — loopback-only client policy, default target-host
   allowlist, `GET /healthz` → `ok`. Enabling proxy in settings shows
-  "Proxy connected at https://localhost:3003" and the banner clears.
+  "Proxy connected at <https://localhost:3003>" and the banner clears.
 - Session restore: full history + context usage restored after page reload.
 
 ## Excel Desktop host (sideloaded manifest → `https://localhost:3000`)
@@ -58,7 +58,7 @@ All run at repo root on `ebe4f27`:
 ## Checklist status snapshot
 
 | ID | Status | Notes |
-|---|---|---|
+| --- | --- | --- |
 | PRE-1 | Pass | Full preflight + manifest suite on `ebe4f27`. |
 | C-1 | Pass (lite) | In-host read + write of real workbook cell, verified externally. |
 | C-2 | Pass (lite) | Session restore verified in browser host and Excel host. |

@@ -12,14 +12,14 @@ const cliDir = path.dirname(fileURLToPath(import.meta.url));
 const proxyScriptPath = path.join(cliDir, "scripts", "cors-proxy-server.mjs");
 
 const homeDir = os.homedir();
-const appDir = path.join(homeDir, ".pi-for-excel");
+const appDir = path.join(homeDir, ".pi-for-office");
 const certDir = path.join(appDir, "certs");
 const keyPath = path.join(certDir, "key.pem");
 const certPath = path.join(certDir, "cert.pem");
 const DEFAULT_PROXY_PORT = "3003";
 const DEFAULT_PROXY_URL = `https://localhost:${DEFAULT_PROXY_PORT}`;
-const PROXY_HEALTH_HEADER = "x-pi-for-excel-proxy";
-const CODEX_WEBSOCKET_BRIDGE_HEADER = "x-pi-for-excel-codex-websocket-bridge";
+const PROXY_HEALTH_HEADER = "x-pi-for-office-proxy";
+const CODEX_WEBSOCKET_BRIDGE_HEADER = "x-pi-for-office-codex-websocket-bridge";
 const PROXY_HEALTH_VALUE = "1";
 
 function commandExists(command) {
@@ -35,7 +35,7 @@ function run(command, args, options = {}) {
   });
 
   if (result.error) {
-    console.error(`[pi-for-excel-proxy] Failed to run: ${command}`);
+    console.error(`[pi-for-office-proxy] Failed to run: ${command}`);
     console.error(result.error.message);
     process.exit(1);
   }
@@ -45,7 +45,9 @@ function run(command, args, options = {}) {
   }
 
   if (result.signal) {
-    console.error(`[pi-for-excel-proxy] ${command} terminated by signal ${result.signal}`);
+    console.error(
+      `[pi-for-office-proxy] ${command} terminated by signal ${result.signal}`,
+    );
     process.exit(1);
   }
 }
@@ -66,7 +68,10 @@ function findMkcertCommand() {
   const candidates = [];
 
   if (process.platform === "darwin") {
-    const brewCandidates = ["/opt/homebrew/bin/mkcert", "/usr/local/bin/mkcert"];
+    const brewCandidates = [
+      "/opt/homebrew/bin/mkcert",
+      "/usr/local/bin/mkcert",
+    ];
     for (const candidate of brewCandidates) {
       if (fs.existsSync(candidate)) {
         candidates.push(candidate);
@@ -95,15 +100,21 @@ function resolveMkcertCommand() {
 
   if (process.platform === "darwin") {
     if (!commandExists("brew")) {
-      console.error("[pi-for-excel-proxy] Homebrew is not installed.");
-      console.error("[pi-for-excel-proxy] Install Homebrew first: https://brew.sh");
+      console.error("[pi-for-office-proxy] Homebrew is not installed.");
+      console.error(
+        "[pi-for-office-proxy] Install Homebrew first: https://brew.sh",
+      );
       process.exit(1);
     }
 
-    console.log("[pi-for-excel-proxy] Installing mkcert via Homebrew...");
+    console.log("[pi-for-office-proxy] Installing mkcert via Homebrew...");
     run("brew", ["install", "mkcert"]);
 
-    const brewCandidates = ["/opt/homebrew/bin/mkcert", "/usr/local/bin/mkcert", "mkcert"];
+    const brewCandidates = [
+      "/opt/homebrew/bin/mkcert",
+      "/usr/local/bin/mkcert",
+      "mkcert",
+    ];
     for (const candidate of brewCandidates) {
       if (candidate !== "mkcert" && !fs.existsSync(candidate)) {
         continue;
@@ -114,13 +125,21 @@ function resolveMkcertCommand() {
       }
     }
 
-    console.error("[pi-for-excel-proxy] mkcert is installed but not compatible with required CLI flags.");
-    console.error("[pi-for-excel-proxy] Ensure FiloSottile mkcert is used (not the npm mkcert package).");
+    console.error(
+      "[pi-for-office-proxy] mkcert is installed but not compatible with required CLI flags.",
+    );
+    console.error(
+      "[pi-for-office-proxy] Ensure FiloSottile mkcert is used (not the npm mkcert package).",
+    );
     process.exit(1);
   }
 
-  console.error("[pi-for-excel-proxy] Please install mkcert, then run this command again.");
-  console.error("[pi-for-excel-proxy] Install instructions: https://github.com/FiloSottile/mkcert#installation");
+  console.error(
+    "[pi-for-office-proxy] Please install mkcert, then run this command again.",
+  );
+  console.error(
+    "[pi-for-office-proxy] Install instructions: https://github.com/FiloSottile/mkcert#installation",
+  );
   process.exit(1);
 }
 
@@ -133,9 +152,11 @@ function installMkcertCa(mkcertCommand) {
     return;
   }
 
-  console.error("[pi-for-excel-proxy] Failed to install mkcert local CA.");
-  console.error("[pi-for-excel-proxy] Run manually: mkcert -install");
-  console.error("[pi-for-excel-proxy] If it fails, fix trust-store permissions and retry.");
+  console.error("[pi-for-office-proxy] Failed to install mkcert local CA.");
+  console.error("[pi-for-office-proxy] Run manually: mkcert -install");
+  console.error(
+    "[pi-for-office-proxy] If it fails, fix trust-store permissions and retry.",
+  );
 
   if (typeof result.status === "number" && result.status !== 0) {
     process.exit(result.status);
@@ -153,25 +174,31 @@ function ensureCertificates() {
 
   const mkcertCommand = resolveMkcertCommand();
 
-  console.log("[pi-for-excel-proxy] Generating local HTTPS certificates...");
+  console.log("[pi-for-office-proxy] Generating local HTTPS certificates...");
   installMkcertCa(mkcertCommand);
 
-  run(mkcertCommand, ["-key-file", keyPath, "-cert-file", certPath, "localhost"], {
-    cwd: certDir,
-  });
+  run(
+    mkcertCommand,
+    ["-key-file", keyPath, "-cert-file", certPath, "localhost"],
+    {
+      cwd: certDir,
+    },
+  );
 
   if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
-    console.error("[pi-for-excel-proxy] Failed to generate TLS certificates.");
+    console.error("[pi-for-office-proxy] Failed to generate TLS certificates.");
     process.exit(1);
   }
 }
 
 function resolveProxyConfig() {
   const userArgs = process.argv.slice(2);
-  const hasExplicitScheme = userArgs.includes("--https") || userArgs.includes("--http");
+  const hasExplicitScheme =
+    userArgs.includes("--https") || userArgs.includes("--http");
   const proxyArgs = hasExplicitScheme ? userArgs : ["--https", ...userArgs];
 
-  const usesHttpOnly = proxyArgs.includes("--http") && !proxyArgs.includes("--https");
+  const usesHttpOnly =
+    proxyArgs.includes("--http") && !proxyArgs.includes("--https");
 
   return {
     proxyArgs,
@@ -211,9 +238,9 @@ function probeHttpsHealth(urlString, trustedCa) {
           finish({
             healthy,
             compatible:
-              healthy
-              && res.headers[PROXY_HEALTH_HEADER] === PROXY_HEALTH_VALUE
-              && res.headers[CODEX_WEBSOCKET_BRIDGE_HEADER] === PROXY_HEALTH_VALUE,
+              healthy &&
+              res.headers[PROXY_HEALTH_HEADER] === PROXY_HEALTH_VALUE &&
+              res.headers[CODEX_WEBSOCKET_BRIDGE_HEADER] === PROXY_HEALTH_VALUE,
           });
         });
       },
@@ -229,8 +256,10 @@ function probeHttpsHealth(urlString, trustedCa) {
 }
 
 async function exitIfDefaultProxyAlreadyRunning(proxyConfig) {
-  const portWasRequested = typeof process.env.PORT === "string" && process.env.PORT.trim().length > 0;
-  const hostWasRequested = typeof process.env.HOST === "string" && process.env.HOST.trim().length > 0;
+  const portWasRequested =
+    typeof process.env.PORT === "string" && process.env.PORT.trim().length > 0;
+  const hostWasRequested =
+    typeof process.env.HOST === "string" && process.env.HOST.trim().length > 0;
   if (!proxyConfig.usesHttps || portWasRequested || hostWasRequested) {
     return;
   }
@@ -262,33 +291,70 @@ async function exitIfDefaultProxyAlreadyRunning(proxyConfig) {
 
   const [localhostProbe, ipv4Probe] = await Promise.all([
     probeHttpsHealth(`${DEFAULT_PROXY_URL}/healthz`, trustedCa),
-    probeHttpsHealth(`https://127.0.0.1:${DEFAULT_PROXY_PORT}/healthz`, trustedCa),
+    probeHttpsHealth(
+      `https://127.0.0.1:${DEFAULT_PROXY_PORT}/healthz`,
+      trustedCa,
+    ),
   ]);
 
   if (localhostProbe.compatible && ipv4Probe.compatible) {
-    console.log(`[pi-for-excel-proxy] Proxy already running at ${DEFAULT_PROXY_URL}`);
-    console.log("[pi-for-excel-proxy] Nothing else to start — keep the existing proxy terminal open.");
+    console.log(
+      `[pi-for-office-proxy] Proxy already running at ${DEFAULT_PROXY_URL}`,
+    );
+    console.log(
+      "[pi-for-office-proxy] Nothing else to start — keep the existing proxy terminal open.",
+    );
     process.exit(0);
   }
 
   if (localhostProbe.healthy || ipv4Probe.healthy) {
-    const describeProbe = (probe) => probe.compatible ? "compatible" : probe.healthy ? "outdated" : "failed";
-    console.error("[pi-for-excel-proxy] Port 3003 has an outdated or partial pi-for-excel proxy listener.");
-    console.error(`[pi-for-excel-proxy] ${DEFAULT_PROXY_URL}/healthz: ${describeProbe(localhostProbe)}`);
-    console.error(`[pi-for-excel-proxy] https://127.0.0.1:${DEFAULT_PROXY_PORT}/healthz: ${describeProbe(ipv4Probe)}`);
-    console.error("[pi-for-excel-proxy] Stop old pi-for-excel proxy processes, then run npx pi-for-excel-proxy again.");
-    console.error("[pi-for-excel-proxy] Or set PORT=<free-port> and copy that URL into Pi for Excel /settings → Proxy.");
+    const describeProbe = (probe) =>
+      probe.compatible ? "compatible" : probe.healthy ? "outdated" : "failed";
+    console.error(
+      "[pi-for-office-proxy] Port 3003 has an outdated or partial proxy listener (old pi-for-excel-proxy).",
+    );
+    console.error(
+      `[pi-for-office-proxy] ${DEFAULT_PROXY_URL}/healthz: ${describeProbe(localhostProbe)}`,
+    );
+    console.error(
+      `[pi-for-office-proxy] https://127.0.0.1:${DEFAULT_PROXY_PORT}/healthz: ${describeProbe(ipv4Probe)}`,
+    );
+    console.error(
+      "[pi-for-office-proxy] Stop old proxy processes (e.g. pi-for-excel-proxy), then run npx pi-for-office-proxy again.",
+    );
+    console.error(
+      "[pi-for-office-proxy] Or set PORT=<free-port> and copy that URL into Pi for Office /settings → Proxy.",
+    );
     process.exit(1);
   }
 }
 
 function startProxy(proxyArgs) {
   fs.mkdirSync(certDir, { recursive: true });
-  console.log(`[pi-for-excel-proxy] Using certificate directory: ${certDir}`);
+  console.log(`[pi-for-office-proxy] Using certificate directory: ${certDir}`);
+
+  // Default the local helper to permissive target hosts so any OpenAI-compatible
+  // endpoint works. The raw server script keeps its strict default; only the
+  // packaged CLI applies this convenience. Loopback/private targets remain blocked
+  // regardless (SSRF guardrail in proxy-target-policy.mjs).
+  const childEnv = { ...process.env };
+  const hasExplicitTargetPolicy =
+    (typeof childEnv.ALLOWED_TARGET_HOSTS === "string" &&
+      childEnv.ALLOWED_TARGET_HOSTS.trim().length > 0) ||
+    (typeof childEnv.ALLOW_ALL_TARGET_HOSTS === "string" &&
+      childEnv.ALLOW_ALL_TARGET_HOSTS.trim().length > "0");
+  if (!hasExplicitTargetPolicy) {
+    childEnv.ALLOW_ALL_TARGET_HOSTS = "1";
+    console.log(
+      "[pi-for-office-proxy] Target allowlist disabled (local helper mode). " +
+        "Loopback and private-network targets remain blocked. " +
+        "Set ALLOWED_TARGET_HOSTS or ALLOW_ALL_TARGET_HOSTS=0 to restrict.",
+    );
+  }
 
   const child = spawn(process.execPath, [proxyScriptPath, ...proxyArgs], {
     cwd: certDir,
-    env: process.env,
+    env: childEnv,
     stdio: "inherit",
   });
 
@@ -316,15 +382,17 @@ function startProxy(proxyArgs) {
   });
 
   child.on("error", (error) => {
-    console.error("[pi-for-excel-proxy] Failed to start proxy process.");
+    console.error("[pi-for-office-proxy] Failed to start proxy process.");
     console.error(error.message);
     process.exit(1);
   });
 }
 
 if (!fs.existsSync(proxyScriptPath)) {
-  console.error("[pi-for-excel-proxy] Missing proxy runtime files.");
-  console.error("[pi-for-excel-proxy] Reinstall the package or run npm pack again.");
+  console.error("[pi-for-office-proxy] Missing proxy runtime files.");
+  console.error(
+    "[pi-for-office-proxy] Reinstall the package or run npm pack again.",
+  );
   process.exit(1);
 }
 

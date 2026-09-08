@@ -49,6 +49,7 @@ Record run date and commit SHA in the evidence table below.
 Run this add-on check when the release includes changes to model context composition (system prompt, tool disclosure, toolset refresh, compaction, or context injection).
 
 References:
+
 - baseline matrix: `docs/cache-observability-baselines.md`
 - run template: `docs/release-smoke-runs/templates/context-cache-telemetry-template.md`
 
@@ -92,6 +93,7 @@ If churn is unexpected, treat as a release blocker until explained or fixed.
 ## Landing-page core claim checks
 
 ### C-1. Workbook awareness
+
 Prompt:
 
 > Read this workbook and summarize: sheet structure, key formulas, current selection, and any obvious data quality risks.
@@ -158,6 +160,7 @@ Expected:
 ## Prompt example checks
 
 ### P-1. Data cleanup + summary
+
 Prompt:
 
 > I pasted raw data in Sheet2. Clean it up, figure out what it is, and build me a summary.
@@ -168,6 +171,7 @@ Expected:
 - Produces deterministic cleanup steps + summary output
 
 ### P-2. Model assumptions + web search + PDFs
+
 Prompt:
 
 > What assumptions is this model making? Walk me through the logic. Cross-check with web search and the PDFs.
@@ -179,6 +183,7 @@ Expected:
 - If PDF bridge missing, explains setup path clearly (no silent failure)
 
 ### P-3. FX rates + extension generation
+
 Prompt:
 
 > Fetch today's FX rates and update the currency column, then build an /fx extension to do that automatically.
@@ -190,6 +195,7 @@ Expected:
 - Extension runs without manual file surgery
 
 ### P-4. tmux + external coding agent
+
 Prompt:
 
 > Use tmux to ask Claude Code to build & open a webpage based on this file's analysis.
@@ -231,7 +237,7 @@ Expected:
 
 Steps:
 
-1. Start proxy (`npx pi-for-excel-proxy`)
+1. Start proxy (`npx pi-for-office-proxy`)
 2. Enable proxy in settings
 3. `/login`
 4. Send provider-backed prompt

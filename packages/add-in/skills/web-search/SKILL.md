@@ -1,7 +1,7 @@
 ---
 name: web-search
 description: Search the public web for up-to-date facts. Works out of the box with Jina (default, no API key needed); optionally Serper, Tavily, or Brave Search. Use when workbook context is insufficient and fresh external references are needed.
-compatibility: Requires Pi for Excel integration "web_search" to be enabled. Works immediately with Jina (default); Serper/Tavily/Brave require an API key.
+compatibility: Requires Pi for Office integration "web_search" to be enabled. Works immediately with Jina (default); Serper/Tavily/Brave require an API key.
 metadata:
   integration-id: web_search
   tool-name: web_search
@@ -21,7 +21,7 @@ This repository exposes web search as a built-in **integration** in the Excel ad
 ## Providers
 
 | Provider | API key | Notes |
-|---|---|---|
+| --- | --- | --- |
 | **Jina** (default) | Optional (for higher limits) | Works out of the box — no signup needed |
 | Serper.dev | Required | Google SERP API, free tier available |
 | Tavily | Required | AI-native search, free monthly credits |

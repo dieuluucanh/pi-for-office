@@ -5,7 +5,7 @@ The Files overlay provides a unified view of all files available to the agent du
 ## Storage backends
 
 | Backend | Key | When used |
-|---------|-----|-----------|
+| --------- | ----- | ----------- |
 | **OPFS** (Origin Private File System) | `opfs` | Default in all browser-based hosts. Sandboxed, persistent per origin. |
 | **Native directory** | `native-directory` | When the user connects a local folder via the File System Access API. |
 | **In-memory** | `memory` | Non-browser / test environments. |
@@ -25,7 +25,7 @@ Connected-folder mode lets users link a local directory so the agent can read pr
 ### Host compatibility matrix
 
 | Host | Engine | `showDirectoryPicker` | Connect folder button |
-|------|--------|----------------------|----------------------|
+| ------ | -------- | ---------------------- | ---------------------- |
 | Excel Online (Chrome / Edge) | Chromium | ✅ Supported | Visible |
 | Excel Online (Firefox) | Gecko | ❌ Not supported | Hidden |
 | Excel Online (Safari) | WebKit | ❌ Not supported | Hidden |

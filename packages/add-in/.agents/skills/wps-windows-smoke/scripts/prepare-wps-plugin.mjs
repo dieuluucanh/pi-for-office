@@ -12,7 +12,7 @@ Windows QEMU guest. The generated directory can be served over HTTP and used by
 wpsjs publish or an enterprise jsplugins.xml server.
 
 Options:
-  --repo <path>          pi-for-excel repo root (default: cwd or nearest parent with wps/main.js)
+  --repo <path>          pi-for-office repo root (default: cwd or nearest parent with wps/main.js)
   --out <path>           output plugin dir (default: ~/VMs/wps-win11/wps-smoke-plugin)
   --name <name>          WPS plugin name (default: PiForExcelSmoke)
   --taskpane-url <url>   taskpane URL seen by guest (default: http://10.0.2.2:3141/src/taskpane.html)
@@ -73,14 +73,19 @@ function parseArgs(argv) {
 function findRepo(start) {
   let dir = path.resolve(start);
   while (true) {
-    if (fs.existsSync(path.join(dir, "wps/main.js")) && fs.existsSync(path.join(dir, "wps/ribbon.xml"))) {
+    if (
+      fs.existsSync(path.join(dir, "wps/main.js")) &&
+      fs.existsSync(path.join(dir, "wps/ribbon.xml"))
+    ) {
       return dir;
     }
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
-  throw new Error("could not find repo root containing wps/main.js and wps/ribbon.xml; pass --repo");
+  throw new Error(
+    "could not find repo root containing wps/main.js and wps/ribbon.xml; pass --repo",
+  );
 }
 
 function ensureTrailingSlash(url) {
@@ -96,7 +101,10 @@ function patchMainJs(source, taskpaneUrl) {
   // Older repo skeletons assigned callbacks to globalScope inside an IIFE.
   // The current skeleton uses top-level function declarations plus aliases, so
   // this compatibility patch is best-effort for old checked-out branches only.
-  if (!out.includes("function OnAddinLoad") && !out.includes("globalScope.OnAddinLoad")) {
+  if (
+    !out.includes("function OnAddinLoad") &&
+    !out.includes("globalScope.OnAddinLoad")
+  ) {
     out = out.replace(
       /globalScope\.OnAddInLoad = function OnAddInLoad\(\) \{\n    storageGet\(TASKPANE_ID_STORAGE_KEY\);\n  \};/,
       `globalScope.OnAddInLoad = function OnAddInLoad() {\n    storageGet(TASKPANE_ID_STORAGE_KEY);\n  };\n\n  globalScope.OnAddinLoad = globalScope.OnAddInLoad;`,
@@ -136,7 +144,10 @@ function copyWpsJsDirectory(repo, out, taskpaneUrl) {
     if (entry.isDirectory()) {
       fs.cpSync(source, target, { recursive: true });
     } else if (entry.isFile() && entry.name.endsWith(".js")) {
-      fs.writeFileSync(target, patchMainJs(fs.readFileSync(source, "utf8"), taskpaneUrl));
+      fs.writeFileSync(
+        target,
+        patchMainJs(fs.readFileSync(source, "utf8"), taskpaneUrl),
+      );
     } else if (entry.isFile()) {
       fs.copyFileSync(source, target);
     }
@@ -157,8 +168,13 @@ function writeSmokeFiles(opts) {
   fs.rmSync(out, { recursive: true, force: true });
   fs.mkdirSync(out, { recursive: true });
 
-  const mainJs = patchMainJs(fs.readFileSync(path.join(repo, "wps/main.js"), "utf8"), opts.taskpaneUrl);
-  const ribbonXml = patchRibbonXml(fs.readFileSync(path.join(repo, "wps/ribbon.xml"), "utf8"));
+  const mainJs = patchMainJs(
+    fs.readFileSync(path.join(repo, "wps/main.js"), "utf8"),
+    opts.taskpaneUrl,
+  );
+  const ribbonXml = patchRibbonXml(
+    fs.readFileSync(path.join(repo, "wps/ribbon.xml"), "utf8"),
+  );
   fs.writeFileSync(path.join(out, "index.html"), buildIndexHtml());
   fs.writeFileSync(path.join(out, "main.js"), mainJs);
   copyWpsJsDirectory(repo, out, opts.taskpaneUrl);
@@ -167,25 +183,41 @@ function writeSmokeFiles(opts) {
   if (fs.existsSync(iconPath)) {
     fs.copyFileSync(iconPath, path.join(out, "pi.svg"));
   }
-  copyIfExists(path.join(repo, "wps/taskpane.html"), path.join(out, "taskpane.html"));
-  fs.writeFileSync(path.join(out, "manifest.xml"), `<?xml version="1.0" encoding="UTF-8"?>
+  copyIfExists(
+    path.join(repo, "wps/taskpane.html"),
+    path.join(out, "taskpane.html"),
+  );
+  fs.writeFileSync(
+    path.join(out, "manifest.xml"),
+    `<?xml version="1.0" encoding="UTF-8"?>
 <JsPlugin>
   <ApiVersion>1.0.0</ApiVersion>
   <Name>${opts.name}</Name>
-  <Description>pi-for-excel WPS smoke plugin</Description>
+  <Description>pi-for-office WPS smoke plugin</Description>
 </JsPlugin>
-`);
-  fs.writeFileSync(path.join(out, "jsplugins.xml"), `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+`,
+  );
+  fs.writeFileSync(
+    path.join(out, "jsplugins.xml"),
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <jsplugins>
   <jspluginonline name="${opts.name}" type="et" url="${pluginUrl}" debug="code" version="1.0.0" enable="enable_dev" install="null" customDomain="" />
 </jsplugins>
-`);
-  fs.writeFileSync(path.join(out, "package.json"), JSON.stringify({
-    name: opts.name,
-    addonType: "et",
-    version: "1.0.0",
-    customDomain: "",
-  }, null, 2));
+`,
+  );
+  fs.writeFileSync(
+    path.join(out, "package.json"),
+    JSON.stringify(
+      {
+        name: opts.name,
+        addonType: "et",
+        version: "1.0.0",
+        customDomain: "",
+      },
+      null,
+      2,
+    ),
+  );
 
   return { repo, out, pluginUrl };
 }
@@ -194,27 +226,55 @@ function runPublish(opts, generated) {
   const project = path.join(generated.out, ".publish-project");
   fs.rmSync(project, { recursive: true, force: true });
   fs.mkdirSync(path.join(project, "wps-addon-build"), { recursive: true });
-  for (const file of ["index.html", "ribbon.xml", "main.js", "manifest.xml", "pi.svg", "taskpane.html"]) {
-    copyIfExists(path.join(generated.out, file), path.join(project, "wps-addon-build", file));
+  for (const file of [
+    "index.html",
+    "ribbon.xml",
+    "main.js",
+    "manifest.xml",
+    "pi.svg",
+    "taskpane.html",
+  ]) {
+    copyIfExists(
+      path.join(generated.out, file),
+      path.join(project, "wps-addon-build", file),
+    );
   }
   if (fs.existsSync(path.join(generated.out, "js"))) {
-    fs.cpSync(path.join(generated.out, "js"), path.join(project, "wps-addon-build", "js"), { recursive: true });
+    fs.cpSync(
+      path.join(generated.out, "js"),
+      path.join(project, "wps-addon-build", "js"),
+      { recursive: true },
+    );
   }
-  fs.writeFileSync(path.join(project, "package.json"), JSON.stringify({
-    name: opts.name,
-    addonType: "et",
-    version: "1.0.0",
-    customDomain: "",
-  }, null, 2));
+  fs.writeFileSync(
+    path.join(project, "package.json"),
+    JSON.stringify(
+      {
+        name: opts.name,
+        addonType: "et",
+        version: "1.0.0",
+        customDomain: "",
+      },
+      null,
+      2,
+    ),
+  );
 
-  const result = spawnSync("npx", ["--yes", "wpsjs", "publish", "-s", generated.pluginUrl], {
-    cwd: project,
-    stdio: "inherit",
-  });
+  const result = spawnSync(
+    "npx",
+    ["--yes", "wpsjs", "publish", "-s", generated.pluginUrl],
+    {
+      cwd: project,
+      stdio: "inherit",
+    },
+  );
   if (result.status !== 0) {
     throw new Error(`wpsjs publish failed with status ${result.status}`);
   }
-  fs.copyFileSync(path.join(project, "wps-addon-publish/publish.html"), path.join(generated.out, "publish.html"));
+  fs.copyFileSync(
+    path.join(project, "wps-addon-publish/publish.html"),
+    path.join(generated.out, "publish.html"),
+  );
 }
 
 function startServer(out, port) {
@@ -222,15 +282,23 @@ function startServer(out, port) {
   try {
     const existing = fs.readFileSync(pidFile, "utf8").trim();
     if (existing && process.kill(Number(existing), 0)) {
-      console.log(`HTTP server already recorded as PID ${existing}; pid file: ${pidFile}`);
+      console.log(
+        `HTTP server already recorded as PID ${existing}; pid file: ${pidFile}`,
+      );
       return;
     }
   } catch {
     // no live recorded server
   }
 
-  const serverScript = path.join(os.tmpdir(), `pi-wps-smoke-plugin-${port}-server.py`);
-  fs.writeFileSync(serverScript, `import functools\nimport http.server\nimport socketserver\n\nclass NoCacheHandler(http.server.SimpleHTTPRequestHandler):\n    def do_GET(self):\n        # WPS CEF aggressively revalidates and can keep executing stale cached\n        # add-in JS when the development server returns 304. Ignore validators\n        # and send the current file bytes for every request.\n        if 'If-Modified-Since' in self.headers:\n            del self.headers['If-Modified-Since']\n        if 'If-None-Match' in self.headers:\n            del self.headers['If-None-Match']\n        return super().do_GET()\n\n    def end_headers(self):\n        self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')\n        self.send_header('Pragma', 'no-cache')\n        self.send_header('Expires', '0')\n        super().end_headers()\n\nHandler = functools.partial(NoCacheHandler, directory=${JSON.stringify(out)})\nwith socketserver.TCPServer(('0.0.0.0', ${JSON.stringify(port)}), Handler) as httpd:\n    httpd.serve_forever()\n`);
+  const serverScript = path.join(
+    os.tmpdir(),
+    `pi-wps-smoke-plugin-${port}-server.py`,
+  );
+  fs.writeFileSync(
+    serverScript,
+    `import functools\nimport http.server\nimport socketserver\n\nclass NoCacheHandler(http.server.SimpleHTTPRequestHandler):\n    def do_GET(self):\n        # WPS CEF aggressively revalidates and can keep executing stale cached\n        # add-in JS when the development server returns 304. Ignore validators\n        # and send the current file bytes for every request.\n        if 'If-Modified-Since' in self.headers:\n            del self.headers['If-Modified-Since']\n        if 'If-None-Match' in self.headers:\n            del self.headers['If-None-Match']\n        return super().do_GET()\n\n    def end_headers(self):\n        self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')\n        self.send_header('Pragma', 'no-cache')\n        self.send_header('Expires', '0')\n        super().end_headers()\n\nHandler = functools.partial(NoCacheHandler, directory=${JSON.stringify(out)})\nwith socketserver.TCPServer(('0.0.0.0', ${JSON.stringify(port)}), Handler) as httpd:\n    httpd.serve_forever()\n`,
+  );
 
   const logFile = path.join(os.tmpdir(), `pi-wps-smoke-plugin-${port}.log`);
   const logFd = fs.openSync(logFile, "a");
@@ -241,7 +309,9 @@ function startServer(out, port) {
   child.unref();
   fs.closeSync(logFd);
   fs.writeFileSync(pidFile, String(child.pid));
-  console.log(`Started no-cache HTTP server PID ${child.pid} at http://127.0.0.1:${port}/ (pid file: ${pidFile}; log: ${logFile})`);
+  console.log(
+    `Started no-cache HTTP server PID ${child.pid} at http://127.0.0.1:${port}/ (pid file: ${pidFile}; log: ${logFile})`,
+  );
 }
 
 try {
@@ -254,10 +324,19 @@ try {
   console.log(`WPS smoke plugin written to ${generated.out}`);
   console.log(`Taskpane URL: ${opts.taskpaneUrl}`);
   console.log(`Plugin URL:   ${generated.pluginUrl}`);
-  const optionalFiles = ["pi.svg", "taskpane.html"].filter((file) => fs.existsSync(path.join(generated.out, file)));
-  const optionalSuffix = optionalFiles.length > 0 ? `, ${optionalFiles.join(", ")}` : "";
-  console.log("Files: index.html, ribbon.xml, main.js, manifest.xml, jsplugins.xml" + optionalSuffix + (opts.publish ? ", publish.html" : ""));
-  console.log("Next: open the publish page inside Windows, e.g. http://10.0.2.2:3889/publish.html");
+  const optionalFiles = ["pi.svg", "taskpane.html"].filter((file) =>
+    fs.existsSync(path.join(generated.out, file)),
+  );
+  const optionalSuffix =
+    optionalFiles.length > 0 ? `, ${optionalFiles.join(", ")}` : "";
+  console.log(
+    "Files: index.html, ribbon.xml, main.js, manifest.xml, jsplugins.xml" +
+      optionalSuffix +
+      (opts.publish ? ", publish.html" : ""),
+  );
+  console.log(
+    "Next: open the publish page inside Windows, e.g. http://10.0.2.2:3889/publish.html",
+  );
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);

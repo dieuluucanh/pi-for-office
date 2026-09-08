@@ -63,7 +63,14 @@ badgeRow.style.cssText = "display: flex; gap: 8px; flex-wrap: wrap;";
 for (const tone of ["muted", "ok", "warn", "info"]) {
   const badge = document.createElement("span");
   badge.className = `pi-overlay-badge pi-overlay-badge--${tone}`;
-  badge.textContent = tone === "muted" ? "Read only" : tone === "ok" ? "Connected" : tone === "warn" ? "Warning" : "Info";
+  badge.textContent =
+    tone === "muted"
+      ? "Read only"
+      : tone === "ok"
+        ? "Connected"
+        : tone === "warn"
+          ? "Warning"
+          : "Info";
   badgeRow.appendChild(badge);
 }
 badgeSection.appendChild(badgeRow);
@@ -72,7 +79,11 @@ badgeSection.appendChild(badgeRow);
 
 const fileItemSection = section("file-items", "File List Items");
 
-function createMockFileItem(name: string, meta: string, badgeLabel?: string): HTMLButtonElement {
+function createMockFileItem(
+  name: string,
+  meta: string,
+  badgeLabel?: string,
+): HTMLButtonElement {
   const row = document.createElement("button");
   row.type = "button";
   row.className = "pi-files-item pi-files-item--muted";
@@ -116,15 +127,33 @@ function createMockFileItem(name: string, meta: string, badgeLabel?: string): HT
   return row;
 }
 
-fileItemSection.appendChild(createMockFileItem("cache-observability-baselines.md", "Pi documentation · 2.98 KB", "Read only"));
-fileItemSection.appendChild(createMockFileItem("context-management-policy.md", "Pi documentation · 12.0 KB", "Read only"));
-fileItemSection.appendChild(createMockFileItem("quarterly-report.xlsx", "1.2 MB · Uploaded · 2h ago"));
+fileItemSection.appendChild(
+  createMockFileItem(
+    "cache-observability-baselines.md",
+    "Pi documentation · 2.98 KB",
+    "Read only",
+  ),
+);
+fileItemSection.appendChild(
+  createMockFileItem(
+    "context-management-policy.md",
+    "Pi documentation · 12.0 KB",
+    "Read only",
+  ),
+);
+fileItemSection.appendChild(
+  createMockFileItem("quarterly-report.xlsx", "1.2 MB · Uploaded · 2h ago"),
+);
 
 /* ── 3. Tool Cards ───────────────────────────────────── */
 
 const toolCardSection = section("tool-cards", "Tool Cards");
 
-function createMockToolCard(state: string, action: string, detail: string): HTMLDivElement {
+function createMockToolCard(
+  state: string,
+  action: string,
+  detail: string,
+): HTMLDivElement {
   const card = document.createElement("div");
   card.className = "pi-tool-card";
   card.setAttribute("data-state", state);
@@ -155,10 +184,18 @@ function createMockToolCard(state: string, action: string, detail: string): HTML
   return card;
 }
 
-toolCardSection.appendChild(createMockToolCard("complete", "Filled", "'Cash Flow'!D10:L10 — 9 changes"));
-toolCardSection.appendChild(createMockToolCard("complete", "Filled", "'Cash Flow'!D13:L13 — 9 changes"));
-toolCardSection.appendChild(createMockToolCard("complete", "Filled", "'Cash Flow'!D14:L14 — 9 changes"));
-toolCardSection.appendChild(createMockToolCard("error", "Fill", "'Cash Flow'!D15:L15 — error"));
+toolCardSection.appendChild(
+  createMockToolCard("complete", "Filled", "'Cash Flow'!D10:L10 — 9 changes"),
+);
+toolCardSection.appendChild(
+  createMockToolCard("complete", "Filled", "'Cash Flow'!D13:L13 — 9 changes"),
+);
+toolCardSection.appendChild(
+  createMockToolCard("complete", "Filled", "'Cash Flow'!D14:L14 — 9 changes"),
+);
+toolCardSection.appendChild(
+  createMockToolCard("error", "Fill", "'Cash Flow'!D15:L15 — error"),
+);
 
 /* ── 4. Tool Card Group ──────────────────────────────── */
 
@@ -199,7 +236,11 @@ for (let i = 10; i <= 14; i++) {
   // Simulate tool-message wrapping — grouped-card CSS matches any
   // descendant .pi-tool-card, so a plain div stands in for <tool-message>.
   const wrapper = document.createElement("div");
-  const card = createMockToolCard("complete", "Filled", `'Cash Flow'!D${i}:L${i} — 9 changes`);
+  const card = createMockToolCard(
+    "complete",
+    "Filled",
+    `'Cash Flow'!D${i}:L${i} — 9 changes`,
+  );
   wrapper.appendChild(card);
   group.appendChild(wrapper);
 }
@@ -269,7 +310,7 @@ const previewSection = section("text-preview", "File Text Preview");
 const sampleMarkdown = `# Context Management Policy
 
 **Status:** Active policy (2026-02-12)
-**Scope:** How Pi for Excel builds and manages context
+**Scope:** How Pi for Office builds and manages context
 
 ## Why this exists
 
@@ -282,13 +323,17 @@ We optimize for **answer quality and reliability** across multi-turn sessions. I
 3. **Bounded growth** — auto-compact before hitting limits.`;
 
 const previewCaptionMd = document.createElement("div");
-previewCaptionMd.style.cssText = "font-size: 10px; color: var(--muted-foreground); margin: 0 0 4px; opacity: 0.8;";
+previewCaptionMd.style.cssText =
+  "font-size: 10px; color: var(--muted-foreground); margin: 0 0 4px; opacity: 0.8;";
 previewCaptionMd.textContent = "Markdown file — rendered";
 previewSection.appendChild(previewCaptionMd);
 
 const mdPreview = document.createElement("div");
-mdPreview.className = "pi-files-detail-preview pi-files-detail-preview--markdown";
-const mdPreviewBlock = document.createElement("markdown-block") as HTMLElement & { content: string };
+mdPreview.className =
+  "pi-files-detail-preview pi-files-detail-preview--markdown";
+const mdPreviewBlock = document.createElement(
+  "markdown-block",
+) as HTMLElement & { content: string };
 mdPreviewBlock.content = sampleMarkdown;
 mdPreview.appendChild(mdPreviewBlock);
 const mdFade = document.createElement("div");
@@ -297,7 +342,8 @@ mdPreview.appendChild(mdFade);
 previewSection.appendChild(mdPreview);
 
 const previewCaptionText = document.createElement("div");
-previewCaptionText.style.cssText = "font-size: 10px; color: var(--muted-foreground); margin: 12px 0 4px; opacity: 0.8;";
+previewCaptionText.style.cssText =
+  "font-size: 10px; color: var(--muted-foreground); margin: 12px 0 4px; opacity: 0.8;";
 previewCaptionText.textContent = "Plain text file — wrapped, no line numbers";
 previewSection.appendChild(previewCaptionText);
 
@@ -344,7 +390,8 @@ for (const [msg, classes] of [
 ] as const) {
   const toast = document.createElement("div");
   toast.className = classes;
-  toast.style.cssText = "position: relative; top: 0; left: 0; transform: none; opacity: 1; pointer-events: auto; margin-bottom: 8px;";
+  toast.style.cssText =
+    "position: relative; top: 0; left: 0; transform: none; opacity: 1; pointer-events: auto; margin-bottom: 8px;";
 
   const content = document.createElement("div");
   content.className = "pi-toast__content";
@@ -371,7 +418,9 @@ for (const [msg, classes] of [
 
 const mdSection = section("markdown", "Markdown Rendering (font consistency)");
 
-const mdBlock = document.createElement("markdown-block") as HTMLElement & { content: string };
+const mdBlock = document.createElement("markdown-block") as HTMLElement & {
+  content: string;
+};
 mdBlock.content = `The formula is \`=IF(C$4-Assumptions!$B$10+1=Assumptions!$B$49,...)\` — C4 = calendaryear (2025 for Year 1, 2031 for Year 7).
 
 Assumptions!B10 = 2025 (start year) − Assumptions!B$49 = 7
@@ -385,7 +434,10 @@ mdSection.appendChild(mdBlock);
 // collapsible block. Proposal CSS lives in this <style> tag until the
 // direction is approved; it is NOT shipped in the taskpane bundle.
 
-const activitySection = section("activity-block", "Activity Block (Phase 2 proposal)");
+const activitySection = section(
+  "activity-block",
+  "Activity Block (Phase 2 proposal)",
+);
 
 const activityStyles = document.createElement("style");
 activityStyles.textContent = `
@@ -486,7 +538,8 @@ activityStyles.textContent = `
 activitySection.appendChild(activityStyles);
 
 const activityNote = document.createElement("p");
-activityNote.style.cssText = "font-size: 11px; color: var(--muted-foreground); margin: 0 0 12px;";
+activityNote.style.cssText =
+  "font-size: 11px; color: var(--muted-foreground); margin: 0 0 12px;";
 activityNote.textContent =
   "Proposal: one block per tool run instead of one card per call. States: live (working), collapsed (default when done), expanded with drill-in.";
 activitySection.appendChild(activityNote);
@@ -501,7 +554,9 @@ const mockSteps: MockStep[] = [
   { verb: "Formatted", detail: "'Cash Flow'!D10:L15 — currency" },
 ];
 
-function createActivityBlock(state: "working" | "collapsed" | "open"): HTMLDivElement {
+function createActivityBlock(
+  state: "working" | "collapsed" | "open",
+): HTMLDivElement {
   const block = document.createElement("div");
   block.className =
     state === "working"
@@ -547,7 +602,9 @@ function createActivityBlock(state: "working" | "collapsed" | "open"): HTMLDivEl
     mockSteps.forEach((step, i) => {
       const row = document.createElement("button");
       row.type = "button";
-      row.className = step.error ? "pi-activity__step pi-activity__step--error" : "pi-activity__step";
+      row.className = step.error
+        ? "pi-activity__step pi-activity__step--error"
+        : "pi-activity__step";
       const status = document.createElement("span");
       status.className = step.error
         ? "pi-activity__step-status pi-activity__step-status--error"
@@ -567,7 +624,13 @@ function createActivityBlock(state: "working" | "collapsed" | "open"): HTMLDivEl
       if (i === 3) {
         const drilldown = document.createElement("div");
         drilldown.className = "pi-activity__drilldown";
-        drilldown.appendChild(createMockToolCard("error", "Fill", "'Cash Flow'!D15:L15 — #REF! error"));
+        drilldown.appendChild(
+          createMockToolCard(
+            "error",
+            "Fill",
+            "'Cash Flow'!D15:L15 — #REF! error",
+          ),
+        );
         steps.appendChild(drilldown);
       }
     });
@@ -583,7 +646,8 @@ for (const [label, state] of [
   ["Done — expanded with drill-in", "open"],
 ] as const) {
   const caption = document.createElement("div");
-  caption.style.cssText = "font-size: 10px; color: var(--muted-foreground); margin: 0 0 4px; opacity: 0.8;";
+  caption.style.cssText =
+    "font-size: 10px; color: var(--muted-foreground); margin: 0 0 4px; opacity: 0.8;";
   caption.textContent = label;
   activitySection.appendChild(caption);
   activitySection.appendChild(createActivityBlock(state));

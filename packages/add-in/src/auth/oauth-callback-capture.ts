@@ -1,5 +1,5 @@
 /**
- * Poll the local Pi for Excel proxy for OAuth redirects captured on localhost.
+ * Poll the local Pi for Office proxy for OAuth redirects captured on localhost.
  *
  * Browser-safe OAuth providers still use CLI-compatible localhost redirect URIs
  * such as http://localhost:1455/auth/callback or http://localhost:8085/oauth2callback.
@@ -34,11 +34,15 @@ interface PollOptions {
 const DEFAULT_TIMEOUT_MS = 2 * 60 * 1000;
 const DEFAULT_INTERVAL_MS = 750;
 
-function isAuthOauthCallbackCapturePayloadShape(value: DynamicValue): value is DynamicObject {
+function isAuthOauthCallbackCapturePayloadShape(
+  value: DynamicValue,
+): value is DynamicObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isOAuthCallbackCapture(value: DynamicValue): value is OAuthCallbackCapture {
+function isOAuthCallbackCapture(
+  value: DynamicValue,
+): value is OAuthCallbackCapture {
   return (
     isAuthOauthCallbackCapturePayloadShape(value) &&
     value.status === "ready" &&
@@ -109,9 +113,16 @@ async function getEnabledLocalProxyUrl(): Promise<string | null> {
   return isLoopbackProxyUrl(proxyUrl) ? proxyUrl : null;
 }
 
-function buildCallbackPollUrl(proxyUrl: string, providerId: string, state: string): string {
+function buildCallbackPollUrl(
+  proxyUrl: string,
+  providerId: string,
+  state: string,
+): string {
   const normalizedBase = proxyUrl.endsWith("/") ? proxyUrl : `${proxyUrl}/`;
-  const url = new URL(`oauth/callback/${encodeURIComponent(providerId)}`, normalizedBase);
+  const url = new URL(
+    `oauth/callback/${encodeURIComponent(providerId)}`,
+    normalizedBase,
+  );
   url.searchParams.set("state", state);
   return url.toString();
 }
@@ -125,7 +136,11 @@ export async function pollOAuthCallbackCapture(
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const intervalMs = options.intervalMs ?? DEFAULT_INTERVAL_MS;
   const deadline = Date.now() + timeoutMs;
-  const pollUrl = buildCallbackPollUrl(proxyUrl, options.providerId, options.state);
+  const pollUrl = buildCallbackPollUrl(
+    proxyUrl,
+    options.providerId,
+    options.state,
+  );
 
   while (Date.now() <= deadline) {
     throwIfAborted(options.signal);
@@ -150,12 +165,16 @@ export async function pollOAuthCallbackCapture(
       if (response.ok) {
         const payload: DynamicValue = await response.json();
         if (isOAuthCallbackCapture(payload)) {
-          return payload.providerId === options.providerId && payload.state === options.state
+          return payload.providerId === options.providerId &&
+            payload.state === options.state
             ? payload
             : null;
         }
 
-        if (!isAuthOauthCallbackCapturePayloadShape(payload) || payload.status !== "pending") {
+        if (
+          !isAuthOauthCallbackCapturePayloadShape(payload) ||
+          payload.status !== "pending"
+        ) {
           return null;
         }
       }

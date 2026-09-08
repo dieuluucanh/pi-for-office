@@ -10,6 +10,9 @@
     ".": "./src/protocol.ts"
   },
   "files": ["src/protocol.ts", "README.md"],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit"
   }

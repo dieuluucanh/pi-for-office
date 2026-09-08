@@ -1,6 +1,6 @@
 # Cache observability baselines
 
-Baseline expectations for prefix-churn telemetry in Pi for Excel.
+Baseline expectations for prefix-churn telemetry in Pi for Office.
 
 This is the operational companion to `docs/context-management-policy.md` (area #424, item 6).
 
@@ -25,7 +25,7 @@ These are request-prefix deltas within the same session key, based on:
 Use this as the default expectation map when reviewing context-shape changes.
 
 | Scenario | Expected `prefixChangeReasons` on next call | Why |
-|---|---|---|
+| --- | --- | --- |
 | Fresh session first call | `[]` | No previous fingerprint exists yet. |
 | Repeated turns with no settings/runtime changes | `[]` | Prefix should stay stable. |
 | `/model` in **non-empty** session (default behavior) | `["model"]` | #442 restored in-place switching as default (pi-mono parity). |

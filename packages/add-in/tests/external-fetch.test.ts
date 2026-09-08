@@ -13,7 +13,7 @@ class MemorySettingsStore implements ProxyAwareSettingsStore {
   private readonly values = new Map<string, DynamicValue>();
 
   get(key: string): Promise<DynamicValue> {
-    const value = this.values.has(key) ? this.values.get(key) ?? null : null;
+    const value = this.values.has(key) ? (this.values.get(key) ?? null) : null;
     return Promise.resolve(value);
   }
 
@@ -55,20 +55,32 @@ void test("resolveOutboundRequestUrl wraps target URL when proxy is enabled", ()
 /* ── Proxy-down error detection ─────────────────────────────── */
 
 void test("isLikelyProxyConnectionError returns true for WebKit 'Load failed' when proxy is set", () => {
-  assert.equal(isLikelyProxyConnectionError("Load failed", "https://localhost:3003"), true);
+  assert.equal(
+    isLikelyProxyConnectionError("Load failed", "https://localhost:3003"),
+    true,
+  );
 });
 
 void test("isLikelyProxyConnectionError returns true for Chrome 'Failed to fetch' when proxy is set", () => {
-  assert.equal(isLikelyProxyConnectionError("Failed to fetch", "https://localhost:3003"), true);
+  assert.equal(
+    isLikelyProxyConnectionError("Failed to fetch", "https://localhost:3003"),
+    true,
+  );
 });
 
 void test("isLikelyProxyConnectionError returns true for Node 'fetch failed' when proxy is set", () => {
-  assert.equal(isLikelyProxyConnectionError("fetch failed", "https://localhost:3003"), true);
+  assert.equal(
+    isLikelyProxyConnectionError("fetch failed", "https://localhost:3003"),
+    true,
+  );
 });
 
 void test("isLikelyProxyConnectionError returns true for ECONNREFUSED when proxy is set", () => {
   assert.equal(
-    isLikelyProxyConnectionError("connect ECONNREFUSED 127.0.0.1:3003", "https://localhost:3003"),
+    isLikelyProxyConnectionError(
+      "connect ECONNREFUSED 127.0.0.1:3003",
+      "https://localhost:3003",
+    ),
     true,
   );
 });
@@ -79,7 +91,10 @@ void test("isLikelyProxyConnectionError returns false when no proxy is configure
 
 void test("isLikelyProxyConnectionError returns false for non-network errors with proxy", () => {
   assert.equal(
-    isLikelyProxyConnectionError("Invalid JSON in response body", "https://localhost:3003"),
+    isLikelyProxyConnectionError(
+      "Invalid JSON in response body",
+      "https://localhost:3003",
+    ),
     false,
   );
 });
@@ -107,7 +122,7 @@ void test("isLikelyProxyConnectionError returns false for upstream messages that
 void test("buildProxyDownErrorMessage includes tool label, fix command, and original error", () => {
   const message = buildProxyDownErrorMessage("Web search", "Load failed");
   assert.ok(message.startsWith("Error: Web search failed"));
-  assert.ok(message.includes("npx pi-for-excel-proxy"));
+  assert.ok(message.includes("npx pi-for-office-proxy"));
   assert.ok(message.includes("Do not retry"));
   assert.ok(message.includes("Load failed"));
 });

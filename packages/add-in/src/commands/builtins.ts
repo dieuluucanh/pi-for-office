@@ -1,5 +1,5 @@
 /**
- * Built-in slash commands for Pi for Excel.
+ * Built-in slash commands for Pi for Office.
  *
  * Public entrypoint; implementation lives in `src/commands/builtins/*`.
  */

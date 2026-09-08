@@ -79,9 +79,9 @@ allowlist explicitly via the existing `ALLOWED_ORIGINS` env var when you run
 them:
 
 ```bash
-ALLOWED_ORIGINS="https://localhost:3141,https://pi-for-excel.vercel.app,https://pi-excel.localhost" npm run proxy:https
-ALLOWED_ORIGINS="https://localhost:3141,https://pi-for-excel.vercel.app,https://pi-excel.localhost" npm run tmux:bridge:https
-ALLOWED_ORIGINS="https://localhost:3141,https://pi-for-excel.vercel.app,https://pi-excel.localhost" npm run python:bridge:https
+ALLOWED_ORIGINS="https://localhost:3141,https://dieuluucanh.github.io/pi-for-office,https://pi-excel.localhost" npm run proxy:https
+ALLOWED_ORIGINS="https://localhost:3141,https://dieuluucanh.github.io/pi-for-office,https://pi-excel.localhost" npm run tmux:bridge:https
+ALLOWED_ORIGINS="https://localhost:3141,https://dieuluucanh.github.io/pi-for-office,https://pi-excel.localhost" npm run python:bridge:https
 ```
 
 Note `ALLOWED_ORIGINS` **replaces** the default list, so include every origin

@@ -1,10 +1,10 @@
 {
-  "name": "pi-for-excel-proxy",
+  "name": "pi-for-office-proxy",
   "version": "0.2.5-pre",
-  "description": "One-command local HTTPS proxy helper for Pi for Excel OAuth logins.",
+  "description": "One-command local HTTPS proxy helper for Pi for Office OAuth logins.",
   "type": "module",
   "bin": {
-    "pi-for-excel-proxy": "cli.mjs"
+    "pi-for-office-proxy": "cli.mjs"
   },
   "files": [
     "cli.mjs",

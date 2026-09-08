@@ -11,7 +11,7 @@ Give users a way to provide persistent instructions to the agent at multiple sco
 Three levels, two to implement now:
 
 | Level | Scope | Storage | Travels with file? | Agent can write? |
-|-------|-------|---------|-------------------|-----------------|
+| ------- | ------- | --------- | ------------------- | ----------------- |
 | **User** | All workbooks | IndexedDB | No (local to machine) | Yes — auto-save ("memory") |
 | **Workbook** | This .xlsx file | IndexedDB (default; keyed by workbook identity) or `workbook.settings` (opt-in) | Optional (opt-in) | Yes — propose & confirm |
 | **Sheet/cell** | Specific ranges | Excel comments (`@pi:` prefix) | Yes | Future |
@@ -46,6 +46,7 @@ The agent auto-saves when the user expresses a preference. No confirmation step 
 **Implicit triggers:** Agent notices repeated corrections (e.g., user keeps fixing date formats) and saves the pattern.
 
 **UX flow:**
+
 ```
 User:  "Always check for circular references after writing formulas"
 
@@ -111,11 +112,13 @@ Injected into the system prompt every turn, after user instructions.
 The file may be shared — the agent must be transparent and cautious.
 
 **The agent always:**
+
 1. Shows the exact text it wants to save
 2. Reminds the user where workbook instructions are stored (local vs inside the `.xlsx`). If inside the workbook, warn they travel with the file.
 3. Waits for explicit confirmation before saving
 
 **UX flow:**
+
 ```
 Agent: "I'd like to note this in the workbook instructions:
 
@@ -148,6 +151,7 @@ Cell B5 comment: "@pi: This is projected revenue, not actual. Source: management
 ```
 
 **Why this works:**
+
 - Zero new UI, storage, or API — uses native Excel comments
 - Spatial context — notes are attached to the cells they describe
 - Travels with the file
@@ -155,6 +159,7 @@ Cell B5 comment: "@pi: This is projected revenue, not actual. Source: management
 - Users know how to add comments
 
 **What we'd add:**
+
 1. System prompt line: "Comments prefixed with `@pi:` are instructions from the user. Follow them."
 2. Blueprint enhancement: mention sheets that have `@pi:` comments so the agent knows to read detailed when relevant.
 
@@ -235,7 +240,7 @@ The tool itself doesn't enforce the propose-and-confirm pattern for workbook-lev
 | Level | Read from | Write to |
 |-------|-----------|----------|
 | `user` | IndexedDB `SettingsStore` → `"user.instructions"` | Same |
-| `workbook` | IndexedDB (keyed by workbook identity) *(default)*; optional `workbook.settings.getItem("pi.instructions")` | IndexedDB *(default)*; optional `workbook.settings.add("pi.instructions", ...)` |
+| `workbook` | IndexedDB (keyed by workbook identity) _(default)_; optional `workbook.settings.getItem("pi.instructions")` | IndexedDB _(default)_; optional `workbook.settings.add("pi.instructions", ...)` |
 
 ---
 
@@ -285,6 +290,7 @@ Two tabs: **My Instructions** and **Workbook**.
 ### Placeholder text (greyed, disappears on focus)
 
 **My Instructions tab:**
+
 ```
 Your preferences and habits, e.g.:
 • Always use EUR for currencies
@@ -293,6 +299,7 @@ Your preferences and habits, e.g.:
 ```
 
 **Workbook tab:**
+
 ```
 Notes about this workbook's structure, e.g.:
 • DCF model for Acme Corp, FY2025
@@ -311,7 +318,7 @@ Notes about this workbook's structure, e.g.:
 ## Token Budget
 
 | Component | Estimated tokens | When |
-|-----------|-----------------|------|
+| ----------- | ----------------- | ------ |
 | Preamble (instructions section header + guidance) | ~100 | Always |
 | User instructions (up to soft limit) | ~500 max | Always |
 | Workbook instructions (up to soft limit) | ~1,000 max | Always |

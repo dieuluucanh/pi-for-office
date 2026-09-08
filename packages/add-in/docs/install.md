@@ -1,4 +1,4 @@
-# Install Pi for Excel
+# Install Pi for Office
 
 > 中文用户:简要中文安装与模型配置指南见 [README.zh-CN.md](../README.zh-CN.md)。
 
@@ -35,11 +35,11 @@ Download this file and save it somewhere you can find it (e.g. your Desktop):
 
 3. Copy `manifest.prod.xml` into that folder
 4. Quit Excel completely (Cmd + Q) and reopen it
-5. Go to **Insert → My Add-ins** — you should see **Pi for Excel** listed. Click it to register the add-in.
-6. Now look for the **Add-ins** button on the far right of the **Home** ribbon tab (it looks like four orange squares). Click it, then click **Pi for Excel** to open the sidebar.
+5. Go to **Insert → My Add-ins** — you should see **Pi for Office** listed. Click it to register the add-in.
+6. Now look for the **Add-ins** button on the far right of the **Home** ribbon tab (it looks like four orange squares). Click it, then click **Pi for Office** to open the sidebar.
 
    <img src="../public/assets/add-ins-button.png" width="200" alt="Add-ins button in the Home ribbon tab" />
-   <img src="../public/assets/add-ins-dropdown.png" width="200" alt="Pi for Excel in the Add-ins dropdown" />
+   <img src="../public/assets/add-ins-dropdown.png" width="200" alt="Pi for Office in the Add-ins dropdown" />
 
 > **Folder doesn't exist?** Create it first — open Terminal and run:
 >
@@ -85,7 +85,7 @@ For more detail, see [Microsoft's guide for Windows](https://learn.microsoft.com
 
 ## 3) First-run check
 
-1. Open the taskpane (click the **Add-ins** button in the Home ribbon tab, then click **Pi for Excel**)
+1. Open the taskpane (click the **Add-ins** button in the Home ribbon tab, then click **Pi for Office**)
 2. Connect a provider (see below)
 3. Send a test prompt, e.g.:
    - `What sheet am I currently on?`
@@ -120,7 +120,7 @@ Use this when your org exposes an OpenAI-compatible endpoint (or for local OpenA
 Notes:
 
 - If your gateway is publicly reachable over HTTPS, you can usually connect directly (no proxy).
-- For localhost/private endpoints via the local proxy, you may need to configure proxy host policy env vars (for example `ALLOWED_TARGET_HOSTS`, `ALLOW_LOOPBACK_TARGETS`, or `ALLOW_PRIVATE_TARGETS`) when starting `pi-for-excel-proxy`.
+- For localhost/private endpoints via the local proxy, you may need to configure proxy host policy env vars (for example `ALLOWED_TARGET_HOSTS`, `ALLOW_LOOPBACK_TARGETS`, or `ALLOW_PRIVATE_TARGETS`) when starting `pi-for-office-proxy`.
 
 ### OAuth / account login (Anthropic, OpenAI ChatGPT, Google Code Assist/Antigravity, GitHub Copilot)
 
@@ -128,7 +128,7 @@ Notes:
 2. Complete login in the browser window that opens
 3. Return to Excel and complete any prompt shown
    - With the local proxy running, ChatGPT, Anthropic, and Google OAuth should continue automatically after the browser redirects to localhost.
-   - If automatic capture is unavailable, your browser may land on a page that says **"can't be reached"** — that's normal! Copy the full URL from the browser address bar and paste it when prompted in Pi for Excel.
+   - If automatic capture is unavailable, your browser may land on a page that says **"can't be reached"** — that's normal! Copy the full URL from the browser address bar and paste it when prompted in Pi for Office.
    - Some Google workspace tiers may also ask for a Google Cloud project ID during setup
 
 If login fails with a CORS/network error, follow the next section.
@@ -156,13 +156,21 @@ Typical symptoms:
 If you already have Node.js:
 
 ```bash
-npx -y pi-for-excel-proxy@latest
+npx -y pi-for-office-proxy@latest
+```
+
+Alternatively, run directly from the repo (no npm publish needed):
+
+```bash
+git clone https://github.com/dieuluucanh/pi-for-office.git
+cd pi-for-office/packages/add-in/pkg/proxy
+node cli.mjs
 ```
 
 If you do not have Node.js (or are unsure):
 
 ```bash
-curl -fsSL https://piforexcel.com/proxy | sh
+curl -fsSL https://dieuluucanh.github.io/pi-for-office/proxy.sh | sh
 ```
 
 1. In Pi, open `/settings` → **Proxy**:
@@ -191,21 +199,21 @@ Notes:
 - API-key providers generally work without proxy.
 - The local proxy also starts loopback-only callback listeners for browser OAuth flows so ChatGPT (`http://localhost:1455/auth/callback`), Anthropic (`http://localhost:53692/callback`), Google Code Assist (`http://localhost:8085/oauth2callback`), and Google Antigravity (`http://localhost:51121/oauth-callback`) can capture browser callbacks automatically. If a port is busy, the affected login still works via the manual URL paste fallback.
 - `3141` is the add-in/dev-server port; the local proxy normally uses `3003`.
-- GPT-5.6 Luna on the ChatGPT provider requires the current proxy's Codex WebSocket bridge. `https://localhost:3003/healthz` must advertise both `X-Pi-For-Excel-Proxy: 1` and `X-Pi-For-Excel-Codex-WebSocket-Bridge: 1`.
-- If an older proxy is running, stop that process and rerun `npx -y pi-for-excel-proxy@latest`; the current CLI intentionally refuses to reuse an outdated listener.
+- GPT-5.6 Luna on the ChatGPT provider requires the current proxy's Codex WebSocket bridge. `https://localhost:3003/healthz` must advertise both `X-Pi-For-Office-Proxy: 1` and `X-Pi-For-Office-Codex-WebSocket-Bridge: 1`.
+- If an older proxy is running, stop that process and rerun `npx -y pi-for-office-proxy@latest`; the current CLI intentionally refuses to reuse an outdated listener.
 - If a healthy compatible proxy is already running on `3003`, the CLI reports that and exits instead of starting a duplicate.
 - If port `3003` is busy for some other reason, the CLI automatically chooses a random free port. Copy the printed `https://localhost:<port>` URL into `/settings` → **Proxy**.
 - To force a specific port, set `PORT` and use that same URL in settings:
 
 ```bash
-PORT=3005 npx pi-for-excel-proxy
+PORT=3005 npx pi-for-office-proxy
 ```
 
 ---
 
 ## Updates
 
-If you installed with `manifest.prod.xml`, Pi for Excel loads from a hosted URL and most updates are automatic.
+If you installed with `manifest.prod.xml`, Pi for Office loads from a hosted URL and most updates are automatic.
 
 - Normal case: close/reopen Excel taskpane to pick up latest version.
 - Rare case (manifest changes): download the new `manifest.prod.xml` and upload it again in Excel.

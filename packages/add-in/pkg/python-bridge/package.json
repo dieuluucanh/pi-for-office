@@ -1,10 +1,10 @@
 {
-  "name": "pi-for-excel-python-bridge",
+  "name": "pi-for-office-python-bridge",
   "version": "0.1.1-pre",
-  "description": "One-command local HTTPS Python / LibreOffice bridge helper for Pi for Excel.",
+  "description": "One-command local HTTPS Python / LibreOffice bridge helper for Pi for Office.",
   "type": "module",
   "bin": {
-    "pi-for-excel-python-bridge": "./cli.mjs"
+    "pi-for-office-python-bridge": "./cli.mjs"
   },
   "files": [
     "cli.mjs",

@@ -29,7 +29,7 @@ workbook tools fail fast with `UnsupportedHostToolError` instead of running an
 Office.js path.
 
 | Tool | WPS status | Notes |
-|---|---|---|
+| --- | --- | --- |
 | `get_workbook_overview` | Supported | Sheets, visibility, used-range dimensions, active sheet, and selection. Headers, tables, named ranges, charts, PivotTables, shapes, and other object inventory are explicitly reported as not implemented yet. |
 | `read_range` | Supported | `compact`, `csv`, and `detailed` modes via WPS `Range.Value2`, `Formula`, and `NumberFormat`. If formula/format metadata is unavailable, the result includes an in-band WPS metadata note. |
 | `write_cells` | Supported | Values/formulas, overwrite protection, and read-back verification. **No WPS automatic backup is created**; the result and details report recovery as `not_available`. |
@@ -51,7 +51,7 @@ workbook context.
 ## Host/distribution matrix
 
 | Host/distribution | Support stance | Add-in route | Notes |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Microsoft Excel | Supported | Office Add-in manifest + Office.js | Existing production path. |
 | China WPS personal (`wps.cn`) | Phase 2 backend implemented; strict product proof blocked on ribbon-action trust state in WPS 12.1.0.26200 | `wpsjs publish` flow | Recommended WPS route. Installs write `publish.xml` under `%appdata%/kingsoft/wps/jsaddons` on Windows or `~/.local/share/Kingsoft/wps/jsaddons` on Linux. In the QEMU harness, use a guest-localhost publish/add-in URL (`http://127.0.0.1:3889/`) plus portproxy to the macOS host; keep the taskpane URL on `http://10.0.2.2:3141/src/taskpane.html`. |
 | WPS 365 enterprise | Phase 2 backend implemented; enterprise deployment smoke pending | Publish mode or managed `jsplugins.xml` via `oem.ini` | `jsplugins.xml` mode is for enterprise/OEM repack scenarios. |
@@ -96,7 +96,7 @@ https://localhost:3141/src/taskpane.html
 The production placeholder matches the Office production manifest:
 
 ```text
-https://pi-for-excel.vercel.app/src/taskpane.html
+https://dieuluucanh.github.io/pi-for-office/src/taskpane.html
 ```
 
 For packaging, set/replace `PI_WPS_TASKPANE_URL` (or patch the constant in
@@ -226,7 +226,7 @@ Strict product-level proof is blocked in the current personal WPS
 - On the x86 WPS build, the real Pi WPS add-in also installs and loads when the
   add-in root is served from a stable Windows-local origin. WPS fetches
   `manifest.xml`, `ribbon.xml`, `index.html`, `main.js`, and `js/ribbon.js`,
-  writes `authaddin.enable=true`, shows the real `Pi for Excel` ribbon tab, and
+  writes `authaddin.enable=true`, shows the real `Pi for Office` ribbon tab, and
   `Open Pi` opens the real `/src/taskpane.html` taskpane. The taskpane origin
   permission prompt is expected in the dev harness (`127.0.0.1` add-in opening
   `10.0.2.2:3141`), and WPS guest access to `/__pi-auth` remains blocked

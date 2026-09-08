@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pi for Excel — Login</title>
+  <title>Pi for Office — Login</title>
   <link rel="icon" href="/assets/icon-32.png" type="image/png" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -110,7 +110,7 @@
   <div class="card" id="card">
     <div class="logo">π</div>
     <h1 id="title">Login successful!</h1>
-    <p class="subtitle" id="subtitle">Copy the URL below and paste it back in Pi for Excel.</p>
+    <p class="subtitle" id="subtitle">Copy the URL below and paste it back in Pi for Office.</p>
     <div class="url-box" id="url-box">
       <label>Your login URL</label>
       <div class="url-text" id="url-text"></div>
@@ -119,6 +119,8 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
       Copy URL
     </button>
+    <template id="btn-icon-copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></template>
+    <template id="btn-icon-copied"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></template>
     <div class="steps">
       <p><strong>Step 1:</strong> Click the button above to copy the URL.</p>
       <p><strong>Step 2:</strong> Switch back to Excel.</p>
@@ -138,7 +140,7 @@
 
       if (!hasCode) {
         titleEl.textContent = 'Waiting for login…';
-        subtitleEl.textContent = 'If you see this page, your login redirect arrived but no authorization code was found. Try logging in again from Pi for Excel.';
+        subtitleEl.textContent = 'If you see this page, your login redirect arrived but no authorization code was found. Try logging in again from Pi for Office.';
         document.getElementById('url-box').style.display = 'none';
         copyBtn.style.display = 'none';
         return;
@@ -146,17 +148,21 @@
 
       urlTextEl.textContent = fullUrl;
 
+      // Static icon templates (no innerHTML / no dynamic markup).
+      const iconCopy = document.getElementById('btn-icon-copy');
+      const iconCopied = document.getElementById('btn-icon-copied');
+      const setCopyLabel = function (copied) {
+        copyBtn.replaceChildren();
+        copyBtn.appendChild((copied ? iconCopied : iconCopy).content.cloneNode(true));
+        copyBtn.appendChild(document.createTextNode(copied ? ' Copied!' : ' Copy URL'));
+        copyBtn.classList.toggle('copied', copied);
+      };
+
       copyBtn.addEventListener('click', function () {
         navigator.clipboard.writeText(fullUrl).then(function () {
-          copyBtn.innerHTML =
-            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' +
-            ' Copied!';
-          copyBtn.classList.add('copied');
+          setCopyLabel(true);
           setTimeout(function () {
-            copyBtn.innerHTML =
-              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>' +
-              ' Copy URL';
-            copyBtn.classList.remove('copied');
+            setCopyLabel(false);
           }, 2000);
         });
       });

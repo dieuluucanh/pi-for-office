@@ -7,21 +7,23 @@ const LANDING_FILE = path.join(ROOT, "public", "index.html");
 const INSTALL_DOC_FILE = path.join(ROOT, "docs", "install.md");
 
 const LANDING_REQUIRED_SNIPPETS = [
-  "npx pi-for-excel-proxy",
-  "curl -fsSL https://piforexcel.com/proxy | sh",
+  "npx pi-for-office-proxy",
+  "curl -fsSL https://dieuluucanh.github.io/pi-for-office/proxy.sh | sh",
   "Built-in multi-provider web search and page fetch",
   "Extensions can call LLMs, fetch HTTP data, persist storage, and register tools through the built-in bridge.",
 ];
 
 const LANDING_FORBIDDEN_SNIPPETS = [
+  "npx pi-for-excel-proxy",
+  "https://piforexcel.com/proxy",
   "git clone https://github.com/tmustier/pi-for-excel.git ~/.pi-for-excel",
   "mkcert -install && mkcert localhost",
   "cd ~/.pi-for-excel && npm run proxy:https",
 ];
 
 const INSTALL_DOC_REQUIRED_SNIPPETS = [
-  "npx pi-for-excel-proxy",
-  "curl -fsSL https://piforexcel.com/proxy | sh",
+  "npx pi-for-office-proxy",
+  "curl -fsSL https://dieuluucanh.github.io/pi-for-office/proxy.sh | sh",
 ];
 
 function rel(filePath) {
@@ -42,9 +44,18 @@ async function main() {
     fs.readFile(INSTALL_DOC_FILE, "utf8"),
   ]);
 
-  const landingMissing = collectMissing(landingSource, LANDING_REQUIRED_SNIPPETS);
-  const landingForbiddenPresent = collectPresent(landingSource, LANDING_FORBIDDEN_SNIPPETS);
-  const installMissing = collectMissing(installSource, INSTALL_DOC_REQUIRED_SNIPPETS);
+  const landingMissing = collectMissing(
+    landingSource,
+    LANDING_REQUIRED_SNIPPETS,
+  );
+  const landingForbiddenPresent = collectPresent(
+    landingSource,
+    LANDING_FORBIDDEN_SNIPPETS,
+  );
+  const installMissing = collectMissing(
+    installSource,
+    INSTALL_DOC_REQUIRED_SNIPPETS,
+  );
 
   const hasErrors =
     landingMissing.length > 0 ||
@@ -63,7 +74,9 @@ async function main() {
     }
 
     if (landingForbiddenPresent.length > 0) {
-      console.error(`${rel(LANDING_FILE)} still contains forbidden legacy snippets:`);
+      console.error(
+        `${rel(LANDING_FILE)} still contains forbidden legacy snippets:`,
+      );
       for (const snippet of landingForbiddenPresent) {
         console.error(`  - ${snippet}`);
       }

@@ -7,7 +7,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-const PACKAGE_TAG = "pi-for-excel-tmux-bridge";
+const PACKAGE_TAG = "pi-for-office-tmux-bridge";
 const DEFAULT_PORT = "3341";
 const INSTALL_MISSING_FLAG = "--install-missing";
 
@@ -15,7 +15,7 @@ const cliDir = path.dirname(fileURLToPath(import.meta.url));
 const bridgeScriptPath = path.join(cliDir, "scripts", "tmux-bridge-server.mjs");
 
 const homeDir = os.homedir();
-const appDir = path.join(homeDir, ".pi-for-excel");
+const appDir = path.join(homeDir, ".pi-for-office");
 const certDir = path.join(appDir, "certs");
 const keyPath = path.join(certDir, "key.pem");
 const certPath = path.join(certDir, "cert.pem");
@@ -55,7 +55,9 @@ function run(command, args, options = {}) {
   }
 
   if (result.signal) {
-    console.error(`[${PACKAGE_TAG}] ${command} terminated by signal ${result.signal}`);
+    console.error(
+      `[${PACKAGE_TAG}] ${command} terminated by signal ${result.signal}`,
+    );
     process.exit(1);
   }
 }
@@ -76,7 +78,10 @@ function resolveMkcertCommand() {
   const candidates = [];
 
   if (process.platform === "darwin") {
-    const brewCandidates = ["/opt/homebrew/bin/mkcert", "/usr/local/bin/mkcert"];
+    const brewCandidates = [
+      "/opt/homebrew/bin/mkcert",
+      "/usr/local/bin/mkcert",
+    ];
     for (const candidate of brewCandidates) {
       if (fs.existsSync(candidate)) {
         candidates.push(candidate);
@@ -104,7 +109,11 @@ function resolveMkcertCommand() {
     console.log(`[${PACKAGE_TAG}] Installing mkcert via Homebrew...`);
     run("brew", ["install", "mkcert"]);
 
-    const brewCandidates = ["/opt/homebrew/bin/mkcert", "/usr/local/bin/mkcert", "mkcert"];
+    const brewCandidates = [
+      "/opt/homebrew/bin/mkcert",
+      "/usr/local/bin/mkcert",
+      "mkcert",
+    ];
     for (const candidate of brewCandidates) {
       if (candidate !== "mkcert" && !fs.existsSync(candidate)) {
         continue;
@@ -115,13 +124,21 @@ function resolveMkcertCommand() {
       }
     }
 
-    console.error(`[${PACKAGE_TAG}] mkcert is installed but not compatible with required CLI flags.`);
-    console.error(`[${PACKAGE_TAG}] Ensure FiloSottile mkcert is used (not the npm mkcert package).`);
+    console.error(
+      `[${PACKAGE_TAG}] mkcert is installed but not compatible with required CLI flags.`,
+    );
+    console.error(
+      `[${PACKAGE_TAG}] Ensure FiloSottile mkcert is used (not the npm mkcert package).`,
+    );
     process.exit(1);
   }
 
-  console.error(`[${PACKAGE_TAG}] Please install mkcert, then run this command again.`);
-  console.error(`[${PACKAGE_TAG}] Install instructions: https://github.com/FiloSottile/mkcert#installation`);
+  console.error(
+    `[${PACKAGE_TAG}] Please install mkcert, then run this command again.`,
+  );
+  console.error(
+    `[${PACKAGE_TAG}] Install instructions: https://github.com/FiloSottile/mkcert#installation`,
+  );
   process.exit(1);
 }
 
@@ -136,7 +153,9 @@ function installMkcertCa(mkcertCommand) {
 
   console.error(`[${PACKAGE_TAG}] Failed to install mkcert local CA.`);
   console.error(`[${PACKAGE_TAG}] Run manually: mkcert -install`);
-  console.error(`[${PACKAGE_TAG}] If it fails, fix trust-store permissions and retry.`);
+  console.error(
+    `[${PACKAGE_TAG}] If it fails, fix trust-store permissions and retry.`,
+  );
 
   if (typeof result.status === "number" && result.status !== 0) {
     process.exit(result.status);
@@ -157,9 +176,13 @@ function ensureCertificates() {
   console.log(`[${PACKAGE_TAG}] Generating local HTTPS certificates...`);
   installMkcertCa(mkcertCommand);
 
-  run(mkcertCommand, ["-key-file", keyPath, "-cert-file", certPath, "localhost"], {
-    cwd: certDir,
-  });
+  run(
+    mkcertCommand,
+    ["-key-file", keyPath, "-cert-file", certPath, "localhost"],
+    {
+      cwd: certDir,
+    },
+  );
 
   if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
     console.error(`[${PACKAGE_TAG}] Failed to generate TLS certificates.`);
@@ -173,13 +196,17 @@ function installMissingDependencies() {
   }
 
   if (process.platform !== "darwin") {
-    console.warn(`[${PACKAGE_TAG}] ${INSTALL_MISSING_FLAG} currently supports macOS/Homebrew only.`);
+    console.warn(
+      `[${PACKAGE_TAG}] ${INSTALL_MISSING_FLAG} currently supports macOS/Homebrew only.`,
+    );
     console.warn(`[${PACKAGE_TAG}] Please install tmux manually and retry.`);
     return;
   }
 
   if (!commandExists("brew")) {
-    console.error(`[${PACKAGE_TAG}] Homebrew is required for ${INSTALL_MISSING_FLAG}.`);
+    console.error(
+      `[${PACKAGE_TAG}] Homebrew is required for ${INSTALL_MISSING_FLAG}.`,
+    );
     console.error(`[${PACKAGE_TAG}] Install Homebrew first: https://brew.sh`);
     process.exit(1);
   }
@@ -188,7 +215,9 @@ function installMissingDependencies() {
   run("brew", ["install", "tmux"]);
 
   if (!canRunTmux()) {
-    console.warn(`[${PACKAGE_TAG}] tmux is still unavailable after install attempt.`);
+    console.warn(
+      `[${PACKAGE_TAG}] tmux is still unavailable after install attempt.`,
+    );
   }
 }
 
@@ -197,10 +226,14 @@ function resolveBridgeConfig() {
   const installMissing = userArgs.includes(INSTALL_MISSING_FLAG);
   const bridgeUserArgs = userArgs.filter((arg) => arg !== INSTALL_MISSING_FLAG);
 
-  const hasExplicitScheme = bridgeUserArgs.includes("--https") || bridgeUserArgs.includes("--http");
-  const bridgeArgs = hasExplicitScheme ? bridgeUserArgs : ["--https", ...bridgeUserArgs];
+  const hasExplicitScheme =
+    bridgeUserArgs.includes("--https") || bridgeUserArgs.includes("--http");
+  const bridgeArgs = hasExplicitScheme
+    ? bridgeUserArgs
+    : ["--https", ...bridgeUserArgs];
 
-  const usesHttpOnly = bridgeArgs.includes("--http") && !bridgeArgs.includes("--https");
+  const usesHttpOnly =
+    bridgeArgs.includes("--http") && !bridgeArgs.includes("--https");
 
   return {
     bridgeArgs,
@@ -217,9 +250,8 @@ function applyDefaultPort(env) {
 }
 
 function applyDefaultMode(env) {
-  const configuredMode = typeof env.TMUX_BRIDGE_MODE === "string"
-    ? env.TMUX_BRIDGE_MODE.trim()
-    : "";
+  const configuredMode =
+    typeof env.TMUX_BRIDGE_MODE === "string" ? env.TMUX_BRIDGE_MODE.trim() : "";
 
   if (configuredMode.length === 0) {
     env.TMUX_BRIDGE_MODE = "tmux";
@@ -234,7 +266,10 @@ function startBridge(bridgeArgs) {
   applyDefaultPort(childEnv);
   applyDefaultMode(childEnv);
 
-  if (typeof childEnv.PI_FOR_EXCEL_CERT_DIR !== "string" || childEnv.PI_FOR_EXCEL_CERT_DIR.trim().length === 0) {
+  if (
+    typeof childEnv.PI_FOR_EXCEL_CERT_DIR !== "string" ||
+    childEnv.PI_FOR_EXCEL_CERT_DIR.trim().length === 0
+  ) {
     childEnv.PI_FOR_EXCEL_CERT_DIR = certDir;
   }
 
@@ -275,7 +310,9 @@ function startBridge(bridgeArgs) {
 
 if (!fs.existsSync(bridgeScriptPath)) {
   console.error(`[${PACKAGE_TAG}] Missing bridge runtime files.`);
-  console.error(`[${PACKAGE_TAG}] Reinstall the package or run npm pack again.`);
+  console.error(
+    `[${PACKAGE_TAG}] Reinstall the package or run npm pack again.`,
+  );
   process.exit(1);
 }
 

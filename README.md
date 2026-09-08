@@ -3,31 +3,46 @@
 Pi-powered AI agent for Microsoft Office — Excel, Word, PowerPoint, and Power BI.
 Native-Pi, open-source, and **zero changes to Pi core**.
 
-> **Status:** Monorepo scaffolded. `packages/add-in` is a fork of
+> **Status:** Working build. `packages/add-in` is a fork of
 > [pi-for-excel](https://github.com/tmustier/pi-for-excel) (MIT) being generalized
 > from Excel-only to a unified multi-host Office add-in.
 
 ## Packages
 
 | Package | Description |
-|---------|-------------|
-| [`packages/add-in`](packages/add-in/) | Unified Office.js task-pane add-in (Excel + Word + PowerPoint). Forked from pi-for-excel. |
+| --------- | ------------- |
+| [`packages/add-in`](packages/add-in/) | Unified Office.js task-pane add-in (Excel + Word + PowerPoint). Forked from [pi-for-excel](https://github.com/tmustier/pi-for-excel). |
 | [`packages/bridge-extension`](packages/bridge-extension/) | Native Pi extension — WebSocket bridge + Office tool proxy for the add-in (`pi install npm:@dieulc/pi-office-bridge`). |
 | `packages/powerbi-visual` | Power BI custom visual (Phase 3, not yet scaffolded). |
 
-## Architecture (planned)
+## Architecture
 
 ```
-Office app (task pane add-in)  ──WebSocket──►  local Pi process (bridge extension)
-       │                                              │
-   Office.js tools                         agent loop + system tools (bash, git, files)
-       │                                              │
-       └────────────── LLM providers (BYOK, or Pi's own auth)
+Office app (task pane add-in)
+        │
+        ├── Browser-only (default) ──► LLM providers directly (BYOK / API keys)
+        │        │                        no local process required
+        │        └────────────► optional local CORS proxy (npx pi-for-office-proxy)
+        │                             only needed for OAuth logins (Anthropic /
+        │                             OpenAI ChatGPT / Google) & advanced features
+        │
+        └── Bridge mode (advanced) ── WebSocket ──► local Pi process (bridge extension)
+                                                       agent loop + system tools
+                                                       (bash, git, files)
 ```
 
-- **Standalone mode** — the add-in runs a browser agent directly (like pi-for-excel).
-- **Bridge mode** — when a local Pi process is running with the bridge extension
-  installed, the add-in auto-detects it and gains full system-tool capabilities.
+Two operational modes, one app:
+
+- **Browser-only mode (default)** — the add-in runs a browser agent directly and
+  talks to LLM providers with Bring-Your-Own-Key API keys. No local proxy, no Pi
+  process, no Node.js — this is the mode most users stay in.
+- **Proxy mode (opt-in)** — enable in `/settings → Proxy` and run
+  `npx pi-for-office-proxy` only when you need OAuth-based provider logins
+  (Anthropic subscription, OpenAI ChatGPT, Google Code Assist/Antigravity,
+  GitHub Copilot) that are CORS-blocked inside Office webviews.
+- **Bridge mode (advanced)** — when a local Pi process is running with the
+  bridge extension installed, the add-in auto-detects it and gains full
+  system-tool capabilities (bash, git, files).
 
 ## Repo layout
 

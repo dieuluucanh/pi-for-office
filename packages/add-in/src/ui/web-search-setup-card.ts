@@ -23,13 +23,16 @@ import {
   type WebSearchConfigStore,
   type WebSearchProvider,
 } from "../tools/web-search-config.js";
-import { isWebSearchDetails, type WebSearchDetails } from "../tools/tool-details.js";
+import {
+  isWebSearchDetails,
+  type WebSearchDetails,
+} from "../tools/tool-details.js";
 import { validateWebSearchApiKey } from "../tools/web-search.js";
 import { AlertTriangle, Check, Copy, Search, lucide } from "./lucide-icons.js";
 import { showToast } from "./toast.js";
 import { t } from "../language/index.js";
 
-const PROXY_COMMAND = "npx pi-for-excel-proxy";
+const PROXY_COMMAND = "npx pi-for-office-proxy";
 
 interface ProxyStepOptions {
   stepNumber: number | null;
@@ -49,13 +52,19 @@ function selectElementText(element: HTMLElement): void {
   selection.addRange(range);
 }
 
-function copyToClipboard(text: string, onCopied: () => void, fallbackElement: HTMLElement): void {
+function copyToClipboard(
+  text: string,
+  onCopied: () => void,
+  fallbackElement: HTMLElement,
+): void {
   if (!navigator.clipboard?.writeText) {
     selectElementText(fallbackElement);
     return;
   }
 
-  void navigator.clipboard.writeText(text).then(onCopied, () => selectElementText(fallbackElement));
+  void navigator.clipboard
+    .writeText(text)
+    .then(onCopied, () => selectElementText(fallbackElement));
 }
 
 function createCopyableCommand(command: string): HTMLDivElement {
@@ -75,22 +84,26 @@ function createCopyableCommand(command: string): HTMLDivElement {
   let resetTimeout: ReturnType<typeof setTimeout> | null = null;
 
   copyBtn.addEventListener("click", () => {
-    copyToClipboard(command, () => {
-      copyBtn.replaceChildren(lucide(Check));
-      copyBtn.title = t("bridge-setup.copiedTitle");
-      copyBtn.setAttribute("aria-label", "Copied");
+    copyToClipboard(
+      command,
+      () => {
+        copyBtn.replaceChildren(lucide(Check));
+        copyBtn.title = t("bridge-setup.copiedTitle");
+        copyBtn.setAttribute("aria-label", "Copied");
 
-      if (resetTimeout !== null) {
-        clearTimeout(resetTimeout);
-      }
+        if (resetTimeout !== null) {
+          clearTimeout(resetTimeout);
+        }
 
-      resetTimeout = setTimeout(() => {
-        copyBtn.replaceChildren(lucide(Copy));
-        copyBtn.title = t("bridge-setup.copyCommandTitle");
-        copyBtn.setAttribute("aria-label", "Copy command");
-        resetTimeout = null;
-      }, 1400);
-    }, code);
+        resetTimeout = setTimeout(() => {
+          copyBtn.replaceChildren(lucide(Copy));
+          copyBtn.title = t("bridge-setup.copyCommandTitle");
+          copyBtn.setAttribute("aria-label", "Copy command");
+          resetTimeout = null;
+        }, 1400);
+      },
+      code,
+    );
   });
 
   row.append(code, copyBtn);
@@ -103,9 +116,10 @@ function createProxyStep(options: ProxyStepOptions): HTMLDivElement {
 
   const label = document.createElement("p");
   label.className = "pi-search-setup__step-label";
-  label.textContent = options.stepNumber !== null
-    ? t("web-search-setup.stepLabel", { n: String(options.stepNumber) })
-    : t("web-search-setup.startHelper");
+  label.textContent =
+    options.stepNumber !== null
+      ? t("web-search-setup.stepLabel", { n: String(options.stepNumber) })
+      : t("web-search-setup.startHelper");
 
   const hint = document.createElement("p");
   hint.className = "pi-search-setup__hint";
@@ -139,31 +153,39 @@ function createProxyStep(options: ProxyStepOptions): HTMLDivElement {
 
     const probeUrl = options.proxyBaseUrl ?? DEFAULT_PROXY_URL;
 
-    void probeProxyReachability(probeUrl, 1500).then(
-      (reachable) => {
-        if (reachable) {
-          status.textContent = t("web-search-setup.helperDetected");
-          status.className = "pi-search-setup__status is-ok";
-          options.onProxyReady?.();
-          return;
-        }
+    void probeProxyReachability(probeUrl, 1500)
+      .then(
+        (reachable) => {
+          if (reachable) {
+            status.textContent = t("web-search-setup.helperDetected");
+            status.className = "pi-search-setup__status is-ok";
+            options.onProxyReady?.();
+            return;
+          }
 
-        status.textContent = t("web-search-setup.helper-not-detected");
-        status.className = "pi-search-setup__status is-warn";
-      },
-      () => {
-        status.textContent = t("web-search-setup.check-failed");
-        status.className = "pi-search-setup__status is-error";
-      },
-    ).finally(() => {
-      checking = false;
-      retryBtn.disabled = false;
-      retryBtn.textContent = t("web-search-setup.retry");
-    });
+          status.textContent = t("web-search-setup.helper-not-detected");
+          status.className = "pi-search-setup__status is-warn";
+        },
+        () => {
+          status.textContent = t("web-search-setup.check-failed");
+          status.className = "pi-search-setup__status is-error";
+        },
+      )
+      .finally(() => {
+        checking = false;
+        retryBtn.disabled = false;
+        retryBtn.textContent = t("web-search-setup.retry");
+      });
   });
 
   actions.append(retryBtn);
-  step.append(label, createCopyableCommand(PROXY_COMMAND), hint, actions, status);
+  step.append(
+    label,
+    createCopyableCommand(PROXY_COMMAND),
+    hint,
+    actions,
+    status,
+  );
   return step;
 }
 
@@ -181,16 +203,19 @@ function createKeyStep(
 
   const label = document.createElement("p");
   label.className = "pi-search-setup__step-label";
-  label.textContent = stepNumber !== null
-    ? `Step ${stepNumber} · Set up a ${info.title} API key:`
-    : `Set up a ${info.title} API key:`;
+  label.textContent =
+    stepNumber !== null
+      ? `Step ${stepNumber} · Set up a ${info.title} API key:`
+      : `Set up a ${info.title} API key:`;
 
   const signupLink = document.createElement("a");
   signupLink.className = "pi-search-setup__link";
   signupLink.href = info.signupUrl;
   signupLink.target = "_blank";
   signupLink.rel = "noopener noreferrer";
-  signupLink.textContent = t("web-search-setup.freeKeyLink", { url: info.signupUrl.replace(/^https?:\/\//u, "") });
+  signupLink.textContent = t("web-search-setup.freeKeyLink", {
+    url: info.signupUrl.replace(/^https?:\/\//u, ""),
+  });
 
   const inputRow = document.createElement("div");
   inputRow.className = "pi-search-setup__input-row";
@@ -258,7 +283,9 @@ function createKeyStep(
           return;
         }
 
-        status.textContent = t("web-search-setup.keySavedValidation", { message: result.message });
+        status.textContent = t("web-search-setup.keySavedValidation", {
+          message: result.message,
+        });
         status.className = "pi-search-setup__status is-warn";
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -302,16 +329,20 @@ function buildCardContent(
     }
 
     case "needs_key": {
-      body.append(createKeyStep(provider, null, settings, proxyBaseUrl, markDone));
+      body.append(
+        createKeyStep(provider, null, settings, proxyBaseUrl, markDone),
+      );
       return { title: t("web-search-setup.title.needsApiKey"), body };
     }
 
     case "needs_proxy": {
-      body.append(createProxyStep({
-        stepNumber: null,
-        proxyBaseUrl,
-        onProxyReady: markDone,
-      }));
+      body.append(
+        createProxyStep({
+          stepNumber: null,
+          proxyBaseUrl,
+          onProxyReady: markDone,
+        }),
+      );
       return { title: t("web-search-setup.title.cantConnect"), body };
     }
 
@@ -321,15 +352,30 @@ function buildCardContent(
 
       const hint = document.createElement("p");
       hint.className = "pi-search-setup__text";
-      hint.textContent = t("web-search-setup.noCurrentKeyHaveAlternative", { current: currentInfo.apiKeyLabel, alternative: alternativeInfo.title });
+      hint.textContent = t("web-search-setup.noCurrentKeyHaveAlternative", {
+        current: currentInfo.apiKeyLabel,
+        alternative: alternativeInfo.title,
+      });
 
       const switchNote = document.createElement("p");
       switchNote.className = "pi-search-setup__text";
-      switchNote.textContent = t("web-search-setup.switchOrSetup", { alternative: alternativeInfo.title, current: currentInfo.title });
+      switchNote.textContent = t("web-search-setup.switchOrSetup", {
+        alternative: alternativeInfo.title,
+        current: currentInfo.title,
+      });
 
-      body.append(hint, switchNote, createKeyStep(provider, null, settings, proxyBaseUrl, markDone));
+      body.append(
+        hint,
+        switchNote,
+        createKeyStep(provider, null, settings, proxyBaseUrl, markDone),
+      );
 
-      return { title: t("web-search-setup.title.noKeyFound", { label: currentInfo.apiKeyLabel }), body };
+      return {
+        title: t("web-search-setup.title.noKeyFound", {
+          label: currentInfo.apiKeyLabel,
+        }),
+        body,
+      };
     }
 
     case "generic_error": {
@@ -348,7 +394,10 @@ function buildCardContent(
  * Called from the tool renderer via a `ref` callback when a `web_search`
  * tool result has `ok: false`.
  */
-export function mountSearchSetupCard(container: HTMLElement, details: WebSearchDetails): void {
+export function mountSearchSetupCard(
+  container: HTMLElement,
+  details: WebSearchDetails,
+): void {
   if (container.dataset.mounted === "true") {
     return;
   }
@@ -419,6 +468,8 @@ export function mountSearchSetupCard(container: HTMLElement, details: WebSearchD
  * Returns true when the details indicate a web search failure that should
  * show the inline setup card.
  */
-export function shouldShowSearchSetupCard(details: DynamicValue): details is WebSearchDetails {
+export function shouldShowSearchSetupCard(
+  details: DynamicValue,
+): details is WebSearchDetails {
   return isWebSearchDetails(details) && details.ok === false;
 }

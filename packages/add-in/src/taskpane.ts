@@ -1,5 +1,5 @@
 /**
- * Pi for Excel — taskpane entrypoint.
+ * Pi for Office — taskpane entrypoint.
  *
  * Keep this file as thin as possible.
  *

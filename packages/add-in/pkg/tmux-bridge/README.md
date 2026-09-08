@@ -1,17 +1,17 @@
-# pi-for-excel-tmux-bridge
+# pi-for-office-tmux-bridge
 
-Local HTTPS tmux bridge helper for Pi for Excel.
+Local HTTPS tmux bridge helper for Pi for Office.
 
 ## Usage
 
 ```bash
-npx pi-for-excel-tmux-bridge
+npx pi-for-office-tmux-bridge
 ```
 
 This command:
 
 1. Ensures `mkcert` exists (installs via Homebrew on macOS if missing)
-2. Creates certificates in `~/.pi-for-excel/certs/` when needed
+2. Creates certificates in `~/.pi-for-office/certs/` when needed
 3. Starts the bridge at `https://localhost:3341`
 4. Runs in real `tmux` mode by default
 
@@ -20,7 +20,7 @@ Real mode requires `tmux` to be installed and available on `PATH`.
 Optional assisted install (macOS/Homebrew):
 
 ```bash
-npx pi-for-excel-tmux-bridge --install-missing
+npx pi-for-office-tmux-bridge --install-missing
 ```
 
 This installs missing `tmux` before starting the bridge.
@@ -28,10 +28,10 @@ This installs missing `tmux` before starting the bridge.
 To force safe simulated mode:
 
 ```bash
-TMUX_BRIDGE_MODE=stub npx pi-for-excel-tmux-bridge
+TMUX_BRIDGE_MODE=stub npx pi-for-office-tmux-bridge
 ```
 
-Then in Pi for Excel:
+Then in Pi for Office:
 
 1. The default tmux bridge URL is already `https://localhost:3341`
 2. (Optional) set `/experimental tmux-bridge-url <url>` to use a non-default URL

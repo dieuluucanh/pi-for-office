@@ -14,10 +14,11 @@ function createMockMcpTool() {
   const calls: Array<{ method: string; params?: DynamicValue }> = [];
 
   const tool = createMcpTool({
-    getRuntimeConfig: () => Promise.resolve({
-      servers: [TEST_SERVER],
-      proxyBaseUrl: undefined,
-    }),
+    getRuntimeConfig: () =>
+      Promise.resolve({
+        servers: [TEST_SERVER],
+        proxyBaseUrl: undefined,
+      }),
     callJsonRpc: ({ method, params }) => {
       calls.push({ method, params });
 
@@ -130,10 +131,11 @@ void test("mcp tool call requires server when tool name is ambiguous", async () 
   let callInvoked = false;
 
   const tool = createMcpTool({
-    getRuntimeConfig: () => Promise.resolve({
-      servers: [serverA, serverB],
-      proxyBaseUrl: undefined,
-    }),
+    getRuntimeConfig: () =>
+      Promise.resolve({
+        servers: [serverA, serverB],
+        proxyBaseUrl: undefined,
+      }),
     callJsonRpc: ({ server, method }) => {
       if (method === "initialize") {
         return Promise.resolve({
@@ -177,16 +179,20 @@ void test("mcp tool call requires server when tool name is ambiguous", async () 
   const result = await tool.execute("call-3", { tool: "echo" });
   const text = result.content[0]?.type === "text" ? result.content[0].text : "";
 
-  assert.match(text, /available on multiple servers.*specify the server parameter/i);
+  assert.match(
+    text,
+    /available on multiple servers.*specify the server parameter/i,
+  );
   assert.equal(callInvoked, false);
 });
 
 void test("mcp reports proxy-down error when proxy transport is unreachable", async () => {
   const tool = createMcpTool({
-    getRuntimeConfig: () => Promise.resolve({
-      servers: [TEST_SERVER],
-      proxyBaseUrl: "https://localhost:3003",
-    }),
+    getRuntimeConfig: () =>
+      Promise.resolve({
+        servers: [TEST_SERVER],
+        proxyBaseUrl: "https://localhost:3003",
+      }),
     callJsonRpc: () => Promise.reject(new TypeError("Load failed")),
   });
 
@@ -194,7 +200,7 @@ void test("mcp reports proxy-down error when proxy transport is unreachable", as
   const text = result.content[0]?.type === "text" ? result.content[0].text : "";
 
   assert.match(text, /local CORS proxy is not running/i);
-  assert.match(text, /npx pi-for-excel-proxy/i);
+  assert.match(text, /npx pi-for-office-proxy/i);
   assert.match(text, /Do not retry/i);
 
   const details = result.details as {
@@ -213,17 +219,26 @@ void test("mcp reports proxy-down error when proxy transport is unreachable", as
 
 void test("mcp does not flag proxyDown for upstream JSON-RPC errors containing fetch failed", async () => {
   const tool = createMcpTool({
-    getRuntimeConfig: () => Promise.resolve({
-      servers: [TEST_SERVER],
-      proxyBaseUrl: "https://localhost:3003",
-    }),
-    callJsonRpc: () => Promise.reject(new Error("JSON-RPC error: upstream fetch failed while calling backend service")),
+    getRuntimeConfig: () =>
+      Promise.resolve({
+        servers: [TEST_SERVER],
+        proxyBaseUrl: "https://localhost:3003",
+      }),
+    callJsonRpc: () =>
+      Promise.reject(
+        new Error(
+          "JSON-RPC error: upstream fetch failed while calling backend service",
+        ),
+      ),
   });
 
   const result = await tool.execute("call-5", { connect: "local" });
   const text = result.content[0]?.type === "text" ? result.content[0].text : "";
 
-  assert.match(text, /^Error: JSON-RPC error: upstream fetch failed while calling backend service$/);
+  assert.match(
+    text,
+    /^Error: JSON-RPC error: upstream fetch failed while calling backend service$/,
+  );
 
   const details = result.details as { ok?: boolean; proxyDown?: boolean };
   assert.equal(details.ok, false);

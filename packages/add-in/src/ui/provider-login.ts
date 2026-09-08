@@ -11,7 +11,10 @@ import { getAppStorage } from "../storage/local/app-storage.js";
 import { isCorsError } from "../auth/cors-error.js";
 import { pollOAuthCallbackCapture } from "../auth/oauth-callback-capture.js";
 import { getOAuthProvider } from "../auth/oauth-provider-registry.js";
-import { clearOAuthCredentials, saveOAuthCredentials } from "../auth/oauth-storage.js";
+import {
+  clearOAuthCredentials,
+  saveOAuthCredentials,
+} from "../auth/oauth-storage.js";
 import {
   DEFAULT_PROXY_IS_REMOTE,
   DEFAULT_PROXY_URL,
@@ -19,12 +22,18 @@ import {
   probeProxyReachability,
   resolveConfiguredProxyUrl,
 } from "../auth/proxy-validation.js";
-import { PROVIDER_PROMPT_OVERLAY_ID, PROXY_GATE_OVERLAY_ID } from "./overlay-ids.js";
+import {
+  PROVIDER_PROMPT_OVERLAY_ID,
+  PROXY_GATE_OVERLAY_ID,
+} from "./overlay-ids.js";
 import { closeOverlayById, createOverlayDialog } from "./overlay-dialog.js";
 import { getErrorMessage } from "../utils/errors.js";
 import { escapeAttr, escapeHtml, setSafeInnerHTML } from "../utils/html.js";
 import { t } from "../language/index.js";
-import { filterProvidersByAllowlist, resolveAllowedProviderIds } from "./provider-allowlist.js";
+import {
+  filterProvidersByAllowlist,
+  resolveAllowedProviderIds,
+} from "./provider-allowlist.js";
 
 /**
  * Quick reachability check against the configured proxy URL.
@@ -51,7 +60,9 @@ async function isProxyReachable(): Promise<boolean> {
  * Resolves `true` if the user retried and proxy is now reachable.
  * Resolves `false` if the user cancelled.
  */
-function showProxyGateDialog(): Promise<boolean> {
+function showProxyGateDialog(opts?: {
+  onUseApiKey?: () => void;
+}): Promise<boolean> {
   return new Promise((resolve) => {
     closeOverlayById(PROXY_GATE_OVERLAY_ID);
 
@@ -73,23 +84,27 @@ function showProxyGateDialog(): Promise<boolean> {
       : t("provider.proxy_gate.message");
 
     const codeRow = document.createElement("div");
-    codeRow.style.cssText = "display:flex;align-items:center;gap:8px;margin:12px 0;";
+    codeRow.style.cssText =
+      "display:flex;align-items:center;gap:8px;margin:12px 0;";
 
     const codeEl = document.createElement("code");
     codeEl.style.cssText =
       "flex:1;padding:8px 10px;border-radius:6px;" +
       "background:var(--pi-code-bg, #1e1e1e);color:var(--pi-code-fg, #d4d4d4);" +
       "font-size:13px;font-family:var(--pi-monospace, monospace);user-select:all;";
-    codeEl.textContent = "npx pi-for-excel-proxy";
+    codeEl.textContent = "npx pi-for-office-proxy";
 
     const copyBtn = document.createElement("button");
     copyBtn.type = "button";
     copyBtn.textContent = t("provider.proxy_gate.copy");
-    copyBtn.style.cssText = "padding:6px 12px;border-radius:6px;font-size:13px;cursor:pointer;";
+    copyBtn.style.cssText =
+      "padding:6px 12px;border-radius:6px;font-size:13px;cursor:pointer;";
     copyBtn.addEventListener("click", () => {
-      void navigator.clipboard.writeText("npx pi-for-excel-proxy").then(() => {
+      void navigator.clipboard.writeText("npx pi-for-office-proxy").then(() => {
         copyBtn.textContent = t("provider.proxy_gate.copied");
-        setTimeout(() => { copyBtn.textContent = t("provider.proxy_gate.copy"); }, 1500);
+        setTimeout(() => {
+          copyBtn.textContent = t("provider.proxy_gate.copy");
+        }, 1500);
       });
     });
 
@@ -100,7 +115,9 @@ function showProxyGateDialog(): Promise<boolean> {
     hint.style.lineHeight = "1.5";
     if (DEFAULT_PROXY_IS_REMOTE) {
       codeRow.style.display = "none";
-      hint.textContent = t("provider.proxy_gate.hint_remote", { url: DEFAULT_PROXY_URL });
+      hint.textContent = t("provider.proxy_gate.hint_remote", {
+        url: DEFAULT_PROXY_URL,
+      });
     } else {
       setSafeInnerHTML(
         hint,
@@ -123,7 +140,13 @@ function showProxyGateDialog(): Promise<boolean> {
     retryBtn.className = "pi-prompt-ok";
     retryBtn.textContent = t("provider.proxy_gate.retry");
 
-    actions.append(cancelBtn, retryBtn);
+    const apiKeyBtn = document.createElement("button");
+    apiKeyBtn.type = "button";
+    apiKeyBtn.className = "pi-prompt-cancel";
+    apiKeyBtn.textContent = t("provider.proxy_gate.use_api_key");
+    apiKeyBtn.hidden = !opts?.onUseApiKey;
+
+    actions.append(cancelBtn, apiKeyBtn, retryBtn);
     dialog.card.append(title, message, codeRow, hint, actions);
 
     let settled = false;
@@ -162,7 +185,9 @@ function showProxyGateDialog(): Promise<boolean> {
         retryBtn.textContent = t("provider.proxy_gate.retry");
         retryBtn.style.opacity = "1";
         if (DEFAULT_PROXY_IS_REMOTE) {
-          hint.textContent = t("provider.proxy_gate.not_detected_remote", { url: DEFAULT_PROXY_URL });
+          hint.textContent = t("provider.proxy_gate.not_detected_remote", {
+            url: DEFAULT_PROXY_URL,
+          });
         } else {
           setSafeInnerHTML(
             hint,
@@ -174,13 +199,26 @@ function showProxyGateDialog(): Promise<boolean> {
       })();
     };
 
+    const doUseApiKey = (): void => {
+      if (settled) return;
+      settled = true;
+      dialog.close();
+      resolve(false);
+      opts?.onUseApiKey?.();
+    };
+
     cancelBtn.addEventListener("click", doCancel);
     retryBtn.addEventListener("click", doRetry);
+    apiKeyBtn.addEventListener("click", doUseApiKey);
 
     dialog.addCleanup(() => {
       cancelBtn.removeEventListener("click", doCancel);
       retryBtn.removeEventListener("click", doRetry);
-      if (!settled) { settled = true; resolve(false); }
+      apiKeyBtn.removeEventListener("click", doUseApiKey);
+      if (!settled) {
+        settled = true;
+        resolve(false);
+      }
     });
 
     dialog.mount();
@@ -217,20 +255,52 @@ export const ALL_PROVIDERS: ProviderDef[] = [
   // OAuth providers first (subscription / account-based flows)
   // Only list flows that are supported in-browser (PKCE with proxy-assisted or manual callback handling).
   // desc holds a locale key (resolved via t() at render time in buildProviderRow).
-  { id: "anthropic",          label: /* brand */ "Anthropic",                oauth: "anthropic",          desc: "provider.desc.claude" },
-  { id: "openai-codex",       label: /* brand */ "OpenAI (ChatGPT)",         oauth: "openai-codex",       desc: "provider.desc.openai_sub" },
-  { id: "google-gemini-cli",  label: /* brand */ "Google Code Assist",       oauth: "google-gemini-cli",  desc: "provider.desc.gemini_account" },
-  { id: "google-antigravity", label: /* brand */ "Google Antigravity",       oauth: "google-antigravity", desc: "provider.desc.antigravity" },
-  { id: "github-copilot",     label: /* brand */ "GitHub Copilot",           oauth: "github-copilot" },
+  {
+    id: "anthropic",
+    label: /* brand */ "Anthropic",
+    oauth: "anthropic",
+    desc: "provider.desc.claude",
+  },
+  {
+    id: "openai-codex",
+    label: /* brand */ "OpenAI (ChatGPT)",
+    oauth: "openai-codex",
+    desc: "provider.desc.openai_sub",
+  },
+  {
+    id: "google-gemini-cli",
+    label: /* brand */ "Google Code Assist",
+    oauth: "google-gemini-cli",
+    desc: "provider.desc.gemini_account",
+  },
+  {
+    id: "google-antigravity",
+    label: /* brand */ "Google Antigravity",
+    oauth: "google-antigravity",
+    desc: "provider.desc.antigravity",
+  },
+  {
+    id: "github-copilot",
+    label: /* brand */ "GitHub Copilot",
+    oauth: "github-copilot",
+  },
 
   // API key providers
-  { id: "openai",             label: /* brand */ "OpenAI (API)",             desc: "provider.desc.api_key" },
-  { id: "google",             label: /* brand */ "Google Gemini (API)",      desc: "provider.desc.api_key" },
-  { id: "deepseek",           label: /* brand */ "DeepSeek" },
-  { id: "amazon-bedrock",     label: /* brand */ "Amazon Bedrock" },
-  { id: "mistral",            label: /* brand */ "Mistral" },
-  { id: "groq",               label: /* brand */ "Groq" },
-  { id: "xai",                label: /* brand */ "xAI / Grok" },
+  {
+    id: "openai",
+    label: /* brand */ "OpenAI (API)",
+    desc: "provider.desc.api_key",
+  },
+  {
+    id: "google",
+    label: /* brand */ "Google Gemini (API)",
+    desc: "provider.desc.api_key",
+  },
+  { id: "deepseek", label: /* brand */ "DeepSeek" },
+  { id: "amazon-bedrock", label: /* brand */ "Amazon Bedrock" },
+  { id: "mistral", label: /* brand */ "Mistral" },
+  { id: "groq", label: /* brand */ "Groq" },
+  { id: "xai", label: /* brand */ "xAI / Grok" },
 ];
 
 /**
@@ -241,7 +311,9 @@ export const ALL_PROVIDERS: ProviderDef[] = [
 export const VISIBLE_PROVIDERS: ProviderDef[] = filterProvidersByAllowlist(
   ALL_PROVIDERS,
   resolveAllowedProviderIds(
-    typeof import.meta.env === "undefined" ? undefined : import.meta.env.VITE_PI_ALLOWED_PROVIDERS,
+    typeof import.meta.env === "undefined"
+      ? undefined
+      : import.meta.env.VITE_PI_ALLOWED_PROVIDERS,
   ),
 );
 
@@ -273,7 +345,9 @@ function normalizeAnthropicAuthorizationInput(input: string): string {
   // Accept query-string style pastes (code=...&state=...)
   if (value.includes("code=")) {
     try {
-      const params = new URLSearchParams(value.startsWith("?") ? value.slice(1) : value);
+      const params = new URLSearchParams(
+        value.startsWith("?") ? value.slice(1) : value,
+      );
       const code = params.get("code");
       const state = params.get("state");
       if (code) return state ? `${code}#${state}` : code;
@@ -295,16 +369,16 @@ function normalizeAnthropicAuthorizationInput(input: string): string {
 function looksLikeOAuthRedirectInput(value: string): boolean {
   const lower = value.toLowerCase();
   return (
-    value.includes("#")
-    || value.includes("code=")
-    || lower.startsWith("http://localhost:1455/")
-    || lower.startsWith("http://localhost:53692/")
-    || lower.startsWith("http://localhost:8085/")
-    || lower.startsWith("http://localhost:51121/")
-    || lower.startsWith("https://auth.openai.com/")
-    || lower.startsWith("https://accounts.google.com/")
-    || lower.includes("oauth2callback")
-    || lower.includes("oauth-callback")
+    value.includes("#") ||
+    value.includes("code=") ||
+    lower.startsWith("http://localhost:1455/") ||
+    lower.startsWith("http://localhost:53692/") ||
+    lower.startsWith("http://localhost:8085/") ||
+    lower.startsWith("http://localhost:51121/") ||
+    lower.startsWith("https://auth.openai.com/") ||
+    lower.startsWith("https://accounts.google.com/") ||
+    lower.includes("oauth2callback") ||
+    lower.includes("oauth-callback")
   );
 }
 
@@ -344,7 +418,11 @@ function normalizeApiKeyForProvider(
     return { ok: false, error: t("provider.error.oauth_url_codex") };
   }
 
-  if ((providerId === "google-gemini-cli" || providerId === "google-antigravity") && looksLikeOAuthRedirectInput(key)) {
+  if (
+    (providerId === "google-gemini-cli" ||
+      providerId === "google-antigravity") &&
+    looksLikeOAuthRedirectInput(key)
+  ) {
     return { ok: false, error: t("provider.error.oauth_url_google") };
   }
 
@@ -360,7 +438,10 @@ function normalizeApiKeyForProvider(
  * Copilot). The login flow keeps polling in the background, so the dialog
  * only informs the user; the caller closes it when login settles.
  */
-function showDeviceCodeDialog(info: { userCode: string; verificationUri: string }): () => void {
+function showDeviceCodeDialog(info: {
+  userCode: string;
+  verificationUri: string;
+}): () => void {
   closeOverlayById(PROVIDER_PROMPT_OVERLAY_ID);
 
   const dialog = createOverlayDialog({
@@ -378,7 +459,8 @@ function showDeviceCodeDialog(info: { userCode: string; verificationUri: string 
   message.textContent = t("provider.device_code.message");
 
   const codeRow = document.createElement("div");
-  codeRow.style.cssText = "display:flex;align-items:center;gap:8px;margin:12px 0;";
+  codeRow.style.cssText =
+    "display:flex;align-items:center;gap:8px;margin:12px 0;";
 
   const codeEl = document.createElement("code");
   codeEl.style.cssText =
@@ -390,11 +472,14 @@ function showDeviceCodeDialog(info: { userCode: string; verificationUri: string 
   const copyBtn = document.createElement("button");
   copyBtn.type = "button";
   copyBtn.textContent = t("provider.proxy_gate.copy");
-  copyBtn.style.cssText = "padding:6px 12px;border-radius:6px;font-size:13px;cursor:pointer;";
+  copyBtn.style.cssText =
+    "padding:6px 12px;border-radius:6px;font-size:13px;cursor:pointer;";
   copyBtn.addEventListener("click", () => {
     void navigator.clipboard.writeText(info.userCode).then(() => {
       copyBtn.textContent = t("provider.proxy_gate.copied");
-      setTimeout(() => { copyBtn.textContent = t("provider.proxy_gate.copy"); }, 1500);
+      setTimeout(() => {
+        copyBtn.textContent = t("provider.proxy_gate.copy");
+      }, 1500);
     });
   });
 
@@ -402,7 +487,9 @@ function showDeviceCodeDialog(info: { userCode: string; verificationUri: string 
 
   const helper = document.createElement("p");
   helper.className = "pi-prompt-helper";
-  helper.textContent = t("provider.device_code.helper", { uri: info.verificationUri });
+  helper.textContent = t("provider.device_code.helper", {
+    uri: info.verificationUri,
+  });
 
   dialog.card.append(title, message, codeRow, helper);
   dialog.mount();
@@ -438,7 +525,8 @@ function promptForSelect(opts: {
     messageEl.textContent = opts.message;
 
     const optionList = document.createElement("div");
-    optionList.style.cssText = "display:flex;flex-direction:column;gap:8px;margin:12px 0;";
+    optionList.style.cssText =
+      "display:flex;flex-direction:column;gap:8px;margin:12px 0;";
 
     let settled = false;
 
@@ -610,7 +698,10 @@ function promptForText(opts: {
       manualInput.readOnly = true;
       manualInput.rows = 3;
       manualInput.value = opts.externalUrl;
-      manualInput.setAttribute("aria-label", t("provider.prompt.loginUrlFallback"));
+      manualInput.setAttribute(
+        "aria-label",
+        t("provider.prompt.loginUrlFallback"),
+      );
       const selectManualUrl = (): void => {
         manualInput.focus();
         manualInput.select();
@@ -732,6 +823,32 @@ function promptForText(opts: {
 }
 
 /**
+ * Open an external OAuth URL in a new tab with no opener handle.
+ *
+ * Only allows https: targets — OAuth authorization and device-verification
+ * pages are always HTTPS — so a malformed/compromised provider URL cannot be
+ * used as an open redirect to a dangerous scheme.
+ */
+function openExternalAuthUrl(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return;
+  }
+
+  if (parsed.protocol !== "https:") {
+    return;
+  }
+
+  // Prevent the OAuth page from gaining a handle to the add-in window.
+  // (https-only scheme validated above; targets are OAuth authorization pages)
+  // pi-lens-ignore: no-open-redirect
+  const w = window.open(parsed.href, "_blank", "noopener,noreferrer");
+  if (w) w.opener = null;
+}
+
+/**
  * Build a provider login row with inline OAuth + API key.
  * Manages expand/collapse via the shared expandedRef.
  */
@@ -746,18 +863,21 @@ export function buildProviderRow(
   const { isActive, expandedRef, onConnected, onDisconnected } = opts;
   const storage = getAppStorage();
 
-  const keyPlaceholder = id === "anthropic"
-    ? t("provider.placeholder.anthropic")
-    : id === "openai-codex"
-      ? t("provider.placeholder.chatgpt")
-      : id === "google-gemini-cli" || id === "google-antigravity"
-        ? t("provider.placeholder.google_oauth")
-        : t("provider.placeholder.api_key");
+  const keyPlaceholder =
+    id === "anthropic"
+      ? t("provider.placeholder.anthropic")
+      : id === "openai-codex"
+        ? t("provider.placeholder.chatgpt")
+        : id === "google-gemini-cli" || id === "google-antigravity"
+          ? t("provider.placeholder.google_oauth")
+          : t("provider.placeholder.api_key");
 
   const row = document.createElement("div");
   row.className = "pi-login-row";
   const labelText = escapeHtml(label);
-  const descriptionMarkup = desc ? `<span class="pi-login-desc">${escapeHtml(t(desc))}</span>` : "";
+  const descriptionMarkup = desc
+    ? `<span class="pi-login-desc">${escapeHtml(t(desc))}</span>`
+    : "";
   const oauthMarkup = oauth
     ? `
         <button class="pi-login-oauth">${escapeHtml(t("provider.login_with", { label }))}</button>
@@ -793,7 +913,9 @@ export function buildProviderRow(
     "provider login row template with escaped provider and localized text",
   );
 
-  const headerBtn = row.querySelector<HTMLButtonElement>(".pi-welcome-provider");
+  const headerBtn = row.querySelector<HTMLButtonElement>(
+    ".pi-welcome-provider",
+  );
   if (!headerBtn) {
     throw new Error("Provider row header button not found");
   }
@@ -803,11 +925,15 @@ export function buildProviderRow(
   const errorEl = row.querySelector(".pi-login-error") as HTMLElement;
   const statusEl = row.querySelector<HTMLElement>(".pi-login-status");
   const oauthBtn = row.querySelector<HTMLButtonElement>(".pi-login-oauth");
-  const disconnectBtn = row.querySelector<HTMLButtonElement>(".pi-login-disconnect");
+  const disconnectBtn = row.querySelector<HTMLButtonElement>(
+    ".pi-login-disconnect",
+  );
 
   const setConnectedState = (connected: boolean): void => {
     if (statusEl) {
-      statusEl.textContent = connected ? t("provider.connected") : t("provider.set_up");
+      statusEl.textContent = connected
+        ? t("provider.connected")
+        : t("provider.set_up");
       statusEl.classList.toggle("is-connected", connected);
     }
 
@@ -854,7 +980,13 @@ export function buildProviderRow(
           if (!import.meta.env.DEV && OAUTH_IDS_NEEDING_PROXY.has(id)) {
             const reachable = await isProxyReachable();
             if (!reachable) {
-              const userRetried = await showProxyGateDialog();
+              const userRetried = await showProxyGateDialog({
+                onUseApiKey: () => {
+                  // Skip the helper and fall back to the API key input that is
+                  // already visible in this row (BYOK / browser-only mode).
+                  keyInput.focus();
+                },
+              });
               if (!userRetried) {
                 // User cancelled — reset button and bail.
                 oauthBtn.textContent = t("provider.login_with", { label });
@@ -864,7 +996,9 @@ export function buildProviderRow(
             }
           }
 
-          const deviceCodeDialogRef: { close: (() => void) | null } = { close: null };
+          const deviceCodeDialogRef: { close: (() => void) | null } = {
+            close: null,
+          };
           const authUrlRef: { current: string | null } = { current: null };
 
           let cred;
@@ -872,15 +1006,12 @@ export function buildProviderRow(
             cred = await oauthProvider.login({
               onAuth: (info) => {
                 authUrlRef.current = info.url;
-                // Prevent the OAuth page from gaining a handle to the add-in window.
-                const w = window.open(info.url, "_blank", "noopener,noreferrer");
-                if (w) w.opener = null;
+                openExternalAuthUrl(info.url);
               },
               onDeviceCode: (info) => {
                 // Device-code flows (e.g. GitHub Copilot): open the verification
                 // page and show the user code to enter there.
-                const w = window.open(info.verificationUri, "_blank", "noopener,noreferrer");
-                if (w) w.opener = null;
+                openExternalAuthUrl(info.verificationUri);
                 deviceCodeDialogRef.close = showDeviceCodeDialog(info);
               },
               onSelect: (prompt) =>
@@ -890,17 +1021,20 @@ export function buildProviderRow(
                   options: prompt.options,
                 }),
               onPrompt: async (prompt) => {
-                const helperText = id === "anthropic"
-                  ? t("provider.oauth.helper.anthropic")
-                  : id === "openai-codex"
-                    ? t("provider.oauth.helper.openai")
-                    : id === "google-gemini-cli" || id === "google-antigravity"
-                      ? t("provider.oauth.helper.google")
-                      : undefined;
+                const helperText =
+                  id === "anthropic"
+                    ? t("provider.oauth.helper.anthropic")
+                    : id === "openai-codex"
+                      ? t("provider.oauth.helper.openai")
+                      : id === "google-gemini-cli" ||
+                          id === "google-antigravity"
+                        ? t("provider.oauth.helper.google")
+                        : undefined;
 
-                const oauthCallbackProviderId = oauth && OAUTH_CALLBACK_CAPTURE_IDS.has(oauth)
-                  ? oauth
-                  : undefined;
+                const oauthCallbackProviderId =
+                  oauth && OAUTH_CALLBACK_CAPTURE_IDS.has(oauth)
+                    ? oauth
+                    : undefined;
                 const oauthCallbackState = oauthCallbackProviderId
                   ? getOAuthStateFromAuthUrl(authUrlRef.current)
                   : undefined;
@@ -911,9 +1045,16 @@ export function buildProviderRow(
                   placeholder: prompt.placeholder || "",
                   ...(helperText !== undefined ? { helperText } : {}),
                   submitLabel: t("provider.prompt.continue"),
-                  ...(authUrlRef.current !== null ? { externalUrl: authUrlRef.current } : {}),
+                  ...(authUrlRef.current !== null
+                    ? { externalUrl: authUrlRef.current }
+                    : {}),
                   ...(oauthCallbackProviderId && oauthCallbackState
-                    ? { autoCapture: { providerId: oauthCallbackProviderId, state: oauthCallbackState } }
+                    ? {
+                        autoCapture: {
+                          providerId: oauthCallbackProviderId,
+                          state: oauthCallbackState,
+                        },
+                      }
                     : {}),
                 });
 
@@ -923,7 +1064,9 @@ export function buildProviderRow(
 
                 return value;
               },
-              onProgress: (msg) => { oauthBtn.textContent = msg; },
+              onProgress: (msg) => {
+                oauthBtn.textContent = msg;
+              },
             });
           } finally {
             deviceCodeDialogRef.close?.();
@@ -945,17 +1088,22 @@ export function buildProviderRow(
           const msg = getErrorMessage(err);
           const isLikelyCors =
             isCorsError(err) ||
-            (typeof msg === "string" && /load failed|failed to fetch|cors|cross-origin|networkerror/i.test(msg));
+            (typeof msg === "string" &&
+              /load failed|failed to fetch|cors|cross-origin|networkerror/i.test(
+                msg,
+              ));
 
           if (isLikelyCors) {
             if (DEFAULT_PROXY_IS_REMOTE) {
-              errorEl.textContent = t("provider.cors_error_remote", { url: DEFAULT_PROXY_URL });
+              errorEl.textContent = t("provider.cors_error_remote", {
+                url: DEFAULT_PROXY_URL,
+              });
             } else {
               setSafeInnerHTML(
                 errorEl,
                 `${escapeHtml(t("provider.cors_error"))} <code style="padding:2px 5px;border-radius:4px;` +
-                  "background:var(--pi-code-bg, #1e1e1e);color:var(--pi-code-fg, #d4d4d4)\">" +
-                  `npx pi-for-excel-proxy</code>${escapeHtml(t("provider.cors_error.retry"))} ` +
+                  'background:var(--pi-code-bg, #1e1e1e);color:var(--pi-code-fg, #d4d4d4)">' +
+                  `npx pi-for-office-proxy</code>${escapeHtml(t("provider.cors_error.retry"))} ` +
                   `<a href="${escapeAttr(PROXY_HELPER_DOCS_URL)}" target="_blank" rel="noopener noreferrer">${escapeHtml(t("provider.proxy_gate.guide"))}</a>`,
                 "provider CORS helper error markup with escaped localized text",
               );
@@ -991,7 +1139,9 @@ export function buildProviderRow(
           onDisconnected?.(row, id, label);
         } catch (err) {
           const msg = getErrorMessage(err);
-          errorEl.textContent = msg ? t("provider.disconnect_failed_msg", { msg }) : t("provider.disconnect_failed");
+          errorEl.textContent = msg
+            ? t("provider.disconnect_failed_msg", { msg })
+            : t("provider.disconnect_failed");
           errorEl.hidden = false;
         } finally {
           disconnectBtn.textContent = t("provider.disconnect", { label });
@@ -1003,36 +1153,40 @@ export function buildProviderRow(
   }
 
   // API key save
-  saveBtn.addEventListener("click", () => { void (async () => {
-    const rawKey = keyInput.value.trim();
-    if (!rawKey) return;
+  saveBtn.addEventListener("click", () => {
+    void (async () => {
+      const rawKey = keyInput.value.trim();
+      if (!rawKey) return;
 
-    const normalized = normalizeApiKeyForProvider(id, rawKey);
-    if (!normalized.ok) {
-      errorEl.textContent = normalized.error;
-      errorEl.hidden = false;
-      return;
-    }
+      const normalized = normalizeApiKeyForProvider(id, rawKey);
+      if (!normalized.ok) {
+        errorEl.textContent = normalized.error;
+        errorEl.hidden = false;
+        return;
+      }
 
-    const key = normalized.key;
-    saveBtn.textContent = t("provider.testing");
-    saveBtn.style.opacity = "0.7";
-    errorEl.hidden = true;
-    try {
-      await storage.providerKeys.set(id, key);
-      setConnectedState(true);
-      onConnected(row, id, label);
-      detail.hidden = true;
-      expandedRef.current = null;
-    } catch (err) {
-      const msg = getErrorMessage(err);
-      errorEl.textContent = msg ? t("provider.save_failed_msg", { msg }) : t("provider.save_failed");
-      errorEl.hidden = false;
-    } finally {
-      saveBtn.textContent = t("provider.save");
-      saveBtn.style.opacity = "1";
-    }
-  })(); });
+      const key = normalized.key;
+      saveBtn.textContent = t("provider.testing");
+      saveBtn.style.opacity = "0.7";
+      errorEl.hidden = true;
+      try {
+        await storage.providerKeys.set(id, key);
+        setConnectedState(true);
+        onConnected(row, id, label);
+        detail.hidden = true;
+        expandedRef.current = null;
+      } catch (err) {
+        const msg = getErrorMessage(err);
+        errorEl.textContent = msg
+          ? t("provider.save_failed_msg", { msg })
+          : t("provider.save_failed");
+        errorEl.hidden = false;
+      } finally {
+        saveBtn.textContent = t("provider.save");
+        saveBtn.style.opacity = "1";
+      }
+    })();
+  });
 
   // Enter key in input
   keyInput.addEventListener("keydown", (e) => {

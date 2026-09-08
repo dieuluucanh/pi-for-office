@@ -1,17 +1,17 @@
-# pi-for-excel-python-bridge
+# pi-for-office-python-bridge
 
-Local HTTPS Python / LibreOffice bridge helper for Pi for Excel.
+Local HTTPS Python / LibreOffice bridge helper for Pi for Office.
 
 ## Usage
 
 ```bash
-npx pi-for-excel-python-bridge
+npx pi-for-office-python-bridge
 ```
 
 This command:
 
 1. Ensures `mkcert` exists (installs via Homebrew on macOS if missing)
-2. Creates certificates in `~/.pi-for-excel/certs/` when needed
+2. Creates certificates in `~/.pi-for-office/certs/` when needed
 3. Starts the bridge at `https://localhost:3340`
 4. Runs in real local execution mode by default
 
@@ -20,7 +20,7 @@ Real mode requires `python3` on `PATH`. LibreOffice (`soffice` / `libreoffice`) 
 Optional assisted install (macOS/Homebrew):
 
 ```bash
-npx pi-for-excel-python-bridge --install-missing
+npx pi-for-office-python-bridge --install-missing
 ```
 
 This installs missing `python3` and/or LibreOffice before starting the bridge.
@@ -28,10 +28,10 @@ This installs missing `python3` and/or LibreOffice before starting the bridge.
 To force safe simulated mode:
 
 ```bash
-PYTHON_BRIDGE_MODE=stub npx pi-for-excel-python-bridge
+PYTHON_BRIDGE_MODE=stub npx pi-for-office-python-bridge
 ```
 
-Then in Pi for Excel:
+Then in Pi for Office:
 
 1. The default Python bridge URL is already `https://localhost:3340`
 2. (Optional) set `/experimental python-bridge-url <url>` to use a non-default URL

@@ -20,25 +20,46 @@ type InitializedAppStorage = {
   backend: IndexedDBStorageBackend;
 };
 
-export function initAppStorage(dbName = "pi-for-excel"): InitializedAppStorage {
+/**
+ * Current IndexedDB database name (post-rebrand).
+ *
+ * Renamed from "pi-for-excel" to "pi-for-office". Existing user data is copied
+ * into this database once by IndexedDBStorageBackend's `migrateFrom` hook; the
+ * legacy database is left untouched so nobody loses data if a rollback is needed.
+ */
+export const APP_DATABASE_NAME = "pi-for-office";
+
+/** Pre-rebrand database name — copied from on first open, then left alone. */
+export const LEGACY_DATABASE_NAME = "pi-for-excel";
+
+export function initAppStorage(
+  dbName: string = APP_DATABASE_NAME,
+): InitializedAppStorage {
   const settings = new SettingsStore();
   const providerKeys = new ProviderKeysStore();
   const sessions = new SessionsStore();
   const customProviders = new CustomProvidersStore();
   const modelCatalogs = new ModelCatalogsStore();
 
-  const backend = new IndexedDBStorageBackend({
-    dbName,
-    version: 2,
-    stores: [
-      settings.getConfig(),
-      providerKeys.getConfig(),
-      sessions.getConfig(),
-      SessionsStore.getMetadataConfig(),
-      customProviders.getConfig(),
-      modelCatalogs.getConfig(),
-    ],
-  });
+  // One-time copy of pre-rebrand user data when using the production name.
+  const backendOptions: { migrateFrom?: string } =
+    dbName === APP_DATABASE_NAME ? { migrateFrom: LEGACY_DATABASE_NAME } : {};
+
+  const backend = new IndexedDBStorageBackend(
+    {
+      dbName,
+      version: 2,
+      stores: [
+        settings.getConfig(),
+        providerKeys.getConfig(),
+        sessions.getConfig(),
+        SessionsStore.getMetadataConfig(),
+        customProviders.getConfig(),
+        modelCatalogs.getConfig(),
+      ],
+    },
+    backendOptions,
+  );
 
   settings.setBackend(backend);
   providerKeys.setBackend(backend);
@@ -56,5 +77,13 @@ export function initAppStorage(dbName = "pi-for-excel"): InitializedAppStorage {
   );
   setAppStorage(storage);
 
-  return { storage, settings, providerKeys, sessions, customProviders, modelCatalogs, backend };
+  return {
+    storage,
+    settings,
+    providerKeys,
+    sessions,
+    customProviders,
+    modelCatalogs,
+    backend,
+  };
 }

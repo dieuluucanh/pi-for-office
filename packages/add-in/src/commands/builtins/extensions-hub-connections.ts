@@ -8,7 +8,10 @@
 import { INTEGRATION_IDS } from "../../integrations/catalog.js";
 import type { IntegrationSettingsStore } from "../../integrations/store.js";
 import type { WebSearchConfigStore } from "../../tools/web-search-config.js";
-import type { McpConfigStore, McpServerConfig } from "../../tools/mcp-config.js";
+import type {
+  McpConfigStore,
+  McpServerConfig,
+} from "../../tools/mcp-config.js";
 import {
   getExternalToolsEnabled,
   getSessionIntegrationIds,
@@ -66,18 +69,30 @@ import { t } from "../../language/index.js";
 import type { ExtensionsHubDependencies } from "./settings-pages/dependencies.js";
 import { renderExtensionConnectionsSection } from "./extensions-hub-extension-connections.js";
 
-type SettingsStore = IntegrationSettingsStore & WebSearchConfigStore & McpConfigStore & {
-  delete?: (key: string) => Promise<void>;
-};
+type SettingsStore = IntegrationSettingsStore &
+  WebSearchConfigStore &
+  McpConfigStore & {
+    delete?: (key: string) => Promise<void>;
+  };
 
 // ── Helpers ─────────────────────────────────────────
 
 function normalizeProvider(value: string): WebSearchProvider {
-  if (value === "jina" || value === "firecrawl" || value === "serper" || value === "tavily" || value === "brave") return value;
+  if (
+    value === "jina" ||
+    value === "firecrawl" ||
+    value === "serper" ||
+    value === "tavily" ||
+    value === "brave"
+  )
+    return value;
   return "jina";
 }
 
-function getStatusBadge(ok: boolean, label: string): { text: string; tone: "ok" | "warn" | "muted" } {
+function getStatusBadge(
+  ok: boolean,
+  label: string,
+): { text: string; tone: "ok" | "warn" | "muted" } {
   return ok ? { text: label, tone: "ok" } : { text: label, tone: "muted" };
 }
 
@@ -98,10 +113,14 @@ function describeWebSearchAvailability(args: {
   }
 
   if (sessionEnabled) {
-    return hasWorkbook ? t("ext-hub-connections.scopeSessionOnly") : t("ext-hub-connections.scopeSession");
+    return hasWorkbook
+      ? t("ext-hub-connections.scopeSessionOnly")
+      : t("ext-hub-connections.scopeSession");
   }
 
-  return hasWorkbook ? t("ext-hub-connections.scopeOff") : t("ext-hub-connections.scopeOffShort");
+  return hasWorkbook
+    ? t("ext-hub-connections.scopeOff")
+    : t("ext-hub-connections.scopeOffShort");
 }
 
 // Resolved lazily — t() must not run at module scope (language set at boot).
@@ -171,7 +190,11 @@ export async function renderConnectionsTab(args: {
   settings: SettingsStore;
   deps: ExtensionsHubDependencies;
   isBusy: () => boolean;
-  runMutation: (action: () => Promise<void>, reason: "toggle" | "scope" | "external-toggle" | "config", msg?: string) => Promise<void>;
+  runMutation: (
+    action: () => Promise<void>,
+    reason: "toggle" | "scope" | "external-toggle" | "config",
+    msg?: string,
+  ) => Promise<void>;
 }): Promise<void> {
   const { container, settings, deps, isBusy, runMutation } = args;
 
@@ -192,8 +215,8 @@ export async function renderConnectionsTab(args: {
     getExternalToolsEnabled(settings),
     sessionId
       ? getSessionIntegrationIds(settings, sessionId, INTEGRATION_IDS, {
-        applyDefaultsWhenUnconfigured: workbookId === null,
-      })
+          applyDefaultsWhenUnconfigured: workbookId === null,
+        })
       : Promise.resolve<string[]>([]),
     workbookId
       ? getWorkbookIntegrationIds(settings, workbookId, INTEGRATION_IDS)
@@ -206,13 +229,16 @@ export async function renderConnectionsTab(args: {
 
   const pythonUrl = typeof pythonUrlRaw === "string" ? pythonUrlRaw.trim() : "";
   const tmuxUrl = typeof tmuxUrlRaw === "string" ? tmuxUrlRaw.trim() : "";
-  const effectivePythonUrl = pythonUrl.length > 0 ? pythonUrl : DEFAULT_PYTHON_BRIDGE_URL;
-  const effectiveTmuxUrl = tmuxUrl.length > 0 ? tmuxUrl : DEFAULT_TMUX_BRIDGE_URL;
+  const effectivePythonUrl =
+    pythonUrl.length > 0 ? pythonUrl : DEFAULT_PYTHON_BRIDGE_URL;
+  const effectiveTmuxUrl =
+    tmuxUrl.length > 0 ? tmuxUrl : DEFAULT_TMUX_BRIDGE_URL;
   const selectedProvider = webSearchConfig.provider;
   const providerInfo = WEB_SEARCH_PROVIDER_INFO[selectedProvider];
   const apiKey = getApiKeyForProvider(webSearchConfig);
   const webSearchSessionEnabled = sessionIntegrationIds.includes("web_search");
-  const webSearchWorkbookEnabled = workbookIntegrationIds.includes("web_search");
+  const webSearchWorkbookEnabled =
+    workbookIntegrationIds.includes("web_search");
   const webSearchEnabled = webSearchSessionEnabled || webSearchWorkbookEnabled;
 
   container.replaceChildren();
@@ -237,16 +263,22 @@ export async function renderConnectionsTab(args: {
   container.appendChild(surface);
 
   // ── Web search section ────────────────────────
-  container.appendChild(createSectionHeader({ label: t("extensions-hub-connections.webSearch") }));
+  container.appendChild(
+    createSectionHeader({ label: t("extensions-hub-connections.webSearch") }),
+  );
 
   const webBadgeText = !webSearchEnabled
     ? t("extensions-hub-connections.webSearchOff")
     : apiKey
       ? t("extensions-hub-connections.webSearchConnected")
-      : (isApiKeyRequired(selectedProvider) ? t("extensions-hub-connections.noApiKey") : t("extensions-hub-connections.ready"));
+      : isApiKeyRequired(selectedProvider)
+        ? t("extensions-hub-connections.noApiKey")
+        : t("extensions-hub-connections.ready");
   const webBadgeTone = !webSearchEnabled
     ? "muted"
-    : (apiKey || !isApiKeyRequired(selectedProvider) ? "ok" : "warn");
+    : apiKey || !isApiKeyRequired(selectedProvider)
+      ? "ok"
+      : "warn";
 
   const webCard = createItemCard({
     icon: lucide(Search),
@@ -259,7 +291,8 @@ export async function renderConnectionsTab(args: {
 
   // Provider picker
   const providerSelect = document.createElement("select");
-  providerSelect.className = "pi-item-card__config-input pi-item-card__config-select";
+  providerSelect.className =
+    "pi-item-card__config-input pi-item-card__config-select";
   for (const [key, info] of Object.entries(WEB_SEARCH_PROVIDER_INFO)) {
     const option = document.createElement("option");
     option.value = key;
@@ -276,7 +309,12 @@ export async function renderConnectionsTab(args: {
     );
   });
 
-  webCard.body.appendChild(createConfigRow(t("extensions-hub-connections.providerLabel"), providerSelect));
+  webCard.body.appendChild(
+    createConfigRow(
+      t("extensions-hub-connections.providerLabel"),
+      providerSelect,
+    ),
+  );
 
   // API key row
   const apiKeyInput = createConfigInput({
@@ -295,36 +333,59 @@ export async function renderConnectionsTab(args: {
   const apiKeyControls = document.createElement("div");
   apiKeyControls.className = "pi-hub-inline-row";
 
-  const validateBtn = createButton(t("extensions-hub-connections.validateButton"), {
-    compact: true,
-    onClick: () => {
-      if (isBusy()) return;
-      const key = apiKeyInput.value.trim();
-      void (async () => {
-        try {
-          const config = await loadWebSearchProviderConfig(settings);
-          const testKey = key.length > 0 ? key : (getApiKeyForProvider(config) ?? "");
-          if (!testKey) { showToast(t("extensions-hub-connections.toast.noApiKeyToValidate")); return; }
-          const proxyBaseUrl = await getEnabledProxyBaseUrl(settings);
-          const result = await validateWebSearchApiKey({
-            provider: selectedProvider,
-            apiKey: testKey,
-            ...(proxyBaseUrl !== undefined ? { proxyBaseUrl } : {}),
-          });
-          showToast(t(result.ok ? "extensions-hub-connections.toast.validationOk" : "extensions-hub-connections.toast.validationFailed", { message: result.message }));
-        } catch (err) {
-          showToast(t("extensions-hub-connections.toast.validationError", { error: err instanceof Error ? err.message : String(err) }));
-        }
-      })();
+  const validateBtn = createButton(
+    t("extensions-hub-connections.validateButton"),
+    {
+      compact: true,
+      onClick: () => {
+        if (isBusy()) return;
+        const key = apiKeyInput.value.trim();
+        void (async () => {
+          try {
+            const config = await loadWebSearchProviderConfig(settings);
+            const testKey =
+              key.length > 0 ? key : (getApiKeyForProvider(config) ?? "");
+            if (!testKey) {
+              showToast(
+                t("extensions-hub-connections.toast.noApiKeyToValidate"),
+              );
+              return;
+            }
+            const proxyBaseUrl = await getEnabledProxyBaseUrl(settings);
+            const result = await validateWebSearchApiKey({
+              provider: selectedProvider,
+              apiKey: testKey,
+              ...(proxyBaseUrl !== undefined ? { proxyBaseUrl } : {}),
+            });
+            showToast(
+              t(
+                result.ok
+                  ? "extensions-hub-connections.toast.validationOk"
+                  : "extensions-hub-connections.toast.validationFailed",
+                { message: result.message },
+              ),
+            );
+          } catch (err) {
+            showToast(
+              t("extensions-hub-connections.toast.validationError", {
+                error: err instanceof Error ? err.message : String(err),
+              }),
+            );
+          }
+        })();
+      },
     },
-  });
+  );
 
   const saveKeyBtn = createButton(t("extensions-hub-connections.saveButton"), {
     primary: true,
     compact: true,
     onClick: () => {
       const key = apiKeyInput.value.trim();
-      if (!key) { showToast(t("extensions-hub-connections.toast.enterApiKey")); return; }
+      if (!key) {
+        showToast(t("extensions-hub-connections.toast.enterApiKey"));
+        return;
+      }
       const formatWarning = checkApiKeyFormat(selectedProvider, key);
       void runMutation(
         () => saveWebSearchApiKey(settings, selectedProvider, key),
@@ -336,28 +397,35 @@ export async function renderConnectionsTab(args: {
     },
   });
 
-  const clearKeyBtn = createButton(t("extensions-hub-connections.clearButton"), {
-    compact: true,
-    onClick: () => {
-      void runMutation(
-        () => clearWebSearchApiKey(settings, selectedProvider),
-        "config",
-        `Cleared ${providerInfo.apiKeyLabel}`,
-      );
+  const clearKeyBtn = createButton(
+    t("extensions-hub-connections.clearButton"),
+    {
+      compact: true,
+      onClick: () => {
+        void runMutation(
+          () => clearWebSearchApiKey(settings, selectedProvider),
+          "config",
+          `Cleared ${providerInfo.apiKeyLabel}`,
+        );
+      },
     },
-  });
+  );
 
   apiKeyControls.append(apiKeyInput, validateBtn, saveKeyBtn, clearKeyBtn);
   apiKeyRow.append(apiKeyLabel, apiKeyControls);
   webCard.body.appendChild(apiKeyRow);
 
-  const availability = createConfigValue(describeWebSearchAvailability({
-    sessionEnabled: webSearchSessionEnabled,
-    workbookEnabled: webSearchWorkbookEnabled,
-    workbookLabel: workbookContext.workbookLabel,
-    hasWorkbook: workbookId !== null,
-  }));
-  webCard.body.appendChild(createConfigRow(t("extensions-hub-connections.availability"), availability));
+  const availability = createConfigValue(
+    describeWebSearchAvailability({
+      sessionEnabled: webSearchSessionEnabled,
+      workbookEnabled: webSearchWorkbookEnabled,
+      workbookLabel: workbookContext.workbookLabel,
+      hasWorkbook: workbookId !== null,
+    }),
+  );
+  webCard.body.appendChild(
+    createConfigRow(t("extensions-hub-connections.availability"), availability),
+  );
 
   const scopeDetails = document.createElement("details");
   scopeDetails.className = "pi-hub-advanced-disclosure pi-hub-scope-disclosure";
@@ -380,16 +448,20 @@ export async function renderConnectionsTab(args: {
         showToast(t("extensions-hub-connections.toast.noActiveSession"));
         return;
       }
-      void runMutation(async () => {
-        await setIntegrationEnabledInScope({
-          settings,
-          scope: "session",
-          identifier: sessionId,
-          integrationId: "web_search",
-          enabled: checked,
-          knownIntegrationIds: INTEGRATION_IDS,
-        });
-      }, "scope", `Web search ${checked ? "enabled" : "disabled"} for this session`);
+      void runMutation(
+        async () => {
+          await setIntegrationEnabledInScope({
+            settings,
+            scope: "session",
+            identifier: sessionId,
+            integrationId: "web_search",
+            enabled: checked,
+            knownIntegrationIds: INTEGRATION_IDS,
+          });
+        },
+        "scope",
+        `Web search ${checked ? "enabled" : "disabled"} for this session`,
+      );
     },
   });
   sessionToggleRow.input.disabled = isBusy() || !sessionId;
@@ -397,24 +469,32 @@ export async function renderConnectionsTab(args: {
 
   const workbookToggleRow = createToggleRow({
     label: workbookId
-      ? t("ext-hub-connections.enableWorkbook", { label: workbookContext.workbookLabel })
+      ? t("ext-hub-connections.enableWorkbook", {
+          label: workbookContext.workbookLabel,
+        })
       : t("ext-hub-connections.scopeUnavailable"),
     checked: webSearchWorkbookEnabled,
     onChange: (checked) => {
       if (!workbookId) {
-        showToast(t("extensions-hub-connections.toast.workbookScopeUnavailable"));
+        showToast(
+          t("extensions-hub-connections.toast.workbookScopeUnavailable"),
+        );
         return;
       }
-      void runMutation(async () => {
-        await setIntegrationEnabledInScope({
-          settings,
-          scope: "workbook",
-          identifier: workbookId,
-          integrationId: "web_search",
-          enabled: checked,
-          knownIntegrationIds: INTEGRATION_IDS,
-        });
-      }, "scope", `Web search ${checked ? "enabled" : "disabled"} for this workbook`);
+      void runMutation(
+        async () => {
+          await setIntegrationEnabledInScope({
+            settings,
+            scope: "workbook",
+            identifier: workbookId,
+            integrationId: "web_search",
+            enabled: checked,
+            knownIntegrationIds: INTEGRATION_IDS,
+          });
+        },
+        "scope",
+        `Web search ${checked ? "enabled" : "disabled"} for this workbook`,
+      );
     },
   });
   workbookToggleRow.input.disabled = isBusy() || !workbookId;
@@ -450,43 +530,60 @@ export async function renderConnectionsTab(args: {
   mcpList.className = "pi-hub-stack";
 
   if (mcpServers.length === 0) {
-    mcpList.appendChild(createEmptyInline(lucide(Zap), t("ext-hub-connections.noMcpServers")));
+    mcpList.appendChild(
+      createEmptyInline(lucide(Zap), t("ext-hub-connections.noMcpServers")),
+    );
   } else {
     for (const server of mcpServers) {
-      mcpList.appendChild(renderMcpServerCard(server, settings, isBusy, runMutation));
+      mcpList.appendChild(
+        renderMcpServerCard(server, settings, isBusy, runMutation),
+      );
     }
   }
   container.appendChild(mcpList);
 
   // MCP add form (hidden by default)
-  const nameInput = createAddFormInput(t("ext-hub-connections.serverNamePlaceholder"));
-  const urlInput = createAddFormInput(t("ext-hub-connections.serverUrlPlaceholder"));
-  const tokenInput = createAddFormInput(t("ext-hub-connections.bearerTokenPlaceholder"));
+  const nameInput = createAddFormInput(
+    t("ext-hub-connections.serverNamePlaceholder"),
+  );
+  const urlInput = createAddFormInput(
+    t("ext-hub-connections.serverUrlPlaceholder"),
+  );
+  const tokenInput = createAddFormInput(
+    t("ext-hub-connections.bearerTokenPlaceholder"),
+  );
   tokenInput.type = "password";
 
   const addRow = createAddFormRow();
   addRow.append(nameInput, urlInput);
 
   const tokenRow = createAddFormRow();
-  tokenRow.append(tokenInput, createButton(t("ext-hub-connections.addButton"), {
-    primary: true,
-    compact: true,
-    onClick: () => {
-      void runMutation(async () => {
-        const servers = await loadMcpServers(settings);
-        const next = createMcpServerConfig({
-          name: nameInput.value,
-          url: urlInput.value,
-          token: tokenInput.value,
-          enabled: true,
-        });
-        await saveMcpServers(settings, [...servers, next]);
-        nameInput.value = "";
-        urlInput.value = "";
-        tokenInput.value = "";
-      }, "config", "Added MCP server");
-    },
-  }));
+  tokenRow.append(
+    tokenInput,
+    createButton(t("ext-hub-connections.addButton"), {
+      primary: true,
+      compact: true,
+      onClick: () => {
+        void runMutation(
+          async () => {
+            const servers = await loadMcpServers(settings);
+            const next = createMcpServerConfig({
+              name: nameInput.value,
+              url: urlInput.value,
+              token: tokenInput.value,
+              enabled: true,
+            });
+            await saveMcpServers(settings, [...servers, next]);
+            nameInput.value = "";
+            urlInput.value = "";
+            tokenInput.value = "";
+          },
+          "config",
+          "Added MCP server",
+        );
+      },
+    }),
+  );
 
   mcpAddForm.append(addRow, tokenRow);
   mcpAddForm.hidden = true;
@@ -497,45 +594,132 @@ export async function renderConnectionsTab(args: {
   const showTmux = true;
 
   if (showPython || showTmux) {
-    container.appendChild(createSectionHeader({ label: t("extensions-hub-connections.bridgesSection") }));
+    container.appendChild(
+      createSectionHeader({
+        label: t("extensions-hub-connections.bridgesSection"),
+      }),
+    );
 
     const bridgeList = document.createElement("div");
     bridgeList.className = "pi-hub-stack";
 
     if (showPython) {
-      bridgeList.appendChild(renderBridgeCard({
-        icon: lucide(Terminal),
-        name: t("ext-hub-connections.pythonName"),
-        description: t("ext-hub-connections.pythonDesc"),
-        settingKey: PYTHON_BRIDGE_URL_SETTING_KEY,
-        setupCommand: "npx pi-for-excel-python-bridge",
-        defaultUrl: DEFAULT_PYTHON_BRIDGE_URL,
-        placeholder: DEFAULT_PYTHON_BRIDGE_URL,
-        currentUrl: effectivePythonUrl,
-        hasCustomUrl: pythonUrl.length > 0,
-        settings,
-        runMutation,
-      }));
+      bridgeList.appendChild(
+        renderBridgeCard({
+          icon: lucide(Terminal),
+          name: t("ext-hub-connections.pythonName"),
+          description: t("ext-hub-connections.pythonDesc"),
+          settingKey: PYTHON_BRIDGE_URL_SETTING_KEY,
+          setupCommand: "npx pi-for-office-python-bridge",
+          defaultUrl: DEFAULT_PYTHON_BRIDGE_URL,
+          placeholder: DEFAULT_PYTHON_BRIDGE_URL,
+          currentUrl: effectivePythonUrl,
+          hasCustomUrl: pythonUrl.length > 0,
+          settings,
+          runMutation,
+        }),
+      );
     }
 
     if (showTmux) {
-      bridgeList.appendChild(renderBridgeCard({
-        icon: lucide(Terminal),
-        name: t("ext-hub-connections.tmuxName"),
-        description: t("ext-hub-connections.tmuxDesc"),
-        settingKey: TMUX_BRIDGE_URL_SETTING_KEY,
-        setupCommand: "npx pi-for-excel-tmux-bridge",
-        defaultUrl: DEFAULT_TMUX_BRIDGE_URL,
-        placeholder: DEFAULT_TMUX_BRIDGE_URL,
-        currentUrl: effectiveTmuxUrl,
-        hasCustomUrl: tmuxUrl.length > 0,
-        settings,
-        runMutation,
-      }));
+      bridgeList.appendChild(
+        renderBridgeCard({
+          icon: lucide(Terminal),
+          name: t("ext-hub-connections.tmuxName"),
+          description: t("ext-hub-connections.tmuxDesc"),
+          settingKey: TMUX_BRIDGE_URL_SETTING_KEY,
+          setupCommand: "npx pi-for-office-tmux-bridge",
+          defaultUrl: DEFAULT_TMUX_BRIDGE_URL,
+          placeholder: DEFAULT_TMUX_BRIDGE_URL,
+          currentUrl: effectiveTmuxUrl,
+          hasCustomUrl: tmuxUrl.length > 0,
+          settings,
+          runMutation,
+        }),
+      );
     }
 
     container.appendChild(bridgeList);
   }
+
+  // ── Local Pi agent (bridge) section ──────────
+  container.appendChild(
+    createSectionHeader({
+      label: t("ext-hub-connections.piBridge"),
+    }),
+  );
+
+  const piBridgeCard = document.createElement("div");
+  piBridgeCard.className = "pi-hub-stack";
+
+  const piBridgeItem = createItemCard({
+    icon: lucide(Zap),
+    iconColor: "amber",
+    name: t("ext-hub-connections.piBridge"),
+    description: t("ext-hub-connections.piBridgeDesc"),
+    expandable: true,
+    expanded: true,
+    badges: [{ text: t("ext-hub-connections.piBridgeOff"), tone: "muted" }],
+  });
+
+  // Setup command
+  const piBridgeSetupLabel = document.createElement("p");
+  piBridgeSetupLabel.className = "pi-hub-bridge-setup__label";
+  piBridgeSetupLabel.textContent = t("ext-hub-connections.piBridgeSetup");
+  const piBridgeSetupCmd = document.createElement("div");
+  piBridgeSetupCmd.className = "pi-hub-bridge-setup";
+  const piBridgeCmdRow = document.createElement("div");
+  piBridgeCmdRow.className = "pi-hub-bridge-setup__command";
+  const piBridgeCmdCode = document.createElement("code");
+  piBridgeCmdCode.className = "pi-hub-bridge-setup__code";
+  piBridgeCmdCode.textContent = t("ext-hub-connections.piBridgeSetupCmd");
+  const piBridgeCopyBtn = document.createElement("button");
+  piBridgeCopyBtn.type = "button";
+  piBridgeCopyBtn.className = "pi-hub-bridge-setup__copy";
+  piBridgeCopyBtn.textContent = "📋";
+  piBridgeCopyBtn.title = t("bridge-setup.copyCommandTitle");
+  piBridgeCopyBtn.addEventListener("click", () => {
+    const cmd = t("ext-hub-connections.piBridgeSetupCmd");
+    void navigator.clipboard?.writeText(cmd).then(() => {
+      piBridgeCopyBtn.textContent = "✓";
+      setTimeout(() => { piBridgeCopyBtn.textContent = "📋"; }, 1400);
+    });
+  });
+  piBridgeCmdRow.append(piBridgeCmdCode, piBridgeCopyBtn);
+  const piBridgeHint = document.createElement("p");
+  piBridgeHint.className = "pi-hub-bridge-setup__hint";
+  piBridgeHint.textContent = t("ext-hub-connections.piBridgeKeepRunning");
+  piBridgeSetupCmd.append(piBridgeCmdRow, piBridgeHint);
+  piBridgeItem.body.append(piBridgeSetupLabel, piBridgeSetupCmd);
+
+  // Status display
+  const piBridgeStatus = document.createElement("p");
+  piBridgeStatus.className = "pi-hub-bridge-setup__hint";
+  piBridgeStatus.textContent = t("ext-hub-connections.piBridgeNotRunning");
+
+  // Probe button
+  const probeBtn = createButton(t("bridge-setup.testConnection"), {
+    compact: true,
+    onClick: () => {
+      piBridgeStatus.textContent = t("ext-hub-connections.piBridgeConnecting");
+      const probeUrl = "ws://127.0.0.1:38617";
+      void fetch(probeUrl.replace("ws://", "http://").replace(/\/$/, "") + "/health").
+        .then((res: Response) => {
+          if (res.ok) {
+            piBridgeStatus.textContent = t("ext-hub-connections.piBridgeConnected");
+          } else {
+            piBridgeStatus.textContent = t("ext-hub-connections.piBridgeNotRunning");
+          }
+        })
+        .catch(() => {
+          piBridgeStatus.textContent = t("ext-hub-connections.piBridgeProbeFailed");
+        });
+    },
+  });
+
+  piBridgeItem.body.append(piBridgeStatus, probeBtn);
+  piBridgeCard.appendChild(piBridgeItem.root);
+  container.appendChild(piBridgeCard);
 }
 
 // ── MCP server card ─────────────────────────────────
@@ -544,9 +728,15 @@ function renderMcpServerCard(
   server: McpServerConfig,
   settings: SettingsStore,
   isBusy: () => boolean,
-  runMutation: (action: () => Promise<void>, reason: "toggle" | "scope" | "external-toggle" | "config", msg?: string) => Promise<void>,
+  runMutation: (
+    action: () => Promise<void>,
+    reason: "toggle" | "scope" | "external-toggle" | "config",
+    msg?: string,
+  ) => Promise<void>,
 ): HTMLElement {
-  const toolLabel = server.enabled ? t("ext-hub-connections.badgeEnabled") : t("ext-hub-connections.badgeDisabled");
+  const toolLabel = server.enabled
+    ? t("ext-hub-connections.badgeEnabled")
+    : t("ext-hub-connections.badgeDisabled");
   const card = createItemCard({
     icon: lucide(Zap),
     iconColor: "blue",
@@ -557,11 +747,23 @@ function renderMcpServerCard(
   });
 
   // URL
-  card.body.appendChild(createConfigRow(t("extensions-hub-connections.url"), createConfigValue(server.url)));
+  card.body.appendChild(
+    createConfigRow(
+      t("extensions-hub-connections.url"),
+      createConfigValue(server.url),
+    ),
+  );
 
   // Token
-  const tokenValue = server.token ? maskSecret(server.token) : t("ext-hub-connections.badgeNoToken");
-  card.body.appendChild(createConfigRow(t("extensions-hub-connections.token"), createConfigValue(tokenValue)));
+  const tokenValue = server.token
+    ? maskSecret(server.token)
+    : t("ext-hub-connections.badgeNoToken");
+  card.body.appendChild(
+    createConfigRow(
+      t("extensions-hub-connections.token"),
+      createConfigValue(tokenValue),
+    ),
+  );
 
   // Enabled toggle
   const enabledRow = document.createElement("div");
@@ -572,13 +774,17 @@ function renderMcpServerCard(
   const enabledToggle = createToggle({
     checked: server.enabled,
     onChange: (checked) => {
-      void runMutation(async () => {
-        const servers = await loadMcpServers(settings);
-        const updated = servers.map((s) =>
-          s.id === server.id ? { ...s, enabled: checked } : s,
-        );
-        await saveMcpServers(settings, updated);
-      }, "config", `${server.name}: ${checked ? "enabled" : "disabled"}`);
+      void runMutation(
+        async () => {
+          const servers = await loadMcpServers(settings);
+          const updated = servers.map((s) =>
+            s.id === server.id ? { ...s, enabled: checked } : s,
+          );
+          await saveMcpServers(settings, updated);
+        },
+        "config",
+        `${server.name}: ${checked ? "enabled" : "disabled"}`,
+      );
     },
   });
   enabledRow.append(enabledLabel, enabledToggle.root);
@@ -595,9 +801,21 @@ function renderMcpServerCard(
           const transport = result.proxied
             ? t("extensions-hub-connections.transport.proxy")
             : t("extensions-hub-connections.transport.direct");
-          showToast(t("extensions-hub-connections.toast.serverReachable", { name: server.name, count: result.toolCount, plural: result.toolCount === 1 ? "" : "s", transport }));
+          showToast(
+            t("extensions-hub-connections.toast.serverReachable", {
+              name: server.name,
+              count: result.toolCount,
+              plural: result.toolCount === 1 ? "" : "s",
+              transport,
+            }),
+          );
         } catch (err) {
-          showToast(t("extensions-hub-connections.toast.serverError", { name: server.name, error: err instanceof Error ? err.message : String(err) }));
+          showToast(
+            t("extensions-hub-connections.toast.serverError", {
+              name: server.name,
+              error: err instanceof Error ? err.message : String(err),
+            }),
+          );
         }
       })();
     },
@@ -607,10 +825,17 @@ function renderMcpServerCard(
     danger: true,
     compact: true,
     onClick: () => {
-      void runMutation(async () => {
-        const servers = await loadMcpServers(settings);
-        await saveMcpServers(settings, servers.filter((s) => s.id !== server.id));
-      }, "config", `Removed MCP server: ${server.name}`);
+      void runMutation(
+        async () => {
+          const servers = await loadMcpServers(settings);
+          await saveMcpServers(
+            settings,
+            servers.filter((s) => s.id !== server.id),
+          );
+        },
+        "config",
+        `Removed MCP server: ${server.name}`,
+      );
     },
   });
 
@@ -632,7 +857,11 @@ function renderBridgeCard(args: {
   currentUrl: string;
   hasCustomUrl: boolean;
   settings: SettingsStore;
-  runMutation: (action: () => Promise<void>, reason: "toggle" | "scope" | "external-toggle" | "config", msg?: string) => Promise<void>;
+  runMutation: (
+    action: () => Promise<void>,
+    reason: "toggle" | "scope" | "external-toggle" | "config",
+    msg?: string,
+  ) => Promise<void>;
 }): HTMLElement {
   const card = createItemCard({
     icon: args.icon,
@@ -641,9 +870,10 @@ function renderBridgeCard(args: {
     description: args.description,
     expandable: true,
     expanded: !args.hasCustomUrl,
-    badges: [args.hasCustomUrl
-      ? { text: t("ext-hub-connections.configured"), tone: "ok" as const }
-      : { text: t("ext-hub-connections.defaultUrl"), tone: "muted" as const },
+    badges: [
+      args.hasCustomUrl
+        ? { text: t("ext-hub-connections.configured"), tone: "ok" as const }
+        : { text: t("ext-hub-connections.defaultUrl"), tone: "muted" as const },
     ],
   });
 
@@ -656,7 +886,9 @@ function renderBridgeCard(args: {
     value: args.currentUrl,
     placeholder: args.placeholder,
   });
-  card.body.appendChild(createConfigRow(t("ext-hub-connections.bridgeUrl"), urlInput));
+  card.body.appendChild(
+    createConfigRow(t("ext-hub-connections.bridgeUrl"), urlInput),
+  );
 
   const saveBridgeUrl = (clear: boolean): void => {
     const candidateUrl = clear ? "" : urlInput.value.trim();
@@ -666,29 +898,47 @@ function renderBridgeCard(args: {
       try {
         normalizedCandidateUrl = validateOfficeProxyUrl(candidateUrl);
       } catch (err) {
-        showToast(t("ext-hub-connections.toast.invalidUrl", { error: err instanceof Error ? err.message : String(err) }));
+        showToast(
+          t("ext-hub-connections.toast.invalidUrl", {
+            error: err instanceof Error ? err.message : String(err),
+          }),
+        );
         return;
       }
     }
 
-    const useDefaultUrl = normalizedCandidateUrl.length === 0 || normalizedCandidateUrl === args.defaultUrl;
+    const useDefaultUrl =
+      normalizedCandidateUrl.length === 0 ||
+      normalizedCandidateUrl === args.defaultUrl;
 
-    void args.runMutation(async () => {
-      if (useDefaultUrl) {
-        if (typeof args.settings.delete === "function") {
-          await args.settings.delete(args.settingKey);
+    void args.runMutation(
+      async () => {
+        if (useDefaultUrl) {
+          if (typeof args.settings.delete === "function") {
+            await args.settings.delete(args.settingKey);
+          } else {
+            await args.settings.set(args.settingKey, "");
+          }
         } else {
-          await args.settings.set(args.settingKey, "");
+          await args.settings.set(args.settingKey, normalizedCandidateUrl);
         }
-      } else {
-        await args.settings.set(args.settingKey, normalizedCandidateUrl);
-      }
-      dispatchExperimentalToolConfigChanged({ configKey: args.settingKey });
-    }, "config", useDefaultUrl ? `${args.name} URL set to default` : `${args.name} URL saved`);
+        dispatchExperimentalToolConfigChanged({ configKey: args.settingKey });
+      },
+      "config",
+      useDefaultUrl
+        ? `${args.name} URL set to default`
+        : `${args.name} URL saved`,
+    );
   };
 
-  const saveBtn = createButton(t("ext-hub-connections.saveButton"), { compact: true, onClick: () => saveBridgeUrl(false) });
-  const clearBtn = createButton(t("ext-hub-connections.clearButton"), { compact: true, onClick: () => saveBridgeUrl(true) });
+  const saveBtn = createButton(t("ext-hub-connections.saveButton"), {
+    compact: true,
+    onClick: () => saveBridgeUrl(false),
+  });
+  const clearBtn = createButton(t("ext-hub-connections.clearButton"), {
+    compact: true,
+    onClick: () => saveBridgeUrl(true),
+  });
   card.body.appendChild(createActionsRow(saveBtn, clearBtn));
 
   return card.root;

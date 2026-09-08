@@ -19,7 +19,8 @@ const CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 const AUTHORIZE_URL = "https://claude.ai/oauth/authorize";
 const TOKEN_URL = "https://platform.claude.com/v1/oauth/token";
 const REDIRECT_URI = "http://localhost:53692/callback";
-const SCOPES = "org:create_api_key user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload";
+const SCOPES =
+  "org:create_api_key user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload";
 
 type ParsedAuthorizationInput = { code?: string; state?: string };
 
@@ -29,7 +30,9 @@ type TokenPayload = {
   expiresInSeconds: number;
 };
 
-function isAuthAnthropicBrowserOauthPayloadShape(value: DynamicValue): value is DynamicObject {
+function isAuthAnthropicBrowserOauthPayloadShape(
+  value: DynamicValue,
+): value is DynamicObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -67,8 +70,13 @@ function parseAuthorizationInput(input: string): ParsedAuthorizationInput {
   }
 
   if (value.includes("code=")) {
-    const params = new URLSearchParams(value.startsWith("?") ? value.slice(1) : value);
-    return createParsedAuthorizationInput(params.get("code"), params.get("state"));
+    const params = new URLSearchParams(
+      value.startsWith("?") ? value.slice(1) : value,
+    );
+    return createParsedAuthorizationInput(
+      params.get("code"),
+      params.get("state"),
+    );
   }
 
   return { code: value };
@@ -96,7 +104,10 @@ function parseTokenPayload(payload: DynamicValue): TokenPayload | null {
   };
 }
 
-async function postTokenRequest(body: Record<string, string>, failurePrefix: string): Promise<TokenPayload> {
+async function postTokenRequest(
+  body: Record<string, string>,
+  failurePrefix: string,
+): Promise<TokenPayload> {
   const response = await fetch(TOKEN_URL, {
     method: "POST",
     headers: {
@@ -119,7 +130,11 @@ async function postTokenRequest(body: Record<string, string>, failurePrefix: str
   return payload;
 }
 
-async function exchangeAuthorizationCode(code: string, state: string, verifier: string): Promise<TokenPayload> {
+async function exchangeAuthorizationCode(
+  code: string,
+  state: string,
+  verifier: string,
+): Promise<TokenPayload> {
   return postTokenRequest(
     {
       grant_type: "authorization_code",
@@ -144,9 +159,18 @@ async function refreshAccessToken(refreshToken: string): Promise<TokenPayload> {
   );
 }
 
-async function createAuthorizationFlow(): Promise<{ verifier: string; url: string }> {
+async function createAuthorizationFlow(): Promise<{
+  verifier: string;
+  url: string;
+}> {
   const { verifier, challenge } = await generatePKCE();
-  const authUrl = new URL(AUTHORIZE_URL);
+
+  let authUrl: URL;
+  try {
+    authUrl = new URL(AUTHORIZE_URL);
+  } catch {
+    throw new Error("Invalid Anthropic authorization URL configuration");
+  }
   authUrl.searchParams.set("code", "true");
   authUrl.searchParams.set("client_id", CLIENT_ID);
   authUrl.searchParams.set("response_type", "code");
@@ -159,15 +183,17 @@ async function createAuthorizationFlow(): Promise<{ verifier: string; url: strin
   return { verifier, url: authUrl.toString() };
 }
 
-export async function loginAnthropicInBrowser(callbacks: OAuthLoginCallbacks): Promise<OAuthCredentials> {
+export async function loginAnthropicInBrowser(
+  callbacks: OAuthLoginCallbacks,
+): Promise<OAuthCredentials> {
   callbacks.onProgress?.("Preparing Anthropic login…");
   const flow = await createAuthorizationFlow();
 
   callbacks.onAuth({
     url: flow.url,
     instructions:
-      "After login, Pi for Excel will try to capture the localhost callback automatically if the local proxy is running. " +
-      "If it does not continue, copy the full callback URL from the browser address bar and paste it back in Pi for Excel.",
+      "After login, Pi for Office will try to capture the localhost callback automatically if the local proxy is running. " +
+      "If it does not continue, copy the full callback URL from the browser address bar and paste it back in Pi for Office.",
   });
 
   if (callbacks.signal?.aborted) {
@@ -189,7 +215,11 @@ export async function loginAnthropicInBrowser(callbacks: OAuthLoginCallbacks): P
   }
 
   callbacks.onProgress?.("Exchanging code for tokens…");
-  const tokens = await exchangeAuthorizationCode(parsed.code, parsed.state ?? flow.verifier, flow.verifier);
+  const tokens = await exchangeAuthorizationCode(
+    parsed.code,
+    parsed.state ?? flow.verifier,
+    flow.verifier,
+  );
 
   return {
     access: tokens.accessToken,
@@ -198,7 +228,9 @@ export async function loginAnthropicInBrowser(callbacks: OAuthLoginCallbacks): P
   };
 }
 
-export async function refreshAnthropicBrowserToken(credentials: OAuthCredentials): Promise<OAuthCredentials> {
+export async function refreshAnthropicBrowserToken(
+  credentials: OAuthCredentials,
+): Promise<OAuthCredentials> {
   const refreshToken = credentials.refresh;
   if (typeof refreshToken !== "string" || refreshToken.trim().length === 0) {
     throw new Error("Anthropic refresh failed: missing refresh token");

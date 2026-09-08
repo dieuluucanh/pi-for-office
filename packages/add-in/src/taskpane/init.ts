@@ -1,4 +1,6 @@
-function isTaskpaneInitPayloadShape(value: DynamicValue): value is DynamicObject {
+function isTaskpaneInitPayloadShape(
+  value: DynamicValue,
+): value is DynamicObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -42,9 +44,7 @@ import {
   saveTruncatedToolOutputToWorkspace,
 } from "../tools/output-truncation.js";
 import { withConnectionPreflight } from "../tools/with-connection-preflight.js";
-import {
-  migrateLegacyWebSearchApiKeysToConnectionStore,
-} from "../tools/web-search-config.js";
+import { migrateLegacyWebSearchApiKeysToConnectionStore } from "../tools/web-search-config.js";
 import { migrateLegacyMcpTokensToConnectionStore } from "../tools/mcp-config.js";
 import {
   applyExperimentalToolGates,
@@ -67,11 +67,7 @@ import {
 } from "../commands/builtins/overlays.js";
 import { wireCommandMenu } from "../commands/command-menu.js";
 import { executeSlashCommand } from "../commands/slash-command-execution.js";
-import {
-  getUserRules,
-  getWorkbookRules,
-  hasAnyRules,
-} from "../rules/store.js";
+import { getUserRules, getWorkbookRules, hasAnyRules } from "../rules/store.js";
 import { createExecutionModeController } from "../execution/controller.js";
 import {
   PI_EXECUTION_MODE_CHANGED_EVENT,
@@ -91,9 +87,15 @@ import {
   INTEGRATION_IDS,
 } from "../integrations/catalog.js";
 import { PI_INTEGRATIONS_CHANGED_EVENT } from "../integrations/events.js";
-import { getExternalToolsEnabled, resolveConfiguredIntegrationIds } from "../integrations/store.js";
+import {
+  getExternalToolsEnabled,
+  resolveConfiguredIntegrationIds,
+} from "../integrations/store.js";
 import { buildSystemPrompt } from "../prompt/system-prompt.js";
-import { probeLocalServices, type LocalServiceEntry } from "../tools/bridge-health.js";
+import {
+  probeLocalServices,
+  type LocalServiceEntry,
+} from "../tools/bridge-health.js";
 import {
   buildAgentSkillPromptEntries,
   listAgentSkills,
@@ -124,15 +126,27 @@ import { setActiveProviders } from "../models/active-providers.js";
 import { BrowserModelRuntime } from "../models/browser-model-runtime.js";
 import { promptForProviderConnection } from "../ui/api-key-dialog.js";
 import { openModelSelectorDialog } from "../ui/model-selector-dialog.js";
-import { getCurrentSpreadsheetHost, type SpreadsheetHostKind } from "../host/index.js";
+import {
+  getCurrentSpreadsheetHost,
+  type SpreadsheetHostKind,
+} from "../host/index.js";
 import { createWorkbookCoordinator } from "../workbook/coordinator.js";
-import { formatWorkbookLabel, type WorkbookContext } from "../workbook/context.js";
+import {
+  formatWorkbookLabel,
+  type WorkbookContext,
+} from "../workbook/context.js";
 import {
   getManualFullWorkbookBackupStore,
   type ManualFullWorkbookBackup,
 } from "../workbook/manual-full-backup.js";
-import { getWorkbookRecoveryLog, type WorkbookRecoverySnapshot } from "../workbook/recovery-log.js";
-import { readRetentionLimit, writeRetentionLimit } from "../workbook/recovery/log-store.js";
+import {
+  getWorkbookRecoveryLog,
+  type WorkbookRecoverySnapshot,
+} from "../workbook/recovery-log.js";
+import {
+  readRetentionLimit,
+  writeRetentionLimit,
+} from "../workbook/recovery/log-store.js";
 import {
   WorkbookSaveBoundaryMonitor,
   startWorkbookSaveBoundaryPolling,
@@ -141,11 +155,17 @@ import {
 import { createContextInjector } from "./context-injection.js";
 import { pickDefaultModel } from "./default-model.js";
 import { resolveRuntimeModelSwap } from "./runtime-model-reconcile.js";
-import { getThinkingLevels, installKeyboardShortcuts } from "./keyboard-shortcuts.js";
+import {
+  getThinkingLevels,
+  installKeyboardShortcuts,
+} from "./keyboard-shortcuts.js";
 import { createQueueDisplay } from "./queue-display.js";
 import { createActionQueue } from "./action-queue.js";
 import { maybeStartBackgroundVerificationBridge } from "./background-verification-bridge.js";
-import { RecentlyClosedStack, type RecentlyClosedItem } from "./recently-closed.js";
+import {
+  RecentlyClosedStack,
+  type RecentlyClosedItem,
+} from "./recently-closed.js";
 import { setupSessionPersistence } from "./sessions.js";
 import {
   loadWorkbookTabLayout,
@@ -178,11 +198,15 @@ import {
   createAsyncCoalescer,
   createRuntimeToolFingerprint,
   isLikelyCorsErrorMessage,
+  isProxyTargetBlockedMessage,
+  isProxyUnreachableMessage,
   shouldApplyRuntimeToolUpdate,
   isRuntimeAgentTool,
   normalizeRuntimeTools,
 } from "./runtime-utils.js";
 import { doesOverlayClaimEscape } from "../utils/escape-guard.js";
+import { PaneBridgeClient } from "../bridge/pane-client.js";
+import type { OfficeHostApp } from "@dieulc/pi-office-protocol";
 
 function showErrorBanner(errorRoot: HTMLElement, message: string): void {
   render(renderError(message), errorRoot);
@@ -205,7 +229,13 @@ async function ensureDefaultProxyUrl(
     const runtimeDefaultProxyUrl = resolveRuntimeDefaultProxyUrl({ hostKind });
     const proxyUrl = await settings.get<string>("proxy.url");
     const storedProxyUrl = typeof proxyUrl === "string" ? proxyUrl.trim() : "";
-    if (storedProxyUrl.length > 0 && !(storedProxyUrl === DEFAULT_PROXY_URL && runtimeDefaultProxyUrl !== DEFAULT_PROXY_URL)) {
+    if (
+      storedProxyUrl.length > 0 &&
+      !(
+        storedProxyUrl === DEFAULT_PROXY_URL &&
+        runtimeDefaultProxyUrl !== DEFAULT_PROXY_URL
+      )
+    ) {
       return;
     }
 
@@ -225,7 +255,8 @@ export async function initTaskpane(opts: {
   const spreadsheetHost = getCurrentSpreadsheetHost();
 
   // 1. Storage
-  const { providerKeys, sessions, settings, customProviders, modelCatalogs } = initAppStorage();
+  const { providerKeys, sessions, settings, customProviders, modelCatalogs } =
+    initAppStorage();
 
   // Initialize language from storage
   try {
@@ -255,7 +286,8 @@ export async function initTaskpane(opts: {
   // 1b. Auto-compaction (Pi defaults to enabled)
   let autoCompactEnabled = true;
   try {
-    autoCompactEnabled = (await settings.get<boolean>("compaction.enabled")) ?? true;
+    autoCompactEnabled =
+      (await settings.get<boolean>("compaction.enabled")) ?? true;
   } catch {
     autoCompactEnabled = true;
   }
@@ -283,7 +315,8 @@ export async function initTaskpane(opts: {
 
       const rawUrl = await settings.get<string>("proxy.url");
       const trimmedUrl = typeof rawUrl === "string" ? rawUrl.trim() : "";
-      const candidateUrl = trimmedUrl.length > 0 ? trimmedUrl : DEFAULT_PROXY_URL;
+      const candidateUrl =
+        trimmedUrl.length > 0 ? trimmedUrl : DEFAULT_PROXY_URL;
       return validateOfficeProxyUrl(candidateUrl);
     } catch {
       return undefined;
@@ -303,9 +336,15 @@ export async function initTaskpane(opts: {
 
   const updateAvailableProviderState = async (): Promise<void> => {
     const availableModels = await modelRuntime.models.getAvailable();
-    const combinedProviders = new Set(availableModels.map((model) => model.provider));
+    const combinedProviders = new Set(
+      availableModels.map((model) => model.provider),
+    );
     availableProviders = Array.from(combinedProviders);
-    defaultModel = pickDefaultModel(modelRuntime.models, availableProviders, null);
+    defaultModel = pickDefaultModel(
+      modelRuntime.models,
+      availableProviders,
+      null,
+    );
     setActiveProviders(combinedProviders);
     document.dispatchEvent(new Event("pi:models-changed"));
   };
@@ -315,16 +354,25 @@ export async function initTaskpane(opts: {
   const restoreModelCatalogs = async (): Promise<void> => {
     const refreshResult = await modelRuntime.refresh({ allowNetwork: false });
     if (refreshResult.errors.size > 0) {
-      console.warn("[models] Some cached provider catalogues could not be restored:", Array.from(refreshResult.errors.keys()));
+      console.warn(
+        "[models] Some cached provider catalogues could not be restored:",
+        Array.from(refreshResult.errors.keys()),
+      );
     }
     await updateAvailableProviderState();
     onProvidersChanged?.();
   };
 
   const refreshRuntimeModels = async (): Promise<void> => {
-    const refreshResult = await modelRuntime.refresh({ allowNetwork: true, force: true });
+    const refreshResult = await modelRuntime.refresh({
+      allowNetwork: true,
+      force: true,
+    });
     if (refreshResult.errors.size > 0) {
-      console.warn("[models] Some provider catalogues could not be refreshed:", Array.from(refreshResult.errors.keys()));
+      console.warn(
+        "[models] Some provider catalogues could not be refreshed:",
+        Array.from(refreshResult.errors.keys()),
+      );
     }
     await updateAvailableProviderState();
     onProvidersChanged?.();
@@ -340,7 +388,10 @@ export async function initTaskpane(opts: {
     void refreshConfiguredProviders()
       .then(() => refreshRuntimeModels())
       .catch((error: DynamicValue) => {
-        console.warn("[auth] Provider refresh after settings change failed:", error);
+        console.warn(
+          "[auth] Provider refresh after settings change failed:",
+          error,
+        );
       });
   });
 
@@ -354,7 +405,10 @@ export async function initTaskpane(opts: {
       void refreshConfiguredProviders()
         .then(() => refreshRuntimeModels())
         .catch((error: DynamicValue) => {
-          console.warn("[auth] Provider refresh after credential restore failed:", error);
+          console.warn(
+            "[auth] Provider refresh after credential restore failed:",
+            error,
+          );
         });
     })
     .catch((error: DynamicValue) => {
@@ -362,23 +416,30 @@ export async function initTaskpane(opts: {
     });
 
   try {
-    await awaitWithTimeout("Credential restore", 6000, credentialRestorePromise);
+    await awaitWithTimeout(
+      "Credential restore",
+      6000,
+      credentialRestorePromise,
+    );
   } catch (error) {
     console.warn("[auth] Credential restore skipped:", error);
   }
 
   try {
-    await awaitWithTimeout("Provider lookup", 3500, refreshConfiguredProviders());
+    await awaitWithTimeout(
+      "Provider lookup",
+      3500,
+      refreshConfiguredProviders(),
+    );
   } catch (error) {
     console.warn("[auth] Provider lookup failed during startup:", error);
   }
 
   // Cached catalogues are available before first paint; remote discovery runs
   // afterward and updates an already-open model selector in place.
-  void refreshRuntimeModels()
-    .catch((error: DynamicValue) => {
-      console.warn("[models] Background model refresh failed:", error);
-    });
+  void refreshRuntimeModels().catch((error: DynamicValue) => {
+    console.warn("[models] Background model refresh failed:", error);
+  });
 
   if (availableProviders.length === 0) {
     void showWelcomeLogin(providerKeys).catch((error: DynamicValue) => {
@@ -437,7 +498,8 @@ export async function initTaskpane(opts: {
     showToast,
   });
 
-  const getExecutionMode = (): ExecutionMode => executionModeController.getMode();
+  const getExecutionMode = (): ExecutionMode =>
+    executionModeController.getMode();
 
   const setExecutionMode = async (mode: ExecutionMode): Promise<void> => {
     await executionModeController.setMode(mode);
@@ -455,12 +517,18 @@ export async function initTaskpane(opts: {
     }
   };
 
-  let modelSwitchBehavior: ModelSwitchBehavior = await loadModelSwitchBehavior();
+  let modelSwitchBehavior: ModelSwitchBehavior =
+    await loadModelSwitchBehavior();
 
   const getModelSwitchBehavior = (): ModelSwitchBehavior => modelSwitchBehavior;
 
-  const setModelSwitchBehavior = async (nextBehavior: ModelSwitchBehavior): Promise<void> => {
-    modelSwitchBehavior = await setStoredModelSwitchBehavior(settings, nextBehavior);
+  const setModelSwitchBehavior = async (
+    nextBehavior: ModelSwitchBehavior,
+  ): Promise<void> => {
+    modelSwitchBehavior = await setStoredModelSwitchBehavior(
+      settings,
+      nextBehavior,
+    );
   };
 
   const resolveWorkbookContext = async (): Promise<WorkbookContext> => {
@@ -501,14 +569,23 @@ export async function initTaskpane(opts: {
     let mergedSkills = bundledSkills;
 
     try {
-      const discoverableSkills = await loadDiscoverableAgentSkillsFromWorkspace(getFilesWorkspace());
-      mergedSkills = mergeAgentSkillDefinitions(bundledSkills, discoverableSkills);
+      const discoverableSkills = await loadDiscoverableAgentSkillsFromWorkspace(
+        getFilesWorkspace(),
+      );
+      mergedSkills = mergeAgentSkillDefinitions(
+        bundledSkills,
+        discoverableSkills,
+      );
     } catch (error) {
-      console.warn("[skills] Failed to load discoverable workspace skills:", error);
+      console.warn(
+        "[skills] Failed to load discoverable workspace skills:",
+        error,
+      );
     }
 
     try {
-      const disabledSkillNames = await loadDisabledSkillNamesFromSettings(settings);
+      const disabledSkillNames =
+        await loadDisabledSkillNamesFromSettings(settings);
       const enabledSkills = filterAgentSkillsByEnabledState({
         skills: mergedSkills,
         disabledSkillNames,
@@ -532,14 +609,18 @@ export async function initTaskpane(opts: {
     await localServicesReady;
 
     const availableSkills = await resolveAvailableSkills();
-    const activeConnections = await connectionManager.listPromptEntries(args.requiredConnectionIds);
+    const activeConnections = await connectionManager.listPromptEntries(
+      args.requiredConnectionIds,
+    );
 
     try {
       const userRules = await getUserRules(settings);
       const workbookRules = await getWorkbookRules(settings, args.workbookId);
       setRulesActive(hasAnyRules({ userRules, workbookRules }));
       const conventions = await getResolvedConventions(settings);
-      const activeIntegrations = buildIntegrationPromptEntries(args.activeIntegrationIds);
+      const activeIntegrations = buildIntegrationPromptEntries(
+        args.activeIntegrationIds,
+      );
       return buildSystemPrompt({
         userInstructions: userRules,
         workbookInstructions: workbookRules,
@@ -576,14 +657,13 @@ export async function initTaskpane(opts: {
   const areRuntimeModelsEquivalent = (
     left: Agent["state"]["model"],
     right: Agent["state"]["model"],
-  ): boolean => (
+  ): boolean =>
     left.api === right.api &&
     left.id === right.id &&
     left.provider === right.provider &&
     left.baseUrl === right.baseUrl &&
     left.contextWindow === right.contextWindow &&
-    left.maxTokens === right.maxTokens
-  );
+    left.maxTokens === right.maxTokens;
 
   const reconcileRuntimeModelsWithProviders = (): void => {
     const activeRuntimeId = getActiveRuntime()?.runtimeId ?? null;
@@ -610,8 +690,14 @@ export async function initTaskpane(opts: {
 
       // 1. Refresh metadata from the unified runtime catalogue (built-in,
       // custom, dynamic or extension-owned).
-      const refreshedModel = modelRuntime.models.getModel(currentModel.provider, currentModel.id);
-      if (refreshedModel && !areRuntimeModelsEquivalent(currentModel, refreshedModel)) {
+      const refreshedModel = modelRuntime.models.getModel(
+        currentModel.provider,
+        currentModel.id,
+      );
+      if (
+        refreshedModel &&
+        !areRuntimeModelsEquivalent(currentModel, refreshedModel)
+      ) {
         runtime.agent.state.model = refreshedModel;
         markChanged(runtime.runtimeId);
         continue;
@@ -655,19 +741,25 @@ export async function initTaskpane(opts: {
   });
 
   const saveBoundaryMonitor = new WorkbookSaveBoundaryMonitor({
-    clearBackupsForCurrentWorkbook: () => workbookRecoveryLog.clearForCurrentWorkbook(),
+    clearBackupsForCurrentWorkbook: () =>
+      workbookRecoveryLog.clearForCurrentWorkbook(),
   });
   const stopSaveBoundaryPolling = startWorkbookSaveBoundaryPolling({
     monitor: saveBoundaryMonitor,
   });
 
-  window.addEventListener("beforeunload", () => {
-    stopSaveBoundaryPolling();
-  }, { once: true });
+  window.addEventListener(
+    "beforeunload",
+    () => {
+      stopSaveBoundaryPolling();
+    },
+    { once: true },
+  );
 
   const restoreCheckpointById = async (snapshotId: string): Promise<void> => {
     const activeRuntime = getActiveRuntime();
-    const sessionId = activeRuntime?.persistence.getSessionId() ?? crypto.randomUUID();
+    const sessionId =
+      activeRuntime?.persistence.getSessionId() ?? crypto.randomUUID();
 
     const workbookId = await resolveWorkbookId();
     const coordinatorWorkbookId = workbookId ?? "workbook:unknown";
@@ -694,7 +786,9 @@ export async function initTaskpane(opts: {
     toolName: snapshot.toolName,
     address: snapshot.address,
     changedCount: snapshot.changedCount,
-    ...(snapshot.restoredFromSnapshotId !== undefined ? { restoredFromSnapshotId: snapshot.restoredFromSnapshotId } : {}),
+    ...(snapshot.restoredFromSnapshotId !== undefined
+      ? { restoredFromSnapshotId: snapshot.restoredFromSnapshotId }
+      : {}),
   });
 
   const formatSessionTitle = (title: string): string => {
@@ -792,10 +886,14 @@ export async function initTaskpane(opts: {
     document.dispatchEvent(new CustomEvent("pi:status-update"));
   };
 
-  const refreshCapabilitiesForAllRuntimes = createAsyncCoalescer(runCapabilityRefreshPass);
+  const refreshCapabilitiesForAllRuntimes = createAsyncCoalescer(
+    runCapabilityRefreshPass,
+  );
 
   const reservedToolNames = new Set([
-    ...createAllTools({ hostKind: spreadsheetHost.kind }).map((tool) => tool.name),
+    ...createAllTools({ hostKind: spreadsheetHost.kind }).map(
+      (tool) => tool.name,
+    ),
     ...getIntegrationToolNames(),
   ]);
   const connectionManager = new ConnectionManager({ settings });
@@ -822,10 +920,12 @@ export async function initTaskpane(opts: {
 
   connectionManager.subscribe(() => {
     void refreshCapabilitiesForAllRuntimes();
-    void refreshRuntimeModels()
-      .catch((error: DynamicValue) => {
-        console.warn("[models] Failed to refresh after connection change:", error);
-      });
+    void refreshRuntimeModels().catch((error: DynamicValue) => {
+      console.warn(
+        "[models] Failed to refresh after connection change:",
+        error,
+      );
+    });
   });
 
   const refreshWorkbookState = async () => {
@@ -880,8 +980,54 @@ export async function initTaskpane(opts: {
       localServicesSnapshot = result;
       void refreshCapabilitiesForAllRuntimes();
     },
-    (error: DynamicValue) => { console.warn("[pi] Local services probe failed:", error); },
+    (error: DynamicValue) => {
+      console.warn("[pi] Local services probe failed:", error);
+    },
   );
+
+  // ── Local Pi bridge (opt-in via pi-bridge.enabled) ──────────────
+  void (async () => {
+    try {
+      const bridgeEnabled = await settings.get<boolean>("pi-bridge.enabled");
+      if (!bridgeEnabled) return;
+
+      const bridgeClient = new PaneBridgeClient(
+        {
+          host: "excel" as OfficeHostApp,
+          registry: new Map(),
+        },
+        {
+          onStatusChange: (connected) => {
+            console.log(
+              connected
+                ? "[pi-bridge] Connected to local Pi process"
+                : "[pi-bridge] Disconnected from local Pi process",
+            );
+            document.dispatchEvent(
+              new CustomEvent("pi:pi-bridge-state-changed", {
+                detail: { connected },
+              }),
+            );
+          },
+          onServerError: (error) => {
+            console.warn(
+              "[pi-bridge] Server error:",
+              error.code,
+              error.message,
+            );
+          },
+        },
+      );
+
+      await bridgeClient.connect();
+      console.log("[pi-bridge] Bridge handshake complete");
+    } catch (error) {
+      console.warn(
+        "[pi-bridge] Could not connect (is the Pi process running?):",
+        error instanceof Error ? error.message : error,
+      );
+    }
+  })();
 
   const normalizeApprovalMessage = (title: string, message: string): string => {
     const lines = message.split("\n");
@@ -892,7 +1038,10 @@ export async function initTaskpane(opts: {
     }
 
     let startIndex = 1;
-    while (startIndex < lines.length && lines[startIndex]?.trim().length === 0) {
+    while (
+      startIndex < lines.length &&
+      lines[startIndex]?.trim().length === 0
+    ) {
       startIndex += 1;
     }
 
@@ -909,7 +1058,9 @@ export async function initTaskpane(opts: {
       overlayId: TOOL_APPROVAL_OVERLAY_ID,
       title: args.title,
       message: normalizeApprovalMessage(args.title, args.message),
-      ...(args.confirmLabel !== undefined ? { confirmLabel: args.confirmLabel } : {}),
+      ...(args.confirmLabel !== undefined
+        ? { confirmLabel: args.confirmLabel }
+        : {}),
       cancelLabel: t("confirm.cancel"),
       restoreFocusOnClose: true,
     });
@@ -925,7 +1076,9 @@ export async function initTaskpane(opts: {
 
     let runtimeAgent: Agent | null = null;
 
-    const buildRuntimeCapabilities = async (sessionId: string): Promise<{
+    const buildRuntimeCapabilities = async (
+      sessionId: string,
+    ): Promise<{
       tools: ReturnType<typeof withWorkbookCoordinator>;
       systemPrompt: string;
       extensionToolRevision: number;
@@ -950,9 +1103,10 @@ export async function initTaskpane(opts: {
         requestOfficeJsExecuteApproval: (request) => {
           const apiName = request.apiName ?? "Office.js";
           return requestRuntimeToolApproval({
-            title: apiName === "WPS JSAPI"
-              ? t("init.confirm.wpsJsTitle")
-              : t("init.confirm.officeJsTitle"),
+            title:
+              apiName === "WPS JSAPI"
+                ? t("init.confirm.wpsJsTitle")
+                : t("init.confirm.officeJsTitle"),
             message: buildOfficeJsExecuteApprovalMessage(request),
             confirmLabel: t("init.confirm.allowOnce"),
           });
@@ -1014,7 +1168,8 @@ export async function initTaskpane(opts: {
 
       const tools = applyToolOutputTruncation(preflightTools, {
         // Scale caps with the active model's context window (#566).
-        limits: () => effectiveToolOutputLimits(runtimeAgent?.state.model.contextWindow),
+        limits: () =>
+          effectiveToolOutputLimits(runtimeAgent?.state.model.contextWindow),
         saveTruncatedOutput: saveTruncatedToolOutputToWorkspace,
       });
 
@@ -1032,7 +1187,8 @@ export async function initTaskpane(opts: {
     };
 
     const initialModel = getActiveRuntime()?.agent.state.model ?? defaultModel;
-    const initialCapabilities = await buildRuntimeCapabilities(runtimeSessionId);
+    const initialCapabilities =
+      await buildRuntimeCapabilities(runtimeSessionId);
 
     const agent = new Agent({
       initialState: {
@@ -1051,8 +1207,11 @@ export async function initTaskpane(opts: {
 
     runtimeAgent = agent;
     let currentRuntimeSystemPrompt = initialCapabilities.systemPrompt;
-    let currentRuntimeToolsFingerprint = createRuntimeToolFingerprint(initialCapabilities.tools);
-    let currentExtensionToolRevision = initialCapabilities.extensionToolRevision;
+    let currentRuntimeToolsFingerprint = createRuntimeToolFingerprint(
+      initialCapabilities.tools,
+    );
+    let currentExtensionToolRevision =
+      initialCapabilities.extensionToolRevision;
 
     const refreshRuntimeCapabilities = async () => {
       const nextSessionId = runtimeAgent?.sessionId ?? runtimeSessionId;
@@ -1139,9 +1298,14 @@ export async function initTaskpane(opts: {
     });
 
     const unsubscribeErrorTracking = agent.subscribe((ev) => {
-      const isActiveRuntime = runtimeManager.getActiveRuntime()?.runtimeId === runtimeId;
+      const isActiveRuntime =
+        runtimeManager.getActiveRuntime()?.runtimeId === runtimeId;
 
-      if (ev.type === "message_start" && ev.message.role === "user" && isActiveRuntime) {
+      if (
+        ev.type === "message_start" &&
+        ev.message.role === "user" &&
+        isActiveRuntime
+      ) {
         clearErrorBanner(errorRoot);
       }
 
@@ -1159,7 +1323,10 @@ export async function initTaskpane(opts: {
 
       const errorMessage = agent.state.errorMessage;
       if (errorMessage) {
-        const isAbort = wasUserAbort || /abort/i.test(errorMessage) || /cancel/i.test(errorMessage);
+        const isAbort =
+          wasUserAbort ||
+          /abort/i.test(errorMessage) ||
+          /cancel/i.test(errorMessage);
         if (!isAbort) {
           const err = errorMessage;
           if (findTrailingContextOverflowError(agent.state)) {
@@ -1169,10 +1336,14 @@ export async function initTaskpane(opts: {
                 ? "Context window exceeded — Pi will try compacting older history and retrying once. If this error persists, run /compact, scope your request to a smaller range, or use a larger-context model."
                 : "Context window exceeded. Run /compact to free up context, scope your request to a smaller range, or use a larger-context model.",
             );
+          } else if (isProxyTargetBlockedMessage(err)) {
+            showErrorBanner(errorRoot, t("init.proxyHostBlocked"));
+          } else if (isProxyUnreachableMessage(err)) {
+            showErrorBanner(errorRoot, t("init.proxyUnreachable"));
           } else if (isLikelyCorsErrorMessage(err)) {
             showErrorBanner(
               errorRoot,
-              `Network error (likely CORS). If you're using OAuth, enable /settings → Proxy with ${DEFAULT_PROXY_URL} and retry. Guide: ${PROXY_HELPER_DOCS_URL}`,
+              t("init.corsError", { url: PROXY_HELPER_DOCS_URL }),
             );
           } else {
             showErrorBanner(errorRoot, t("init.llmError", { error: err }));
@@ -1219,47 +1390,48 @@ export async function initTaskpane(opts: {
     }
   };
 
-  const restorePersistedTabLayout = async (): Promise<SessionRuntime | null> => {
-    const workbookId = await resolveWorkbookId();
-    const savedLayout = await loadWorkbookTabLayout(settings, workbookId);
-    if (!savedLayout) return null;
+  const restorePersistedTabLayout =
+    async (): Promise<SessionRuntime | null> => {
+      const workbookId = await resolveWorkbookId();
+      const savedLayout = await loadWorkbookTabLayout(settings, workbookId);
+      if (!savedLayout) return null;
 
-    const runtimesBySessionId = new Map<string, SessionRuntime>();
-    let firstRuntime: SessionRuntime | null = null;
+      const runtimesBySessionId = new Map<string, SessionRuntime>();
+      let firstRuntime: SessionRuntime | null = null;
 
-    for (const sessionId of savedLayout.sessionIds) {
-      const runtime = await createRuntime({
-        activate: false,
-        autoRestoreLatest: false,
-      });
+      for (const sessionId of savedLayout.sessionIds) {
+        const runtime = await createRuntime({
+          activate: false,
+          autoRestoreLatest: false,
+        });
 
-      const sessionData = await sessions.loadSession(sessionId);
-      if (sessionData) {
-        await runtime.persistence.applyLoadedSession(sessionData);
-      } else {
-        // Keep blank tabs durable across reloads.
-        await runtime.persistence.saveSession({ force: true });
+        const sessionData = await sessions.loadSession(sessionId);
+        if (sessionData) {
+          await runtime.persistence.applyLoadedSession(sessionData);
+        } else {
+          // Keep blank tabs durable across reloads.
+          await runtime.persistence.saveSession({ force: true });
+        }
+
+        if (!firstRuntime) {
+          firstRuntime = runtime;
+        }
+
+        if (!runtimesBySessionId.has(sessionId)) {
+          runtimesBySessionId.set(sessionId, runtime);
+        }
       }
 
-      if (!firstRuntime) {
-        firstRuntime = runtime;
-      }
+      if (!firstRuntime) return null;
 
-      if (!runtimesBySessionId.has(sessionId)) {
-        runtimesBySessionId.set(sessionId, runtime);
-      }
-    }
+      const preferredActiveRuntime = savedLayout.activeSessionId
+        ? (runtimesBySessionId.get(savedLayout.activeSessionId) ?? null)
+        : null;
 
-    if (!firstRuntime) return null;
-
-    const preferredActiveRuntime = savedLayout.activeSessionId
-      ? runtimesBySessionId.get(savedLayout.activeSessionId) ?? null
-      : null;
-
-    const nextActiveRuntime = preferredActiveRuntime ?? firstRuntime;
-    runtimeManager.switchRuntime(nextActiveRuntime.runtimeId);
-    return nextActiveRuntime;
-  };
+      const nextActiveRuntime = preferredActiveRuntime ?? firstRuntime;
+      runtimeManager.switchRuntime(nextActiveRuntime.runtimeId);
+      return nextActiveRuntime;
+    };
 
   const syncRuntimeAfterSessionLoad = (runtime: SessionRuntime): void => {
     runtime.queueDisplay.clear();
@@ -1270,14 +1442,18 @@ export async function initTaskpane(opts: {
     document.dispatchEvent(new CustomEvent("pi:status-update"));
   };
 
-  const replaceActiveRuntimeSession = async (sessionData: SessionData): Promise<void> => {
+  const replaceActiveRuntimeSession = async (
+    sessionData: SessionData,
+  ): Promise<void> => {
     const activeRuntime = getActiveRuntime();
     if (!activeRuntime) {
       showToast(t("init.noActiveSession"));
       return;
     }
 
-    const busy = activeRuntime.agent.state.isStreaming || activeRuntime.actionQueue.isBusy();
+    const busy =
+      activeRuntime.agent.state.isStreaming ||
+      activeRuntime.actionQueue.isBusy();
     if (busy) {
       showToast(t("init.currentTabBusy"));
       return;
@@ -1287,7 +1463,9 @@ export async function initTaskpane(opts: {
     syncRuntimeAfterSessionLoad(activeRuntime);
   };
 
-  const openSessionInNewTab = async (sessionData: SessionData): Promise<SessionRuntime> => {
+  const openSessionInNewTab = async (
+    sessionData: SessionData,
+  ): Promise<SessionRuntime> => {
     const runtime = await createRuntime({
       activate: true,
       autoRestoreLatest: false,
@@ -1298,7 +1476,9 @@ export async function initTaskpane(opts: {
     return runtime;
   };
 
-  const openResumePicker = async (defaultTarget: ResumeDialogTarget = "new_tab"): Promise<void> => {
+  const openResumePicker = async (
+    defaultTarget: ResumeDialogTarget = "new_tab",
+  ): Promise<void> => {
     await showResumeDialog({
       defaultTarget,
       onOpenInNewTab: async (sessionData: SessionData) => {
@@ -1320,7 +1500,9 @@ export async function initTaskpane(opts: {
 
   type ReopenRecentlyClosedResult = "reopened" | "missing" | "failed";
 
-  const reopenRecentlyClosedItem = async (item: RecentlyClosedItem): Promise<ReopenRecentlyClosedResult> => {
+  const reopenRecentlyClosedItem = async (
+    item: RecentlyClosedItem,
+  ): Promise<ReopenRecentlyClosedResult> => {
     try {
       const sessionData = await sessions.loadSession(item.sessionId);
       if (!sessionData) {
@@ -1337,7 +1519,9 @@ export async function initTaskpane(opts: {
     }
   };
 
-  const reopenRecentlyClosedById = async (recentlyClosedId: string): Promise<boolean> => {
+  const reopenRecentlyClosedById = async (
+    recentlyClosedId: string,
+  ): Promise<boolean> => {
     const item = recentlyClosed.removeById(recentlyClosedId);
     if (!item) {
       showToast(t("init.sessionNotInRecentlyClosed"));
@@ -1387,13 +1571,18 @@ export async function initTaskpane(opts: {
     return toManualFullBackupSummary(backup);
   };
 
-  const listManualFullBackups = async (limit = 5): Promise<Array<{
-    id: string;
-    createdAt: number;
-    sizeBytes: number;
-  }>> => {
+  const listManualFullBackups = async (
+    limit = 5,
+  ): Promise<
+    Array<{
+      id: string;
+      createdAt: number;
+      sizeBytes: number;
+    }>
+  > => {
     const safeLimit = Math.max(1, Math.min(20, Math.floor(limit)));
-    const backups = await manualFullBackupStore.listForCurrentWorkbook(safeLimit);
+    const backups =
+      await manualFullBackupStore.listForCurrentWorkbook(safeLimit);
     return backups.map((backup) => toManualFullBackupSummary(backup));
   };
 
@@ -1448,8 +1637,9 @@ export async function initTaskpane(opts: {
 
     await runtime.persistence.saveSession({ force: true });
 
-    const closeTitle = runtimeManager.snapshotTabs().find((tab) => tab.runtimeId === runtimeId)?.title
-      ?? formatSessionTitle(runtime.persistence.getSessionTitle());
+    const closeTitle =
+      runtimeManager.snapshotTabs().find((tab) => tab.runtimeId === runtimeId)
+        ?.title ?? formatSessionTitle(runtime.persistence.getSessionTitle());
 
     const closedItem: RecentlyClosedItem = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
@@ -1489,8 +1679,9 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    const currentTitle = runtimeManager.snapshotTabs().find((tab) => tab.runtimeId === runtimeId)?.title
-      ?? formatSessionTitle(runtime.persistence.getSessionTitle());
+    const currentTitle =
+      runtimeManager.snapshotTabs().find((tab) => tab.runtimeId === runtimeId)
+        ?.title ?? formatSessionTitle(runtime.persistence.getSessionTitle());
     const defaultTitle = runtime.persistence.hasExplicitTitle()
       ? runtime.persistence.getSessionTitle().trim()
       : currentTitle;
@@ -1513,9 +1704,14 @@ export async function initTaskpane(opts: {
     showToast(t("init.renamedTo", { title: nextTitle }));
   };
 
-  const resolveRuntimeTabTitle = (runtimeId: string, runtime: SessionRuntime): string => {
-    return runtimeManager.snapshotTabs().find((tab) => tab.runtimeId === runtimeId)?.title
-      ?? formatSessionTitle(runtime.persistence.getSessionTitle());
+  const resolveRuntimeTabTitle = (
+    runtimeId: string,
+    runtime: SessionRuntime,
+  ): string => {
+    return (
+      runtimeManager.snapshotTabs().find((tab) => tab.runtimeId === runtimeId)
+        ?.title ?? formatSessionTitle(runtime.persistence.getSessionTitle())
+    );
   };
 
   type RuntimeModel = Agent["state"]["model"];
@@ -1530,9 +1726,12 @@ export async function initTaskpane(opts: {
       autoRestoreLatest: false,
     });
 
-    clonedRuntime.agent.state.messages = structuredClone(args.sourceRuntime.agent.state.messages);
+    clonedRuntime.agent.state.messages = structuredClone(
+      args.sourceRuntime.agent.state.messages,
+    );
     clonedRuntime.agent.state.model = args.targetModel;
-    clonedRuntime.agent.state.thinkingLevel = args.sourceRuntime.agent.state.thinkingLevel;
+    clonedRuntime.agent.state.thinkingLevel =
+      args.sourceRuntime.agent.state.thinkingLevel;
 
     await clonedRuntime.persistence.renameSession(args.targetTitle);
     clonedRuntime.queueDisplay.clear();
@@ -1553,7 +1752,10 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    if (sourceRuntime.agent.state.isStreaming || sourceRuntime.actionQueue.isBusy()) {
+    if (
+      sourceRuntime.agent.state.isStreaming ||
+      sourceRuntime.actionQueue.isBusy()
+    ) {
       showToast(t("init.waitBeforeDuplicating"));
       return;
     }
@@ -1571,7 +1773,8 @@ export async function initTaskpane(opts: {
   };
 
   const closeOtherRuntimes = async (runtimeId: string): Promise<void> => {
-    const tabsToClose = runtimeManager.snapshotTabs()
+    const tabsToClose = runtimeManager
+      .snapshotTabs()
       .filter((tab) => tab.runtimeId !== runtimeId)
       .map((tab) => tab.runtimeId);
 
@@ -1582,7 +1785,9 @@ export async function initTaskpane(opts: {
 
     let closedCount = 0;
     for (const tabId of tabsToClose) {
-      const closed = await closeRuntimeWithRecovery(tabId, { showUndoToast: false });
+      const closed = await closeRuntimeWithRecovery(tabId, {
+        showUndoToast: false,
+      });
       if (closed) {
         closedCount += 1;
       }
@@ -1609,7 +1814,9 @@ export async function initTaskpane(opts: {
   workbookCoordinator.subscribe((event) => {
     if (event.operationType !== "write") return;
 
-    const runtime = runtimeManager.findRuntimeBySessionId(event.context.sessionId);
+    const runtime = runtimeManager.findRuntimeBySessionId(
+      event.context.sessionId,
+    );
     if (!runtime) return;
 
     if (event.type === "queued") {
@@ -1644,7 +1851,8 @@ export async function initTaskpane(opts: {
       await refreshWorkbookState();
     },
     extensionsHub: {
-      getActiveSessionId: () => getActiveRuntime()?.persistence.getSessionId() ?? null,
+      getActiveSessionId: () =>
+        getActiveRuntime()?.persistence.getSessionId() ?? null,
       resolveWorkbookContext: async () => {
         const workbookContext = await resolveWorkbookContext();
         return {
@@ -1658,8 +1866,11 @@ export async function initTaskpane(opts: {
     },
     backups: {
       loadCheckpoints: async () => {
-        const checkpoints = await workbookRecoveryLog.listForCurrentWorkbook(40);
-        return checkpoints.map((checkpoint) => toRecoveryCheckpointSummary(checkpoint));
+        const checkpoints =
+          await workbookRecoveryLog.listForCurrentWorkbook(40);
+        return checkpoints.map((checkpoint) =>
+          toRecoveryCheckpointSummary(checkpoint),
+        );
       },
       onRestore: async (snapshotId: string) => {
         await restoreCheckpointById(snapshotId);
@@ -1683,7 +1894,10 @@ export async function initTaskpane(opts: {
     },
   });
 
-  const applyModelSelection = async (runtimeId: string, nextModel: RuntimeModel): Promise<void> => {
+  const applyModelSelection = async (
+    runtimeId: string,
+    nextModel: RuntimeModel,
+  ): Promise<void> => {
     const runtime = runtimeManager.getRuntime(runtimeId);
     if (!runtime) {
       showToast(t("init.sessionNotFound"));
@@ -1691,8 +1905,9 @@ export async function initTaskpane(opts: {
     }
 
     const currentModel = runtime.agent.state.model;
-    const sameIdentity = currentModel.provider === nextModel.provider
-      && currentModel.id === nextModel.id;
+    const sameIdentity =
+      currentModel.provider === nextModel.provider &&
+      currentModel.id === nextModel.id;
     if (sameIdentity && areRuntimeModelsEquivalent(currentModel, nextModel)) {
       return;
     }
@@ -1747,7 +1962,10 @@ export async function initTaskpane(opts: {
       try {
         await refreshConfiguredProviders();
       } catch (error) {
-        console.warn("[auth] Failed to refresh providers before opening model selector:", error);
+        console.warn(
+          "[auth] Failed to refresh providers before opening model selector:",
+          error,
+        );
       }
 
       closeStatusPopover();
@@ -1790,7 +2008,8 @@ export async function initTaskpane(opts: {
       try {
         await revertLatestCheckpoint();
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Unknown error";
+        const message =
+          error instanceof Error ? error.message : t("init.unknownError");
         showToast(t("init.revertFailed", { message }));
       }
     },
@@ -1832,7 +2051,9 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    const busy = activeRuntime.agent.state.isStreaming || activeRuntime.actionQueue.isBusy();
+    const busy =
+      activeRuntime.agent.state.isStreaming ||
+      activeRuntime.actionQueue.isBusy();
     const result = executeSlashCommand({
       name,
       args,
@@ -1915,9 +2136,10 @@ export async function initTaskpane(opts: {
   sidebar.onFilesDrop = (files: File[]) => {
     const workspace = getFilesWorkspace();
 
-    void workspace.importFiles(files, {
-      audit: { actor: "user", source: "input-drop" },
-    })
+    void workspace
+      .importFiles(files, {
+        audit: { actor: "user", source: "input-drop" },
+      })
       .then((count) => {
         if (count <= 0) {
           showToast(t("init.noFilesImported"));
@@ -1928,7 +2150,12 @@ export async function initTaskpane(opts: {
         showToast(t("init.importedIntoFiles", { label: importedLabel }));
       })
       .catch((error: DynamicValue) => {
-        showToast(t("init.importFailed", { error: error instanceof Error ? error.message : t("init.unknownError") }));
+        showToast(
+          t("init.importFailed", {
+            error:
+              error instanceof Error ? error.message : t("init.unknownError"),
+          }),
+        );
       });
   };
   sidebar.onOpenResumePicker = () => {
@@ -1940,7 +2167,6 @@ export async function initTaskpane(opts: {
   sidebar.onOpenShortcuts = () => {
     void openSettings("shortcuts");
   };
-
 
   // Bootstrap from persisted tab layout; fallback to legacy single-runtime restore.
   const restoredRuntime = await restorePersistedTabLayout();
@@ -1962,7 +2188,10 @@ export async function initTaskpane(opts: {
     if (disclosureEl) {
       const messagesContainer = sidebar.querySelector(".pi-messages");
       if (messagesContainer) {
-        messagesContainer.parentElement?.insertBefore(disclosureEl, messagesContainer);
+        messagesContainer.parentElement?.insertBefore(
+          disclosureEl,
+          messagesContainer,
+        );
       }
     }
   }
@@ -1981,7 +2210,12 @@ export async function initTaskpane(opts: {
         const detail: DynamicValue = event.detail;
         if (!isTaskpaneInitPayloadShape(detail)) return;
         const state = detail.state;
-        if (state === "detected" || state === "not-detected" || state === "unknown") {
+        if (
+          state === "detected" ||
+          state === "not-detected" ||
+          state === "unknown" ||
+          state === "disabled"
+        ) {
           proxyBanner.update(state);
         }
       });
@@ -1999,9 +2233,16 @@ export async function initTaskpane(opts: {
   });
 
   try {
-    await awaitWithTimeout("Extension initialization", 5000, extensionInitialization);
+    await awaitWithTimeout(
+      "Extension initialization",
+      5000,
+      extensionInitialization,
+    );
   } catch (error) {
-    console.warn("[pi] Extension initialization did not complete during startup:", error);
+    console.warn(
+      "[pi] Extension initialization did not complete during startup:",
+      error,
+    );
   }
 
   // ── Keyboard shortcuts ──
@@ -2077,7 +2318,9 @@ export async function initTaskpane(opts: {
   requestAnimationFrame(wireTextarea);
 
   const runSlashCommand = (name: string, args = ""): void => {
-    document.dispatchEvent(new CustomEvent("pi:command-run", { detail: { name, args } }));
+    document.dispatchEvent(
+      new CustomEvent("pi:command-run", { detail: { name, args } }),
+    );
   };
 
   const openThinkingPopoverFrom = (target: Element): void => {
@@ -2090,7 +2333,9 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    const description = trigger.getAttribute("data-tooltip") ?? "Choose how deeply Pi reasons before responding.";
+    const description =
+      trigger.getAttribute("data-tooltip") ??
+      "Choose how deeply Pi reasons before responding.";
 
     toggleThinkingPopover({
       anchor: trigger,
@@ -2109,13 +2354,17 @@ export async function initTaskpane(opts: {
     const trigger = target.closest(".pi-status-ctx--trigger");
     if (!trigger) return;
 
-    const description = trigger.getAttribute(STATUS_CONTEXT_DESC_ATTR)
-      ?? getStatusContextPopoverFallbackDescription();
+    const description =
+      trigger.getAttribute(STATUS_CONTEXT_DESC_ATTR) ??
+      getStatusContextPopoverFallbackDescription();
 
-    const tokenDetail = trigger.getAttribute(STATUS_CONTEXT_TOKENS_ATTR) ?? undefined;
+    const tokenDetail =
+      trigger.getAttribute(STATUS_CONTEXT_TOKENS_ATTR) ?? undefined;
 
     const warnText = trigger.getAttribute(STATUS_CONTEXT_WARNING_ATTR) ?? "";
-    const warnSeverity = trigger.getAttribute(STATUS_CONTEXT_WARNING_SEVERITY_ATTR);
+    const warnSeverity = trigger.getAttribute(
+      STATUS_CONTEXT_WARNING_SEVERITY_ATTR,
+    );
     let warning: { text: string; severity: "yellow" | "red" } | undefined;
     if (warnText.length > 0) {
       warning = {
@@ -2154,7 +2403,11 @@ export async function initTaskpane(opts: {
     },
   });
   if (backgroundVerificationBridge) {
-    window.addEventListener("pagehide", () => backgroundVerificationBridge.stop(), { once: true });
+    window.addEventListener(
+      "pagehide",
+      () => backgroundVerificationBridge.stop(),
+      { once: true },
+    );
   }
 
   // ── Status bar click handlers ──

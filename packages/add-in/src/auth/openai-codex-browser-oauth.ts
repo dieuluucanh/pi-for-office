@@ -21,10 +21,12 @@ const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 const AUTHORIZE_URL = "https://auth.openai.com/oauth/authorize";
 const TOKEN_URL = "https://auth.openai.com/oauth/token";
 const REDIRECT_URI = "http://localhost:1455/auth/callback";
-const SCOPE = "openid profile email offline_access api.connectors.read api.connectors.invoke";
+const SCOPE =
+  "openid profile email offline_access api.connectors.read api.connectors.invoke";
 const ORIGINATOR = "codex_cli_rs";
 const CREDENTIAL_VERSION = "codex-cli-rs-connector-scopes-2026-04";
-const STALE_CREDENTIAL_ERROR = "OpenAI login needs to be refreshed for current Codex scopes";
+const STALE_CREDENTIAL_ERROR =
+  "OpenAI login needs to be refreshed for current Codex scopes";
 const JWT_CLAIM_PATH = "https://api.openai.com/auth";
 
 type ParsedAuthorizationInput = { code?: string; state?: string };
@@ -41,7 +43,9 @@ type VersionedOpenAICodexCredentials = OAuthCredentials & {
   scopes?: string;
 };
 
-function isOpenaiCodexBrowserOauthPayloadShape(value: DynamicValue): value is DynamicObject {
+function isOpenaiCodexBrowserOauthPayloadShape(
+  value: DynamicValue,
+): value is DynamicObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -94,8 +98,13 @@ function parseAuthorizationInput(input: string): ParsedAuthorizationInput {
   }
 
   if (value.includes("code=")) {
-    const params = new URLSearchParams(value.startsWith("?") ? value.slice(1) : value);
-    return createParsedAuthorizationInput(params.get("code"), params.get("state"));
+    const params = new URLSearchParams(
+      value.startsWith("?") ? value.slice(1) : value,
+    );
+    return createParsedAuthorizationInput(
+      params.get("code"),
+      params.get("state"),
+    );
   }
 
   return { code: value };
@@ -130,7 +139,10 @@ function parseTokenPayload(payload: DynamicValue): TokenPayload | null {
   return tokenPayload;
 }
 
-async function exchangeAuthorizationCode(code: string, verifier: string): Promise<TokenPayload> {
+async function exchangeAuthorizationCode(
+  code: string,
+  verifier: string,
+): Promise<TokenPayload> {
   const response = await fetch(TOKEN_URL, {
     method: "POST",
     headers: {
@@ -147,7 +159,9 @@ async function exchangeAuthorizationCode(code: string, verifier: string): Promis
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => "");
-    throw new Error(`OpenAI token exchange failed (${response.status}): ${errorText}`);
+    throw new Error(
+      `OpenAI token exchange failed (${response.status}): ${errorText}`,
+    );
   }
 
   const payload = parseTokenPayload(await response.json());
@@ -173,7 +187,9 @@ async function refreshAccessToken(refreshToken: string): Promise<TokenPayload> {
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => "");
-    throw new Error(`OpenAI token refresh failed (${response.status}): ${errorText}`);
+    throw new Error(
+      `OpenAI token refresh failed (${response.status}): ${errorText}`,
+    );
   }
 
   const payload = parseTokenPayload(await response.json());
@@ -186,7 +202,8 @@ async function refreshAccessToken(refreshToken: string): Promise<TokenPayload> {
 
 function decodeBase64Url(encoded: string): string {
   const normalized = encoded.replace(/-/g, "+").replace(/_/g, "/");
-  const paddingLength = normalized.length % 4 === 0 ? 0 : 4 - (normalized.length % 4);
+  const paddingLength =
+    normalized.length % 4 === 0 ? 0 : 4 - (normalized.length % 4);
   const padded = normalized + "=".repeat(paddingLength);
   return atob(padded);
 }
@@ -231,8 +248,12 @@ function getAccountId(accessToken: string): string | null {
   return accountId;
 }
 
-export function isOpenAICodexCredentialRefreshRequired(error: DynamicValue): boolean {
-  return error instanceof Error && error.message.includes(STALE_CREDENTIAL_ERROR);
+export function isOpenAICodexCredentialRefreshRequired(
+  error: DynamicValue,
+): boolean {
+  return (
+    error instanceof Error && error.message.includes(STALE_CREDENTIAL_ERROR)
+  );
 }
 
 const REQUIRED_SCOPES = SCOPE.split(" ");
@@ -261,7 +282,9 @@ function accessTokenHasRequiredScopes(accessToken: DynamicValue): boolean {
   const claim = payload.scp ?? payload.scope;
   let granted: string[];
   if (Array.isArray(claim)) {
-    granted = claim.filter((scope): scope is string => typeof scope === "string");
+    granted = claim.filter(
+      (scope): scope is string => typeof scope === "string",
+    );
   } else if (typeof claim === "string") {
     granted = claim.split(" ");
   } else {
@@ -271,22 +294,34 @@ function accessTokenHasRequiredScopes(accessToken: DynamicValue): boolean {
   return REQUIRED_SCOPES.every((scope) => granted.includes(scope));
 }
 
-function isCurrentOpenAICodexCredential(credentials: OAuthCredentials): boolean {
+function isCurrentOpenAICodexCredential(
+  credentials: OAuthCredentials,
+): boolean {
   const versioned = credentials as VersionedOpenAICodexCredentials;
-  if (versioned.codexOAuthVersion === CREDENTIAL_VERSION && versioned.scopes === SCOPE) {
+  if (
+    versioned.codexOAuthVersion === CREDENTIAL_VERSION &&
+    versioned.scopes === SCOPE
+  ) {
     return true;
   }
 
   return accessTokenHasRequiredScopes(credentials.access);
 }
 
-function assertCurrentOpenAICodexCredential(credentials: OAuthCredentials): void {
+function assertCurrentOpenAICodexCredential(
+  credentials: OAuthCredentials,
+): void {
   if (!isCurrentOpenAICodexCredential(credentials)) {
-    throw new Error(`${STALE_CREDENTIAL_ERROR}. Please disconnect and log in again.`);
+    throw new Error(
+      `${STALE_CREDENTIAL_ERROR}. Please disconnect and log in again.`,
+    );
   }
 }
 
-function buildOpenAICodexCredentials(tokens: TokenPayload, accountId: string): OAuthCredentials {
+function buildOpenAICodexCredentials(
+  tokens: TokenPayload,
+  accountId: string,
+): OAuthCredentials {
   const credentials: VersionedOpenAICodexCredentials = {
     access: tokens.accessToken,
     refresh: tokens.refreshToken,
@@ -299,11 +334,20 @@ function buildOpenAICodexCredentials(tokens: TokenPayload, accountId: string): O
   return credentials;
 }
 
-async function createAuthorizationFlow(): Promise<{ verifier: string; state: string; url: string }> {
+async function createAuthorizationFlow(): Promise<{
+  verifier: string;
+  state: string;
+  url: string;
+}> {
   const { verifier, challenge } = await generatePKCE(64);
   const state = createState();
 
-  const authUrl = new URL(AUTHORIZE_URL);
+  let authUrl: URL;
+  try {
+    authUrl = new URL(AUTHORIZE_URL);
+  } catch {
+    throw new Error("Invalid OpenAI authorization URL configuration");
+  }
   authUrl.searchParams.set("response_type", "code");
   authUrl.searchParams.set("client_id", CLIENT_ID);
   authUrl.searchParams.set("redirect_uri", REDIRECT_URI);
@@ -331,8 +375,8 @@ export async function loginOpenAICodexInBrowser(
   callbacks.onAuth({
     url: flow.url,
     instructions:
-      "After login, Pi for Excel will try to capture the localhost callback automatically if the local proxy is running. " +
-      "If it does not continue, copy the full callback URL from the browser address bar and paste it back in Pi for Excel.",
+      "After login, Pi for Office will try to capture the localhost callback automatically if the local proxy is running. " +
+      "If it does not continue, copy the full callback URL from the browser address bar and paste it back in Pi for Office.",
   });
 
   if (callbacks.signal?.aborted) {
@@ -359,7 +403,9 @@ export async function loginOpenAICodexInBrowser(
 
   const accountId = getAccountId(tokens.accessToken);
   if (!accountId) {
-    throw new Error("OpenAI login failed: access token is missing ChatGPT account ID");
+    throw new Error(
+      "OpenAI login failed: access token is missing ChatGPT account ID",
+    );
   }
 
   return buildOpenAICodexCredentials(tokens, accountId);
@@ -378,7 +424,9 @@ export async function refreshOpenAICodexBrowserToken(
   const tokens = await refreshAccessToken(refreshToken);
   const accountId = getAccountId(tokens.accessToken);
   if (!accountId) {
-    throw new Error("OpenAI refresh failed: access token is missing ChatGPT account ID");
+    throw new Error(
+      "OpenAI refresh failed: access token is missing ChatGPT account ID",
+    );
   }
 
   return buildOpenAICodexCredentials(tokens, accountId);

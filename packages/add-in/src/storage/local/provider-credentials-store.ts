@@ -12,7 +12,7 @@ export interface ProviderKeysStoreLike {
 }
 
 /**
- * Adapts Pi for Excel's existing IndexedDB API-key store to Pi AI's runtime
+ * Adapts Pi for Office's existing IndexedDB API-key store to Pi AI's runtime
  * credential contract. Browser OAuth flows continue to refresh their grants in
  * the taskpane and publish the effective access token through ProviderKeysStore.
  */
@@ -48,7 +48,9 @@ export class ProviderCredentialsStore implements CredentialStore {
         result = updated ?? current;
 
         if (updated?.type === "oauth") {
-          throw new Error("Browser OAuth credentials must be persisted by the taskpane OAuth store.");
+          throw new Error(
+            "Browser OAuth credentials must be persisted by the taskpane OAuth store.",
+          );
         }
         if (updated?.type === "api_key" && typeof updated.key === "string") {
           await this.providerKeys.set(providerId, updated.key);

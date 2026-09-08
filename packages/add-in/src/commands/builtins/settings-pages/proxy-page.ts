@@ -10,7 +10,10 @@ import {
   PROXY_HELPER_DOCS_URL,
   validateOfficeProxyUrl,
 } from "../../../auth/proxy-validation.js";
-import { getProxyState, type ProxyState } from "../../../taskpane/proxy-status.js";
+import {
+  getProxyState,
+  type ProxyState,
+} from "../../../taskpane/proxy-status.js";
 import { t } from "../../../language/index.js";
 import {
   createCallout,
@@ -60,7 +63,9 @@ function resolveProxyCallout(args: {
     return {
       tone: "warn",
       icon: "⚠",
-      message: t("settings.section.proxy.not_reachable", { url: args.proxyUrl }),
+      message: t("settings.section.proxy.not_reachable", {
+        url: args.proxyUrl,
+      }),
     };
   }
 
@@ -107,7 +112,10 @@ export function createProxyPage(): SettingsShellPage {
       proxyUrlInput.classList.add("pi-settings-proxy-url");
       proxyUrlInput.spellcheck = false;
 
-      const proxyUrlRow = createConfigRow(t("settings.section.proxy.url"), proxyUrlInput);
+      const proxyUrlRow = createConfigRow(
+        t("settings.section.proxy.url"),
+        proxyUrlInput,
+      );
       proxyUrlRow.classList.add("pi-settings-proxy-url-row");
 
       const statusHost = document.createElement("div");
@@ -121,7 +129,11 @@ export function createProxyPage(): SettingsShellPage {
           validationError,
         });
 
-        statusHost.replaceChildren(createCallout(status.tone, status.icon, status.message, { compact: true }));
+        statusHost.replaceChildren(
+          createCallout(status.tone, status.icon, status.message, {
+            compact: true,
+          }),
+        );
       };
 
       const saveProxyEnabled = async (nextEnabled: boolean): Promise<void> => {
@@ -138,7 +150,11 @@ export function createProxyPage(): SettingsShellPage {
           return;
         }
 
-        showToast(enabled ? t("settings.toast.proxy_enabled") : t("settings.toast.proxy_disabled"));
+        showToast(
+          enabled
+            ? t("settings.toast.proxy_enabled")
+            : t("settings.toast.proxy_disabled"),
+        );
       };
 
       const saveProxyUrl = async (): Promise<void> => {
@@ -149,9 +165,14 @@ export function createProxyPage(): SettingsShellPage {
         try {
           normalizedUrl = validateOfficeProxyUrl(candidate);
         } catch (error) {
-          validationError = error instanceof Error ? error.message : t("settings.toast.proxy_url_invalid");
+          validationError =
+            error instanceof Error
+              ? error.message
+              : t("settings.toast.proxy_url_invalid");
           updateStatus();
-          showToast(t("settings.toast.proxy_url_not_saved", { error: validationError }));
+          showToast(
+            t("settings.toast.proxy_url_not_saved", { error: validationError }),
+          );
           return;
         }
 
@@ -215,7 +236,12 @@ export function createProxyPage(): SettingsShellPage {
         if (!isProxyPagePayloadShape(detail)) return;
 
         const state = detail.state;
-        if (state === "detected" || state === "not-detected" || state === "unknown") {
+        if (
+          state === "detected" ||
+          state === "not-detected" ||
+          state === "unknown" ||
+          state === "disabled"
+        ) {
           proxyState = state;
           updateStatus();
         }
@@ -223,7 +249,10 @@ export function createProxyPage(): SettingsShellPage {
 
       document.addEventListener("pi:proxy-state-changed", onProxyStateChanged);
       ctx.addCleanup(() => {
-        document.removeEventListener("pi:proxy-state-changed", onProxyStateChanged);
+        document.removeEventListener(
+          "pi:proxy-state-changed",
+          onProxyStateChanged,
+        );
       });
       ctx.addCleanup(() => {
         flushPendingProxyUrlSave();
@@ -254,13 +283,15 @@ export function createProxyPage(): SettingsShellPage {
 
       void (async () => {
         try {
-          const storedEnabled = await settingsStore.get<boolean>("proxy.enabled");
+          const storedEnabled =
+            await settingsStore.get<boolean>("proxy.enabled");
           const storedUrl = await settingsStore.get<string>("proxy.url");
 
           enabled = storedEnabled === true;
-          proxyUrl = typeof storedUrl === "string" && storedUrl.trim().length > 0
-            ? storedUrl.trim()
-            : DEFAULT_PROXY_URL;
+          proxyUrl =
+            typeof storedUrl === "string" && storedUrl.trim().length > 0
+              ? storedUrl.trim()
+              : DEFAULT_PROXY_URL;
         } catch {
           enabled = false;
           proxyUrl = DEFAULT_PROXY_URL;

@@ -1,6 +1,6 @@
 # Security threat model (v1)
 
-This document summarizes what Pi for Excel stores, where data flows, and key trust boundaries.
+This document summarizes what Pi for Office stores, where data flows, and key trust boundaries.
 
 ## Scope
 
@@ -31,6 +31,7 @@ This document summarizes what Pi for Excel stores, where data flows, and key tru
 ## Network model
 
 Taskpane communicates with:
+
 - Office JS CDN (`appsforoffice.microsoft.com`)
 - configured model/OAuth providers
 - optional local HTTPS proxy (`https://localhost:<port>`)
@@ -48,24 +49,29 @@ Hosted taskpane is protected with CSP in `vercel.json` (scripts/styles/fonts/con
 ## Main threats and current controls
 
 ### 1) XSS/content injection in markdown/UI
+
 - Marked safety patch blocks unsafe link protocols
 - Markdown images are rendered as links (no automatic `<img>` fetch)
 - Dynamic HTML sinks use escaping helpers where needed
 - CSP reduces script/connect exfil paths
 
 ### 2) Token leakage via browser storage/logs
+
 - OAuth credentials are stored in IndexedDB settings (no legacy localStorage fallback)
 - No intentional token logging in auth restore/proxy paths
 - Provider disconnect clears both API key and OAuth credentials
 
 ### 3) Local proxy / bridge abuse (CORS/SSRF/local attack surface)
+
 - Loopback client requirement
 - Allowed-origin CORS allowlist
-- Strict target filtering/allowlists for proxy traffic
+- Strict target filtering/allowlists for proxy traffic (central/org deployments)
+- **Local CLI convenience default:** when started via `npx pi-for-office-proxy` or `node pkg/proxy/cli.mjs`, the proxy defaults to `ALLOW_ALL_TARGET_HOSTS=1` (any HTTPS target permitted) for usability — loopback/private target blocking remains enforced regardless. The raw `scripts/cors-proxy-server.mjs` keeps its strict default for server/central deployments.
 - Optional bearer-token auth on tmux/python bridge POST endpoints
 - Bounded payload sizes + execution timeouts in helper servers
 
 ### 4) Extension code execution risks
+
 - Remote `http(s)` extension URLs are blocked by default (`/experimental on remote-extension-urls` required)
 - Untrusted extension sources (inline code + remote URL) run in sandbox iframe runtime by default
 - Rollback kill switch exists for maintainers (`/experimental on extension-sandbox-rollback`) and should be temporary only

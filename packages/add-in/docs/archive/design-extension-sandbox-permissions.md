@@ -59,7 +59,7 @@ Security gap: same-context execution means extension code can directly access ta
 ### Trust buckets (by source)
 
 | Source | Trust default | Primary risk |
-|---|---|---|
+| --- | --- | --- |
 | Built-in/local shipped modules | higher trust | accidental overreach / bugs |
 | Pasted code (blob) | untrusted | credential/data exfiltration, DOM abuse |
 | Remote URL modules | highest risk | supply-chain changes over time + active exfiltration |
@@ -84,7 +84,7 @@ Add explicit extension permissions and enforce them in host runtime.
 ### Capability set (v1)
 
 | Capability | Purpose |
-|---|---|
+| --- | --- |
 | `commands.register` | Allow slash-command registration |
 | `tools.register` | Allow extension-defined tools |
 | `agent.events.read` | Subscribe to agent lifecycle events |
@@ -96,13 +96,14 @@ Add explicit extension permissions and enforce them in host runtime.
 | `network.remote` | Allow remote URL module loading (still global experimental gate) |
 
 Notes:
+
 - `workbook.*` assumes future bridge-based workbook access for sandboxed extensions.
 - `network.remote` does **not** bypass global remote-url experiment toggle; both gates must pass.
 
 ### Permission presets
 
 | Extension type | Default preset |
-|---|---|
+| --- | --- |
 | built-in local modules | trusted preset (all current MVP capabilities except `network.remote`) |
 | pasted code | UI + commands by default; prompt for tools/workbook |
 | remote URL | disabled by default unless experiment on; require explicit high-risk prompt |
@@ -164,6 +165,7 @@ interface StoredExtensionEntryV2 {
 ```
 
 Migration from `v1`:
+
 - infer `trust` from source kind/specifier
 - assign default preset permissions
 - set runtime mode (`host` for built-ins, `sandbox-iframe` for untrusted sources once enabled)
@@ -191,6 +193,7 @@ Introduce explicit, bridge-safe API surface:
 - optional `api.workbook.request(...)` (capability-gated)
 
 Deprecation path:
+
 - mark raw `api.agent` as trusted-only and eventually remove from untrusted extension runtime.
 
 ---
@@ -204,6 +207,7 @@ Deprecation path:
 5. Re-enabling after permission change triggers reload.
 
 Prompt copy must stay explicit:
+
 - "This extension can read workbook data"
 - "This extension can modify workbook data"
 - "This extension is loaded from a remote URL"

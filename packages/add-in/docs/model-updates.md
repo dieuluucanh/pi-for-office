@@ -5,6 +5,7 @@
 This repo hardcodes a small set of "featured" and "preferred" model patterns for sorting and default selection. Static built-in models come from Pi AI, while custom and extension providers can add cached, dynamically discovered catalogues at runtime.
 
 This doc describes how to update:
+
 - the **Pi dependency versions** we ship (`@earendil-works/pi-ai`, `@earendil-works/pi-agent-core`)
 - the **model ordering/default-selection behavior** in the add-in (`src/models/model-ordering.ts`, `src/models/featured-models.ts`, `src/taskpane/default-model.ts`)
 - the **thinking-level UI** that reflects registry capabilities (`src/models/thinking-levels.ts`, `src/taskpane/thinking-display.ts`)
@@ -19,14 +20,14 @@ This doc describes how to update:
 - **Custom gateways:** baseline models remain in `CustomProvidersStore`; `/models` discovery overlays them without deleting the configured fallback model.
 - **Extension providers:** `api.models.registerProvider()` declarations are runtime-owned and unload with their extension. Unregistering aborts in-flight discovery before deleting its cache so late responses cannot resurrect stale entries.
 
-Do not use Pi coding-agent's Node/file `ModelRuntime` directly in the Office WebView. Pi for Excel uses the same Pi AI provider primitives with browser storage, OAuth and proxy policy. Cross-check the installed Pi package and changelog when the generated registry changes. Never infer aliases or metadata from marketing names.
+Do not use Pi coding-agent's Node/file `ModelRuntime` directly in the Office WebView. Pi for Office uses the same Pi AI provider primitives with browser storage, OAuth and proxy policy. Cross-check the installed Pi package and changelog when the generated registry changes. Never infer aliases or metadata from marketing names.
 
 ### Current GPT-5.6 registry snapshot (`pi-ai` 0.83.0)
 
 Upstream exposes exactly three IDs on both `openai` and `openai-codex`; there is deliberately no bare `gpt-5.6` alias:
 
 | ID | Display name | Standard input / output | Cache read / write | Above 272k input / output | Above 272k cache read / write |
-|---|---|---:|---:|---:|---:|
+| --- | --- | ---: | ---: | ---: | ---: |
 | `gpt-5.6-sol` | GPT-5.6 Sol | $5 / $30 | $0.50 / $6.25 | $10 / $45 | $1 / $12.50 |
 | `gpt-5.6-terra` | GPT-5.6 Terra | $2.50 / $15 | $0.25 / $3.125 | $5 / $22.50 | $0.50 / $6.25 |
 | `gpt-5.6-luna` | GPT-5.6 Luna | $1 / $6 | $0.10 / $1.25 | $2 / $9 | $0.20 / $2.50 |
@@ -107,13 +108,15 @@ npm run test:models
 ```
 
 If an ID doesn’t appear there, **don’t** add it to the add-in yet—either:
+
 - bump `@earendil-works/pi-ai` further, or
 - use an older/fallback ID, or
-- configure a custom gateway baseline model in Pi for Excel.
+- configure a custom gateway baseline model in Pi for Office.
 
 ### 5) Update model ordering + default selection logic (avoid hardcoding exact IDs)
 
 Files:
+
 - `src/models/model-ordering.ts` (provider/family priority + version/recency scoring)
 - `src/models/featured-models.ts` (featured-model ordering used by the model picker)
 - `src/taskpane/default-model.ts` (default-model selection rules)
@@ -159,6 +162,7 @@ We intentionally avoid pinning exact versioned IDs now. Instead we:
 - Populate thinking controls from `getSupportedThinkingLevels()` instead of provider-specific hardcoded lists. This keeps model-level maps authoritative and ensures `xhigh` and `max` remain distinct.
 
 When new models ship, this usually “just works” as long as naming stays consistent. You only need to update these rules if:
+
 - a provider changes their naming scheme, or
 - you want different provider/family preferences.
 
@@ -171,6 +175,7 @@ Reminder: **`openai-codex` is NOT `openai`** (different base URL). See `src/auth
 - `https://localhost:3141/src/taskpane.html`
 
 That means:
+
 - `npm run build` is a *sanity check* (TypeScript + bundling), but it does **not** change what Excel loads.
 - To test changes in Excel, you need a dev server running on **port 3141**.
 

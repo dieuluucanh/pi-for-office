@@ -72,7 +72,7 @@ export function resolveOutboundRequestUrl(args: {
 
 /* ── Proxy-down error detection ─────────────────────────────── */
 
-const PROXY_START_COMMAND = "npx pi-for-excel-proxy";
+const PROXY_START_COMMAND = "npx pi-for-office-proxy";
 
 /**
  * Common transport-level errors emitted when the app cannot connect to the
@@ -107,11 +107,15 @@ export function isLikelyProxyConnectionError(
   if (!proxyBaseUrl) return false;
   const lower = errorMessage.trim().toLowerCase();
 
-  if (PROXY_REACHABLE_FAILURE_PATTERNS.some((pattern) => lower.includes(pattern))) {
+  if (
+    PROXY_REACHABLE_FAILURE_PATTERNS.some((pattern) => lower.includes(pattern))
+  ) {
     return false;
   }
 
-  if (PROXY_DOWN_TRANSPORT_PATTERNS.some((pattern) => lower.includes(pattern))) {
+  if (
+    PROXY_DOWN_TRANSPORT_PATTERNS.some((pattern) => lower.includes(pattern))
+  ) {
     return true;
   }
 
@@ -130,10 +134,10 @@ export function buildProxyDownErrorMessage(
   originalError: string,
 ): string {
   return (
-    `Error: ${toolLabel} failed because the local CORS proxy is not running. `
-    + `The Excel add-in cannot reach external APIs without it.\n\n`
-    + `To fix: run \`${PROXY_START_COMMAND}\` in a terminal and keep that window open.\n\n`
-    + `Do not retry — requests will keep failing until the proxy is started.\n\n`
-    + `Original error: ${originalError}`
+    `Error: ${toolLabel} failed because the local CORS proxy is not running. ` +
+    `The Excel add-in cannot reach external APIs without it.\n\n` +
+    `To fix: run \`${PROXY_START_COMMAND}\` in a terminal and keep that window open.\n\n` +
+    `Do not retry — requests will keep failing until the proxy is started.\n\n` +
+    `Original error: ${originalError}`
   );
 }

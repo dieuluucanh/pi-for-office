@@ -1,5 +1,5 @@
 /**
- * Extension API for Pi for Excel.
+ * Extension API for Pi for Office.
  *
  * Extensions are ES modules that export an `activate(api)` function.
  * They run in the same webview sandbox — no Node.js APIs.
@@ -121,12 +121,17 @@ function normalizeProviderIdentifier(value: string): string {
     throw new Error("Provider id cannot be empty");
   }
   if (!/^[a-z0-9][a-z0-9._-]*$/u.test(normalized)) {
-    throw new Error("Provider id may contain only letters, numbers, dots, underscores and hyphens.");
+    throw new Error(
+      "Provider id may contain only letters, numbers, dots, underscores and hyphens.",
+    );
   }
   return normalized;
 }
 
-function qualifyOwnedConnectionId(ownerId: string, connectionId: string): string {
+function qualifyOwnedConnectionId(
+  ownerId: string,
+  connectionId: string,
+): string {
   const normalizedConnectionId = normalizeConnectionIdentifier(connectionId);
   const ownerPrefix = `${ownerId.toLowerCase()}.`;
 
@@ -196,13 +201,18 @@ function normalizeConnectionDefinitionForOwner(
   };
 }
 
-function assertValidToolDefinition(name: string, tool: ExtensionToolDefinition): void {
-  const execute: DynamicValue = Reflect.get(tool, "execute");
+function assertValidToolDefinition(
+  name: string,
+  tool: ExtensionToolDefinition,
+): void {
+  const execute: DynamicValue = tool.execute;
   if (typeof execute === "function") {
     return;
   }
 
-  const handler: DynamicValue = Reflect.get(tool, "handler");
+  // Legacy `handler` field was removed from the public type but is still
+  // accepted at runtime so old extensions get a clear deprecation error.
+  const handler: DynamicValue = (tool as { handler?: DynamicValue }).handler;
   if (typeof handler === "function") {
     throw new Error(
       `Extension tool "${name}" is invalid: use execute(params, signal?, onUpdate?) instead of handler.`,
@@ -239,12 +249,15 @@ function defaultToast(message: string): void {
   setTimeout(() => toastEl.classList.remove("visible"), 2000);
 }
 
-function getDefaultCapabilityErrorMessage(capability: ExtensionCapability): string {
+function getDefaultCapabilityErrorMessage(
+  capability: ExtensionCapability,
+): string {
   return `Extension is not allowed to use capability "${capability}".`;
 }
 
 const LEGACY_WIDGET_ID = "__legacy__";
-const WIDGET_V2_DISABLED_ERROR = "Widget API v2 is disabled. Enable /experimental on extension-widget-v2.";
+const WIDGET_V2_DISABLED_ERROR =
+  "Widget API v2 is disabled. Enable /experimental on extension-widget-v2.";
 
 function getWidgetOwnerId(options: CreateExtensionAPIOptions): string {
   if (typeof options.extensionOwnerId !== "string") {
@@ -255,7 +268,9 @@ function getWidgetOwnerId(options: CreateExtensionAPIOptions): string {
   return normalized.length > 0 ? normalized : "extension.unknown";
 }
 
-function resolveWidgetApiV2Enabled(options: CreateExtensionAPIOptions): boolean {
+function resolveWidgetApiV2Enabled(
+  options: CreateExtensionAPIOptions,
+): boolean {
   if (typeof options.widgetApiV2Enabled === "boolean") {
     return options.widgetApiV2Enabled;
   }
@@ -306,7 +321,9 @@ function normalizeWidgetId(id: string): string {
 }
 
 /** Create the extension API for a given host context. */
-export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExtensionAPI {
+export function createExtensionAPI(
+  options: CreateExtensionAPIOptions,
+): ExcelExtensionAPI {
   const registerCommand = options.registerCommand ?? defaultRegisterCommand;
   const registerTool = options.registerTool;
   const unregisterTool = options.unregisterTool;
@@ -323,8 +340,10 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
   const registerModelProvider = options.registerModelProvider;
   const unregisterModelProvider = options.unregisterModelProvider;
   const refreshModelProviders = options.refreshModelProviders;
-  const subscribeAgentEvents = options.subscribeAgentEvents
-    ?? ((handler: (ev: AgentEvent) => void) => options.getAgent().subscribe(handler));
+  const subscribeAgentEvents =
+    options.subscribeAgentEvents ??
+    ((handler: (ev: AgentEvent) => void) =>
+      options.getAgent().subscribe(handler));
   const llmComplete = options.llmComplete;
   const httpFetch = options.httpFetch;
   const storageGet = options.storageGet;
@@ -342,7 +361,8 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
   const downloadFile = options.downloadFile;
   const toast = options.toast ?? defaultToast;
   const isCapabilityEnabled = options.isCapabilityEnabled;
-  const formatCapabilityError = options.formatCapabilityError ?? getDefaultCapabilityErrorMessage;
+  const formatCapabilityError =
+    options.formatCapabilityError ?? getDefaultCapabilityErrorMessage;
   const widgetOwnerId = getWidgetOwnerId(options);
   const connectionOwnerId = widgetOwnerId;
   const widgetApiV2Enabled = resolveWidgetApiV2Enabled(options);
@@ -390,12 +410,14 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
       };
 
       const requiresConnection = normalizeToolConnectionRequirements(
-        Reflect.get(tool, "requiresConnection"),
+        tool.requiresConnection,
         connectionOwnerId,
       );
 
       if (requiresConnection && requiresConnection.length > 0) {
-        Reflect.set(wrappedTool, "requiresConnection", requiresConnection);
+        (
+          wrappedTool as { requiresConnection?: string | readonly string[] }
+        ).requiresConnection = requiresConnection;
       }
 
       registerTool(wrappedTool);
@@ -416,10 +438,15 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
         assertCapability("connections.readwrite");
 
         if (!registerConnection) {
-          throw new Error("Extension host does not support connections.register()");
+          throw new Error(
+            "Extension host does not support connections.register()",
+          );
         }
 
-        const normalizedDefinition = normalizeConnectionDefinitionForOwner(connectionOwnerId, definition);
+        const normalizedDefinition = normalizeConnectionDefinitionForOwner(
+          connectionOwnerId,
+          definition,
+        );
         return registerConnection(normalizedDefinition);
       },
 
@@ -427,10 +454,14 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
         assertCapability("connections.readwrite");
 
         if (!unregisterConnection) {
-          throw new Error("Extension host does not support connections.unregister()");
+          throw new Error(
+            "Extension host does not support connections.unregister()",
+          );
         }
 
-        unregisterConnection(qualifyOwnedConnectionId(connectionOwnerId, connectionId));
+        unregisterConnection(
+          qualifyOwnedConnectionId(connectionOwnerId, connectionId),
+        );
       },
 
       async list() {
@@ -450,24 +481,37 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
           throw new Error("Extension host does not support connections.get()");
         }
 
-        return getConnection(qualifyOwnedConnectionId(connectionOwnerId, connectionId));
+        return getConnection(
+          qualifyOwnedConnectionId(connectionOwnerId, connectionId),
+        );
       },
 
-      async getSecrets(connectionId: string): Promise<Record<string, string> | null> {
+      async getSecrets(
+        connectionId: string,
+      ): Promise<Record<string, string> | null> {
         assertCapability("connections.secrets.read");
 
         if (!getConnectionSecrets) {
-          throw new Error("Extension host does not support connections.getSecrets()");
+          throw new Error(
+            "Extension host does not support connections.getSecrets()",
+          );
         }
 
-        return getConnectionSecrets(qualifyOwnedConnectionId(connectionOwnerId, connectionId));
+        return getConnectionSecrets(
+          qualifyOwnedConnectionId(connectionOwnerId, connectionId),
+        );
       },
 
-      async setSecrets(connectionId: string, secrets: Record<string, string>): Promise<void> {
+      async setSecrets(
+        connectionId: string,
+        secrets: Record<string, string>,
+      ): Promise<void> {
         assertCapability("connections.readwrite");
 
         if (!setConnectionSecrets) {
-          throw new Error("Extension host does not support connections.setSecrets()");
+          throw new Error(
+            "Extension host does not support connections.setSecrets()",
+          );
         }
 
         await setConnectionSecrets(
@@ -480,27 +524,37 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
         assertCapability("connections.readwrite");
 
         if (!clearConnectionSecrets) {
-          throw new Error("Extension host does not support connections.clearSecrets()");
+          throw new Error(
+            "Extension host does not support connections.clearSecrets()",
+          );
         }
 
-        await clearConnectionSecrets(qualifyOwnedConnectionId(connectionOwnerId, connectionId));
+        await clearConnectionSecrets(
+          qualifyOwnedConnectionId(connectionOwnerId, connectionId),
+        );
       },
 
       async markValidated(connectionId: string): Promise<void> {
         assertCapability("connections.readwrite");
 
         if (!markConnectionValidated) {
-          throw new Error("Extension host does not support connections.markValidated()");
+          throw new Error(
+            "Extension host does not support connections.markValidated()",
+          );
         }
 
-        await markConnectionValidated(qualifyOwnedConnectionId(connectionOwnerId, connectionId));
+        await markConnectionValidated(
+          qualifyOwnedConnectionId(connectionOwnerId, connectionId),
+        );
       },
 
       async markInvalid(connectionId: string, reason: string): Promise<void> {
         assertCapability("connections.readwrite");
 
         if (!markConnectionInvalid) {
-          throw new Error("Extension host does not support connections.markInvalid()");
+          throw new Error(
+            "Extension host does not support connections.markInvalid()",
+          );
         }
 
         await markConnectionInvalid(
@@ -509,10 +563,17 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
         );
       },
 
-      async markStatus(connectionId: string, status: "connected" | "missing" | "invalid" | "error", reason?: string): Promise<void> {
+      async markStatus(
+        connectionId: string,
+        status: "connected" | "missing" | "invalid" | "error",
+        reason?: string,
+      ): Promise<void> {
         assertCapability("connections.readwrite");
 
-        const normalizedConnectionId = qualifyOwnedConnectionId(connectionOwnerId, connectionId);
+        const normalizedConnectionId = qualifyOwnedConnectionId(
+          connectionOwnerId,
+          connectionId,
+        );
 
         if (markConnectionStatus) {
           await markConnectionStatus(normalizedConnectionId, status, reason);
@@ -521,7 +582,9 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
 
         if (status === "connected") {
           if (!markConnectionValidated) {
-            throw new Error("Extension host does not support setting connection status to connected.");
+            throw new Error(
+              "Extension host does not support setting connection status to connected.",
+            );
           }
           await markConnectionValidated(normalizedConnectionId);
           return;
@@ -529,21 +592,30 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
 
         if (status === "invalid") {
           if (!markConnectionInvalid) {
-            throw new Error("Extension host does not support setting connection status to invalid.");
+            throw new Error(
+              "Extension host does not support setting connection status to invalid.",
+            );
           }
-          await markConnectionInvalid(normalizedConnectionId, reason ?? "Connection marked invalid.");
+          await markConnectionInvalid(
+            normalizedConnectionId,
+            reason ?? "Connection marked invalid.",
+          );
           return;
         }
 
         if (status === "missing") {
           if (!clearConnectionSecrets) {
-            throw new Error("Extension host does not support setting connection status to missing.");
+            throw new Error(
+              "Extension host does not support setting connection status to missing.",
+            );
           }
           await clearConnectionSecrets(normalizedConnectionId);
           return;
         }
 
-        throw new Error("Extension host does not support setting connection status to error.");
+        throw new Error(
+          "Extension host does not support setting connection status to error.",
+        );
       },
     },
 
@@ -551,20 +623,29 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
       registerProvider(definition: ExtensionModelProviderDefinition): string {
         assertCapability("models.register");
         if (!registerModelProvider) {
-          throw new Error("Extension host does not support models.registerProvider()");
+          throw new Error(
+            "Extension host does not support models.registerProvider()",
+          );
         }
 
-        const normalized = normalizeModelProviderDefinitionForOwner(connectionOwnerId, definition);
+        const normalized = normalizeModelProviderDefinitionForOwner(
+          connectionOwnerId,
+          definition,
+        );
         return registerModelProvider(normalized);
       },
 
       unregisterProvider(providerId: string): void {
         assertCapability("models.register");
         if (!unregisterModelProvider) {
-          throw new Error("Extension host does not support models.unregisterProvider()");
+          throw new Error(
+            "Extension host does not support models.unregisterProvider()",
+          );
         }
 
-        unregisterModelProvider(qualifyOwnedProviderId(connectionOwnerId, providerId));
+        unregisterModelProvider(
+          qualifyOwnedProviderId(connectionOwnerId, providerId),
+        );
       },
 
       async refresh(): Promise<void> {
@@ -587,7 +668,9 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
         assertCapability("agent.context.write");
 
         if (!injectAgentContext) {
-          throw new Error("Extension host does not support agent.injectContext()");
+          throw new Error(
+            "Extension host does not support agent.injectContext()",
+          );
         }
 
         injectAgentContext(content);
@@ -615,7 +698,9 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
     },
 
     llm: {
-      async complete(request: LlmCompletionRequest): Promise<LlmCompletionResult> {
+      async complete(
+        request: LlmCompletionRequest,
+      ): Promise<LlmCompletionResult> {
         assertCapability("llm.complete");
 
         if (!llmComplete) {
@@ -627,7 +712,10 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
     },
 
     http: {
-      async fetch(url: string, requestOptions?: HttpRequestOptions): Promise<HttpResponse> {
+      async fetch(
+        url: string,
+        requestOptions?: HttpRequestOptions,
+      ): Promise<HttpResponse> {
         assertCapability("http.fetch");
 
         if (!httpFetch) {
@@ -680,7 +768,9 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
       async writeText(text: string): Promise<void> {
         assertCapability("clipboard.write");
         if (!clipboardWriteText) {
-          throw new Error("Extension host does not support clipboard.writeText()");
+          throw new Error(
+            "Extension host does not support clipboard.writeText()",
+          );
         }
 
         await clipboardWriteText(text);
@@ -729,7 +819,9 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
       download(filename: string, content: string, mimeType?: string): void {
         assertCapability("download.file");
         if (!downloadFile) {
-          throw new Error("Extension host does not support download.download()");
+          throw new Error(
+            "Extension host does not support download.download()",
+          );
         }
 
         downloadFile(filename, content, mimeType);
@@ -792,12 +884,22 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
           id: widgetId,
           element: spec.el,
           ...(spec.title !== undefined ? { title: spec.title } : {}),
-          ...(spec.placement !== undefined ? { placement: spec.placement } : {}),
+          ...(spec.placement !== undefined
+            ? { placement: spec.placement }
+            : {}),
           ...(spec.order !== undefined ? { order: spec.order } : {}),
-          ...(spec.collapsible !== undefined ? { collapsible: spec.collapsible } : {}),
-          ...(spec.collapsed !== undefined ? { collapsed: spec.collapsed } : {}),
-          ...(spec.minHeightPx !== undefined ? { minHeightPx: spec.minHeightPx } : {}),
-          ...(spec.maxHeightPx !== undefined ? { maxHeightPx: spec.maxHeightPx } : {}),
+          ...(spec.collapsible !== undefined
+            ? { collapsible: spec.collapsible }
+            : {}),
+          ...(spec.collapsed !== undefined
+            ? { collapsed: spec.collapsed }
+            : {}),
+          ...(spec.minHeightPx !== undefined
+            ? { minHeightPx: spec.minHeightPx }
+            : {}),
+          ...(spec.maxHeightPx !== undefined
+            ? { maxHeightPx: spec.maxHeightPx }
+            : {}),
         });
       },
 
@@ -858,21 +960,28 @@ export async function loadExtension(
     );
   }
 
-  if (sourceKind === "remote-url" && !readRemoteExtensionOptInFromStorage(globalThis.localStorage)) {
+  if (
+    sourceKind === "remote-url" &&
+    !readRemoteExtensionOptInFromStorage(globalThis.localStorage)
+  ) {
     throw new Error(
-      "Remote extension URL imports are disabled by default. "
-      + `Set localStorage['${ALLOW_REMOTE_EXTENSION_URLS_STORAGE_KEY}']='1' to opt in (unsafe).`,
+      "Remote extension URL imports are disabled by default. " +
+        `Set localStorage['${ALLOW_REMOTE_EXTENSION_URLS_STORAGE_KEY}']='1' to opt in (unsafe).`,
     );
   }
 
   if (sourceKind === "remote-url") {
-    console.warn(`[pi] WARNING: loading remote extension URL due to explicit opt-in: ${specifier}`);
+    console.warn(
+      `[pi] WARNING: loading remote extension URL due to explicit opt-in: ${specifier}`,
+    );
   }
 
   const importedModule = await importExtensionModule(specifier, sourceKind);
   const activate = getExtensionActivator(importedModule);
   if (!activate) {
-    throw new Error(`Extension module "${specifier}" must export an activate(api) function`);
+    throw new Error(
+      `Extension module "${specifier}" must export an activate(api) function`,
+    );
   }
 
   const cleanups = collectActivationCleanups(await activate(api));

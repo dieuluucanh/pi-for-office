@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Local Python / LibreOffice bridge for Pi for Excel.
+ * Local Python / LibreOffice bridge for Pi for Office.
  *
  * Modes:
  * - stub (default): deterministic simulated responses for local development.
@@ -22,29 +22,41 @@ import { spawn, spawnSync } from "node:child_process";
 import { timingSafeEqual } from "node:crypto";
 
 const args = new Set(process.argv.slice(2));
-const useHttps = args.has("--https") || process.env.HTTPS === "1" || process.env.HTTPS === "true";
+const useHttps =
+  args.has("--https") ||
+  process.env.HTTPS === "1" ||
+  process.env.HTTPS === "true";
 const useHttp = args.has("--http");
 
 if (useHttps && useHttp) {
-  console.error("[pi-for-excel] Invalid args: can't use both --https and --http");
+  console.error(
+    "[pi-for-office] Invalid args: can't use both --https and --http",
+  );
   process.exit(1);
 }
 
 const HOST = process.env.HOST || (useHttps ? "localhost" : "127.0.0.1");
 const PORT = Number.parseInt(process.env.PORT || "3340", 10);
 
-const MODE_RAW = (process.env.PYTHON_BRIDGE_MODE || "stub").trim().toLowerCase();
+const MODE_RAW = (process.env.PYTHON_BRIDGE_MODE || "stub")
+  .trim()
+  .toLowerCase();
 const MODE = MODE_RAW === "real" ? "real" : MODE_RAW === "stub" ? "stub" : null;
 if (!MODE) {
-  console.error(`[pi-for-excel] Invalid PYTHON_BRIDGE_MODE: ${MODE_RAW}. Use "stub" or "real".`);
+  console.error(
+    `[pi-for-office] Invalid PYTHON_BRIDGE_MODE: ${MODE_RAW}. Use "stub" or "real".`,
+  );
   process.exit(1);
 }
 
 const PYTHON_BIN = (process.env.PYTHON_BRIDGE_PYTHON_BIN || "python3").trim();
-const LIBREOFFICE_BIN_RAW = (process.env.PYTHON_BRIDGE_LIBREOFFICE_BIN || "").trim();
-const LIBREOFFICE_CANDIDATES = LIBREOFFICE_BIN_RAW.length > 0
-  ? [LIBREOFFICE_BIN_RAW]
-  : ["soffice", "libreoffice"];
+const LIBREOFFICE_BIN_RAW = (
+  process.env.PYTHON_BRIDGE_LIBREOFFICE_BIN || ""
+).trim();
+const LIBREOFFICE_CANDIDATES =
+  LIBREOFFICE_BIN_RAW.length > 0
+    ? [LIBREOFFICE_BIN_RAW]
+    : ["soffice", "libreoffice"];
 
 function resolveOptionalEnvPath(name) {
   const raw = process.env[name];
@@ -56,13 +68,20 @@ function resolveOptionalEnvPath(name) {
   return path.resolve(trimmed);
 }
 
-const certDir = resolveOptionalEnvPath("PI_FOR_EXCEL_CERT_DIR") ?? path.resolve(process.cwd());
-const keyPath = resolveOptionalEnvPath("PI_FOR_EXCEL_KEY_PATH") ?? path.join(certDir, "key.pem");
-const certPath = resolveOptionalEnvPath("PI_FOR_EXCEL_CERT_PATH") ?? path.join(certDir, "cert.pem");
+const certDir =
+  resolveOptionalEnvPath("PI_FOR_EXCEL_CERT_DIR") ??
+  path.resolve(process.cwd());
+const keyPath =
+  resolveOptionalEnvPath("PI_FOR_EXCEL_KEY_PATH") ??
+  path.join(certDir, "key.pem");
+const certPath =
+  resolveOptionalEnvPath("PI_FOR_EXCEL_CERT_PATH") ??
+  path.join(certDir, "cert.pem");
 
 const DEFAULT_ALLOWED_ORIGINS = new Set([
   "https://localhost:3141",
   "https://pi-for-excel.vercel.app",
+  "https://dieuluucanh.github.io",
 ]);
 
 const MAX_JSON_BODY_BYTES = 512 * 1024;
@@ -181,7 +200,8 @@ function setCorsHeaders(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   res.setHeader(
     "Access-Control-Allow-Headers",
-    req.headers["access-control-request-headers"] || "content-type,authorization",
+    req.headers["access-control-request-headers"] ||
+      "content-type,authorization",
   );
   res.setHeader("Access-Control-Max-Age", "86400");
 }
@@ -254,7 +274,10 @@ async function readJsonBody(req) {
     size += part.length;
 
     if (size > MAX_JSON_BODY_BYTES) {
-      throw new HttpError(413, `Request body too large (max ${MAX_JSON_BODY_BYTES} bytes).`);
+      throw new HttpError(
+        413,
+        `Request body too large (max ${MAX_JSON_BODY_BYTES} bytes).`,
+      );
     }
 
     chunks.push(part);
@@ -292,7 +315,10 @@ function parseBoundedInteger(value, options) {
     throw new HttpError(400, `${options.name} must be an integer.`);
   }
   if (value < options.min || value > options.max) {
-    throw new HttpError(400, `${options.name} must be between ${options.min} and ${options.max}.`);
+    throw new HttpError(
+      400,
+      `${options.name} must be between ${options.min} and ${options.max}.`,
+    );
   }
   return value;
 }
@@ -347,12 +373,18 @@ function parsePythonRunRequest(payload) {
   }
 
   if (code.length > MAX_CODE_LENGTH) {
-    throw new HttpError(400, `code is too long (max ${MAX_CODE_LENGTH} characters).`);
+    throw new HttpError(
+      400,
+      `code is too long (max ${MAX_CODE_LENGTH} characters).`,
+    );
   }
 
   const inputJson = normalizeOptionalString(payload.input_json);
   if (inputJson && inputJson.length > MAX_INPUT_JSON_LENGTH) {
-    throw new HttpError(400, `input_json is too long (max ${MAX_INPUT_JSON_LENGTH} characters).`);
+    throw new HttpError(
+      400,
+      `input_json is too long (max ${MAX_INPUT_JSON_LENGTH} characters).`,
+    );
   }
 
   if (inputJson) {
@@ -387,7 +419,9 @@ function parseLibreOfficeRequest(payload) {
 
   const inputPath = normalizeAbsolutePath(payload.input_path, "input_path");
 
-  const targetFormat = normalizeOptionalString(payload.target_format)?.toLowerCase();
+  const targetFormat = normalizeOptionalString(
+    payload.target_format,
+  )?.toLowerCase();
   if (!targetFormat || !LIBREOFFICE_TARGET_FORMATS.has(targetFormat)) {
     throw new HttpError(400, "target_format must be one of: csv, pdf, xlsx.");
   }
@@ -397,7 +431,8 @@ function parseLibreOfficeRequest(payload) {
     outputPath = normalizeAbsolutePath(payload.output_path, "output_path");
   }
 
-  const overwrite = typeof payload.overwrite === "boolean" ? payload.overwrite : false;
+  const overwrite =
+    typeof payload.overwrite === "boolean" ? payload.overwrite : false;
 
   const timeoutMs = parseBoundedInteger(payload.timeout_ms, {
     name: "timeout_ms",
@@ -425,14 +460,14 @@ function probeBinary(command, args) {
   });
 
   if (probe.error) {
-    const code = typeof probe.error.code === "string"
-      ? probe.error.code
-      : "unknown_error";
-    const message = probe.error instanceof Error
-      ? probe.error.message
-      : String(probe.error);
+    const code =
+      typeof probe.error.code === "string" ? probe.error.code : "unknown_error";
+    const message =
+      probe.error instanceof Error ? probe.error.message : String(probe.error);
 
-    console.warn(`[pi-for-excel] Binary "${command}" not available (${code}): ${message}`);
+    console.warn(
+      `[pi-for-office] Binary "${command}" not available (${code}): ${message}`,
+    );
 
     return {
       available: false,
@@ -443,9 +478,8 @@ function probeBinary(command, args) {
 
   if (probe.status !== 0) {
     const stderr = typeof probe.stderr === "string" ? probe.stderr.trim() : "";
-    const reason = stderr.length > 0
-      ? stderr
-      : `probe_exit_${String(probe.status)}`;
+    const reason =
+      stderr.length > 0 ? stderr : `probe_exit_${String(probe.status)}`;
 
     return {
       available: false,
@@ -540,7 +574,10 @@ async function runCommandCapture(options) {
   });
 
   if (overflow) {
-    throw new HttpError(413, `Process output exceeded ${MAX_OUTPUT_BYTES} bytes.`);
+    throw new HttpError(
+      413,
+      `Process output exceeded ${MAX_OUTPUT_BYTES} bytes.`,
+    );
   }
 
   if (timedOut) {
@@ -604,9 +641,11 @@ async function runPython(request, pythonInfo) {
   });
 
   if (result.code !== 0) {
-    const message = [result.stderr, result.stdout]
-      .map((value) => value.trim())
-      .find((value) => value.length > 0) || `python exited with code ${result.code}`;
+    const message =
+      [result.stderr, result.stdout]
+        .map((value) => value.trim())
+        .find((value) => value.length > 0) ||
+      `python exited with code ${result.code}`;
 
     throw new HttpError(400, message);
   }
@@ -671,7 +710,10 @@ function ensureOutputWritable(outputPath, overwrite) {
 
   const outputDir = path.dirname(outputPath);
   if (!fs.existsSync(outputDir)) {
-    throw new HttpError(400, `output_path directory does not exist: ${outputDir}`);
+    throw new HttpError(
+      400,
+      `output_path directory does not exist: ${outputDir}`,
+    );
   }
 }
 
@@ -725,13 +767,19 @@ async function runLibreOfficeConvert(request, libreOfficeInfo) {
     });
 
     if (result.code !== 0) {
-      const message = [result.stderr, result.stdout]
-        .map((value) => value.trim())
-        .find((value) => value.length > 0) || `LibreOffice exited with code ${result.code}`;
+      const message =
+        [result.stderr, result.stdout]
+          .map((value) => value.trim())
+          .find((value) => value.length > 0) ||
+        `LibreOffice exited with code ${result.code}`;
       throw new HttpError(400, message);
     }
 
-    const convertedPath = findConvertedFile(tempDir, request.input_path, request.target_format);
+    const convertedPath = findConvertedFile(
+      tempDir,
+      request.input_path,
+      request.target_format,
+    );
     if (!convertedPath) {
       throw new HttpError(500, "LibreOffice did not produce an output file.");
     }
@@ -815,16 +863,16 @@ function createRealBackend() {
 
   if (!pythonInfo.available) {
     console.warn(
-      `[pi-for-excel] Python binary "${PYTHON_BIN}" is unavailable. ` +
-      "python_run and python_transform_range will fail until PYTHON_BRIDGE_PYTHON_BIN is set to a valid executable.",
+      `[pi-for-office] Python binary "${PYTHON_BIN}" is unavailable. ` +
+        "python_run and python_transform_range will fail until PYTHON_BRIDGE_PYTHON_BIN is set to a valid executable.",
     );
   }
 
   if (!libreOfficeInfo.available) {
     console.warn(
-      "[pi-for-excel] LibreOffice binary is unavailable. " +
-      "python_run can still work, but libreoffice_convert requires installing LibreOffice (soffice/libreoffice) " +
-      "or setting PYTHON_BRIDGE_LIBREOFFICE_BIN.",
+      "[pi-for-office] LibreOffice binary is unavailable. " +
+        "python_run can still work, but libreoffice_convert requires installing LibreOffice (soffice/libreoffice) " +
+        "or setting PYTHON_BRIDGE_LIBREOFFICE_BIN.",
     );
   }
 
@@ -835,26 +883,26 @@ function createRealBackend() {
         backend: "real",
         python: pythonInfo.available
           ? {
-            available: true,
-            command: pythonInfo.command,
-            version: pythonInfo.version,
-          }
+              available: true,
+              command: pythonInfo.command,
+              version: pythonInfo.version,
+            }
           : {
-            available: false,
-            command: pythonInfo.command,
-            error: pythonInfo.error,
-          },
+              available: false,
+              command: pythonInfo.command,
+              error: pythonInfo.error,
+            },
         libreoffice: libreOfficeInfo.available
           ? {
-            available: true,
-            command: libreOfficeInfo.command,
-            version: libreOfficeInfo.version,
-          }
+              available: true,
+              command: libreOfficeInfo.command,
+              version: libreOfficeInfo.version,
+            }
           : {
-            available: false,
-            command: libreOfficeInfo.command,
-            error: libreOfficeInfo.error,
-          },
+              available: false,
+              command: libreOfficeInfo.command,
+              error: libreOfficeInfo.error,
+            },
       };
     },
 
@@ -877,7 +925,9 @@ function createRealBackend() {
         throw new HttpError(501, "libreoffice binary not available");
       }
 
-      return runLibreOfficeConvert(request, { command: libreOfficeInfo.command });
+      return runLibreOfficeConvert(request, {
+        command: libreOfficeInfo.command,
+      });
     },
   };
 }
@@ -917,7 +967,7 @@ const handler = async (req, res) => {
       respondJson(res, 200, {
         ok: true,
         mode: backend.mode,
-        ...await backend.health(),
+        ...(await backend.health()),
       });
       return;
     }
@@ -968,12 +1018,10 @@ const handler = async (req, res) => {
     const status = isHttpError ? error.status : 500;
 
     if (!isHttpError) {
-      console.error("[pi-for-excel] Unhandled python bridge error:", error);
+      console.error("[pi-for-office] Unhandled python bridge error:", error);
     }
 
-    const message = isHttpError
-      ? error.message
-      : "Internal server error.";
+    const message = isHttpError ? error.message : "Internal server error.";
 
     respondJson(res, status, {
       ok: false,
@@ -988,8 +1036,12 @@ const server = (() => {
   }
 
   if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
-    console.error("[pi-for-excel] HTTPS requested but key.pem/cert.pem not found in repo root.");
-    console.error("Generate them with mkcert (see README). Example: mkcert localhost");
+    console.error(
+      "[pi-for-office] HTTPS requested but key.pem/cert.pem not found in repo root.",
+    );
+    console.error(
+      "Generate them with mkcert (see README). Example: mkcert localhost",
+    );
     process.exit(1);
   }
 
@@ -1004,22 +1056,40 @@ const server = (() => {
 
 server.listen(PORT, HOST, () => {
   const scheme = useHttps ? "https" : "http";
-  console.log(`[pi-for-excel] python bridge listening on ${scheme}://${HOST}:${PORT}`);
-  console.log(`[pi-for-excel] mode: ${backend.mode}`);
-  console.log(`[pi-for-excel] health: ${scheme}://${HOST}:${PORT}/health`);
-  console.log(`[pi-for-excel] endpoint: ${scheme}://${HOST}:${PORT}/v1/python-run`);
-  console.log(`[pi-for-excel] endpoint: ${scheme}://${HOST}:${PORT}/v1/libreoffice-convert`);
-  console.log(`[pi-for-excel] allowed origins: ${Array.from(allowedOrigins).join(", ")}`);
+  console.log(
+    `[pi-for-office] python bridge listening on ${scheme}://${HOST}:${PORT}`,
+  );
+  console.log(`[pi-for-office] mode: ${backend.mode}`);
+  console.log(`[pi-for-office] health: ${scheme}://${HOST}:${PORT}/health`);
+  console.log(
+    `[pi-for-office] endpoint: ${scheme}://${HOST}:${PORT}/v1/python-run`,
+  );
+  console.log(
+    `[pi-for-office] endpoint: ${scheme}://${HOST}:${PORT}/v1/libreoffice-convert`,
+  );
+  console.log(
+    `[pi-for-office] allowed origins: ${Array.from(allowedOrigins).join(", ")}`,
+  );
 
   if (authToken) {
-    console.log("[pi-for-excel] auth: bearer token required for POST endpoints");
+    console.log(
+      "[pi-for-office] auth: bearer token required for POST endpoints",
+    );
   } else {
-    console.warn("[pi-for-excel] auth: no bearer token configured — any local process on this machine can drive this bridge.");
-    console.warn("[pi-for-excel] recommended: set PYTHON_BRIDGE_TOKEN=<secret> and mirror it in Pi via /experimental python-bridge-token <secret>");
+    console.warn(
+      "[pi-for-office] auth: no bearer token configured — any local process on this machine can drive this bridge.",
+    );
+    console.warn(
+      "[pi-for-office] recommended: set PYTHON_BRIDGE_TOKEN=<secret> and mirror it in Pi via /experimental python-bridge-token <secret>",
+    );
   }
 
   if (backend.mode === "stub") {
-    console.log("[pi-for-excel] stub mode: python/libreoffice calls are simulated.");
-    console.log("[pi-for-excel] use PYTHON_BRIDGE_MODE=real for local command execution.");
+    console.log(
+      "[pi-for-office] stub mode: python/libreoffice calls are simulated.",
+    );
+    console.log(
+      "[pi-for-office] use PYTHON_BRIDGE_MODE=real for local command execution.",
+    );
   }
 });

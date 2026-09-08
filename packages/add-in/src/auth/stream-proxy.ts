@@ -19,7 +19,10 @@ import type {
 } from "@earendil-works/pi-ai";
 
 import { isDebugEnabled } from "../debug/debug.js";
-import { selectToolBundle, type ToolBundleId } from "../context/tool-disclosure.js";
+import {
+  selectToolBundle,
+  type ToolBundleId,
+} from "../context/tool-disclosure.js";
 import { modelRecencyScore } from "../models/model-ordering.js";
 import { OPENAI_GATEWAY_PROVIDER_PREFIX } from "./custom-gateways.js";
 import {
@@ -101,15 +104,20 @@ function applyProxy(
   };
 }
 
-export function requiresCodexWebSocketBridge(model: Pick<Model<Api>, "id" | "provider">): boolean {
+export function requiresCodexWebSocketBridge(
+  model: Pick<Model<Api>, "id" | "provider">,
+): boolean {
   return model.provider === "openai-codex" && model.id === "gpt-5.6-luna";
 }
 
 type GoogleOAuthProvider = "google-gemini-cli" | "google-antigravity";
 
-const GOOGLE_CODE_ASSIST_DEFAULT_BASE_URL = "https://cloudcode-pa.googleapis.com";
+const GOOGLE_CODE_ASSIST_DEFAULT_BASE_URL =
+  "https://cloudcode-pa.googleapis.com";
 
-function isGoogleOAuthProvider(provider: string): provider is GoogleOAuthProvider {
+function isGoogleOAuthProvider(
+  provider: string,
+): provider is GoogleOAuthProvider {
   return provider === "google-gemini-cli" || provider === "google-antigravity";
 }
 
@@ -139,7 +147,10 @@ function pickPreferredGoogleOAuthModel(
   return geminiAny[geminiAny.length - 1] ?? null;
 }
 
-function normalizeGoogleOAuthModel(modelsRuntime: Models, model: Model<Api>): Model<Api> {
+function normalizeGoogleOAuthModel(
+  modelsRuntime: Models,
+  model: Model<Api>,
+): Model<Api> {
   const provider = model.provider;
   if (!isGoogleOAuthProvider(provider)) {
     return model;
@@ -148,7 +159,10 @@ function normalizeGoogleOAuthModel(modelsRuntime: Models, model: Model<Api>): Mo
   let normalized: Model<Api> = model;
 
   if (/preview/i.test(normalized.id)) {
-    const fallbackModel = pickPreferredGoogleOAuthModel(modelsRuntime, provider);
+    const fallbackModel = pickPreferredGoogleOAuthModel(
+      modelsRuntime,
+      provider,
+    );
     if (fallbackModel) {
       normalized = fallbackModel;
     }
@@ -297,7 +311,9 @@ function getSessionId(options: StreamOptions | undefined): string | undefined {
   return sessionId;
 }
 
-function isAuthStreamProxyPayloadShape(value: DynamicValue): value is DynamicObject {
+function isAuthStreamProxyPayloadShape(
+  value: DynamicValue,
+): value is DynamicObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -414,7 +430,10 @@ function recordCall(
 
   const sessionId = getSessionId(options);
   const prefixFingerprint = createPrefixFingerprint(model, context);
-  const prefixChangeReasons = prefixChangeTracker.observe(sessionId, prefixFingerprint);
+  const prefixChangeReasons = prefixChangeTracker.observe(
+    sessionId,
+    prefixFingerprint,
+  );
   const prefixChanged = prefixChangeReasons.length > 0;
 
   if (prefixChanged) {
@@ -444,7 +463,8 @@ function recordCall(
       setSessionContext(sessionId, context);
     }
 
-    const totalChars = stats.systemChars + stats.toolSchemaChars + stats.messageChars;
+    const totalChars =
+      stats.systemChars + stats.toolSchemaChars + stats.messageChars;
     const snapshot: PayloadSnapshot = {
       call,
       timestamp: Date.now(),
@@ -480,7 +500,10 @@ function withPayloadHook(
   const originalOnPayload = options?.onPayload;
   if (!captureSnapshot && !originalOnPayload) return options;
 
-  const onPayload: NonNullable<StreamOptions["onPayload"]> = (payload, model) => {
+  const onPayload: NonNullable<StreamOptions["onPayload"]> = (
+    payload,
+    model,
+  ) => {
     if (captureSnapshot) {
       upsertPayloadShape(call, payload);
     }
@@ -502,11 +525,17 @@ interface CodexBridgeCapabilityCacheEntry {
 const CODEX_BRIDGE_SUPPORTED_TTL_MS = 60_000;
 const CODEX_BRIDGE_UNAVAILABLE_TTL_MS = 3_000;
 const MAX_CODEX_BRIDGE_SESSION_IDS = 256;
-const UUID_V7_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
-const codexBridgeCapabilityCache = new Map<string, CodexBridgeCapabilityCacheEntry>();
+const UUID_V7_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+const codexBridgeCapabilityCache = new Map<
+  string,
+  CodexBridgeCapabilityCacheEntry
+>();
 const codexBridgeSessionIds = new Map<string, string>();
 
-export function resolveCodexWebSocketBridgeSessionId(sessionId?: string): string {
+export function resolveCodexWebSocketBridgeSessionId(
+  sessionId?: string,
+): string {
   if (sessionId && UUID_V7_PATTERN.test(sessionId)) {
     return sessionId;
   }
@@ -532,7 +561,9 @@ export function resolveCodexWebSocketBridgeSessionId(sessionId?: string): string
   return generated;
 }
 
-async function proxySupportsCodexWebSocketBridge(proxyUrl: string): Promise<boolean> {
+async function proxySupportsCodexWebSocketBridge(
+  proxyUrl: string,
+): Promise<boolean> {
   const normalized = normalizeProxyUrl(proxyUrl);
   const cached = codexBridgeCapabilityCache.get(normalized);
   const cacheTtlMs = cached?.supported
@@ -543,7 +574,10 @@ async function proxySupportsCodexWebSocketBridge(proxyUrl: string): Promise<bool
   }
 
   const supported = await probeCodexWebSocketBridge(normalized);
-  codexBridgeCapabilityCache.set(normalized, { checkedAt: Date.now(), supported });
+  codexBridgeCapabilityCache.set(normalized, {
+    checkedAt: Date.now(),
+    supported,
+  });
   return supported;
 }
 
@@ -552,7 +586,11 @@ export function createOfficeStreamFn(
   modelsRuntime: Models,
   isRuntimeProvider?: (providerId: string) => boolean,
 ): OfficeStreamFn {
-  return async (model: Model<Api>, context: Context, options?: StreamOptions) => {
+  return async (
+    model: Model<Api>,
+    context: Context,
+    options?: StreamOptions,
+  ) => {
     const continuation = isToolContinuation(context.messages);
 
     // Always expose tools (via deterministic bundle selection), including
@@ -581,33 +619,52 @@ export function createOfficeStreamFn(
       continuation,
       toolSelection.bundleId,
     );
-    const effectiveOptions = withPayloadHook(options, callRecord.call, callRecord.captureSnapshot);
+    const effectiveOptions = withPayloadHook(
+      options,
+      callRecord.call,
+      callRecord.captureSnapshot,
+    );
 
     const proxyUrl = await getProxyUrl();
     const needsCodexBridge = requiresCodexWebSocketBridge(normalizedModel);
     if (!proxyUrl) {
       if (needsCodexBridge) {
         throw new Error(
-          "GPT-5.6 Luna currently requires the latest Pi for Excel proxy for ChatGPT WebSocket transport. " +
-          "Enable Proxy in Settings and run: npx -y pi-for-excel-proxy@latest",
+          "GPT-5.6 Luna currently requires the latest Pi for Office proxy for ChatGPT WebSocket transport. " +
+            "Enable Proxy in Settings and run: npx -y pi-for-office-proxy@latest",
         );
       }
-      return modelsRuntime.streamSimple(normalizedModel, effectiveContext, effectiveOptions);
+      return modelsRuntime.streamSimple(
+        normalizedModel,
+        effectiveContext,
+        effectiveOptions,
+      );
     }
 
-    if (!shouldProxyProvider(normalizedModel.provider, options?.apiKey, isRuntimeProvider)) {
-      return modelsRuntime.streamSimple(normalizedModel, effectiveContext, effectiveOptions);
+    if (
+      !shouldProxyProvider(
+        normalizedModel.provider,
+        options?.apiKey,
+        isRuntimeProvider,
+      )
+    ) {
+      return modelsRuntime.streamSimple(
+        normalizedModel,
+        effectiveContext,
+        effectiveOptions,
+      );
     }
 
     // Guardrails: fail fast for known-bad proxy configs (e.g., HTTP proxy from HTTPS taskpane).
     const validated = validateOfficeProxyUrl(proxyUrl);
     let proxyTransport: OfficeProxyTransport | undefined;
     if (needsCodexBridge) {
-      const bridgeSupported = await proxySupportsCodexWebSocketBridge(validated);
+      const bridgeSupported =
+        await proxySupportsCodexWebSocketBridge(validated);
       if (!bridgeSupported) {
         throw new Error(
-          "GPT-5.6 Luna requires a newer Pi for Excel proxy with ChatGPT WebSocket support. " +
-          "Restart with: npx -y pi-for-excel-proxy@latest (central deployments: ask your administrator to upgrade the proxy).",
+          "GPT-5.6 Luna requires a newer Pi for Office proxy with ChatGPT WebSocket support. " +
+            "Restart with: npx -y pi-for-office-proxy@latest (central deployments: ask your administrator to upgrade the proxy).",
         );
       }
       proxyTransport = "codex-websocket";
@@ -618,7 +675,9 @@ export function createOfficeStreamFn(
           ...effectiveOptions,
           // Native Pi sessions use UUIDv7. ChatGPT's Codex router can assign an
           // unavailable Luna rollout alias to older UUIDv4 session identifiers.
-          sessionId: resolveCodexWebSocketBridgeSessionId(effectiveOptions?.sessionId),
+          sessionId: resolveCodexWebSocketBridgeSessionId(
+            effectiveOptions?.sessionId,
+          ),
           transport: "sse",
         }
       : effectiveOptions;

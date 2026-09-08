@@ -5,7 +5,7 @@
 
 ## Overview
 
-This document specifies how Pi for Excel should support **multiple concurrent agent sessions in the same workbook** from both product and technical standpoints.
+This document specifies how Pi for Office should support **multiple concurrent agent sessions in the same workbook** from both product and technical standpoints.
 
 Target user outcomes:
 
@@ -106,6 +106,7 @@ export interface WorkbookCoordinator {
 ```
 
 Initial policy:
+
 - `runWrite`: strictly serialized
 - `runRead`: can execute immediately in Phase 1, or also queued if Office API stability requires it
 
@@ -132,6 +133,7 @@ export interface SessionRuntime {
 ```
 
 Responsibilities:
+
 - create/remove/switch active session tabs
 - isolate prompt queues per session
 - route UI events to active session
@@ -152,6 +154,7 @@ export type DelegateJobState =
 ```
 
 Responsibilities:
+
 - spawn runtime with task + policy (read-only vs propose)
 - surface progress and final summary in main session
 - cancellation + timeout support
@@ -159,12 +162,14 @@ Responsibilities:
 ### 5) TeamOrchestrator
 
 Coordinates manager + worker runtimes:
+
 - split task
 - run workers in parallel
 - merge worker outputs
 - produce manager summary + apply plan
 
 Initial team safety rule:
+
 - Workers do not directly mutate workbook
 - Manager performs final apply step through coordinated writes
 
@@ -211,6 +216,7 @@ Versioned key pattern in `SettingsStore` should be used (e.g. `*.v1.*`).
 ##### Workstream A — Workbook coordinator + tool execution policy
 
 **New files**
+
 - `src/workbook/coordinator.ts`
   - Implement write mutex/queue keyed by `workbookId`
   - Expose operation lifecycle events (`queued`, `started`, `completed`, `failed`)
@@ -222,20 +228,24 @@ Versioned key pattern in `SettingsStore` should be used (e.g. `*.v1.*`).
   - Wrap tool `execute()` so mutate calls run under `WorkbookCoordinator.runWrite(...)`
 
 **Touched files**
+
 - `src/taskpane/init.ts`
   - Create coordinator and wrap core tools before agent creation
 
 **Checkpoint A**
+
 - Two concurrent mutating tool calls from separate agents never overlap; second call enters `queued` then runs after first completes.
 
 ##### Workstream B — Multi-runtime session manager (tabs backend)
 
 **New files**
+
 - `src/taskpane/session-runtime-manager.ts`
   - Manage runtime map: `{ sessionId, agent, actionQueue, queueDisplay, metadata }`
   - APIs: `createRuntime`, `switchRuntime`, `closeRuntime`, `getActiveRuntime`, `listRuntimes`
 
 **Touched files**
+
 - `src/taskpane/init.ts`
   - Replace single-agent wiring with runtime-manager wiring
 - `src/taskpane/action-queue.ts`
@@ -244,11 +254,13 @@ Versioned key pattern in `SettingsStore` should be used (e.g. `*.v1.*`).
   - Support runtime-scoped queue display binding (active runtime only)
 
 **Checkpoint B**
+
 - Two runtimes can be created and switched; each preserves independent message history and pending queue state.
 
 ##### Workstream C — Active-agent indirection for commands, shortcuts, status
 
 **Touched files**
+
 - `src/commands/builtins/index.ts`
   - Register builtins against an `ActiveAgentProvider` instead of a single captured agent
 - `src/commands/builtins/model.ts`
@@ -263,14 +275,17 @@ Versioned key pattern in `SettingsStore` should be used (e.g. `*.v1.*`).
   - Render against current active runtime/agent
 
 **Checkpoint C**
+
 - Switching tabs changes `/model`, `/copy`, `/compact`, `/new`, `/resume`, keyboard shortcuts, and status bar to the newly active runtime.
 
 ##### Workstream D — Session tabs UI (MVP)
 
 **New files (optional split)**
+
 - `src/ui/session-tabs.ts` (if extracted)
 
 **Touched files**
+
 - `src/ui/pi-sidebar.ts`
   - Add tab strip UI: create/switch/close
   - Expose callbacks/events for runtime manager
@@ -280,11 +295,13 @@ Versioned key pattern in `SettingsStore` should be used (e.g. `*.v1.*`).
   - Connect tab events to runtime manager
 
 **Checkpoint D**
+
 - User can create/switch/close tabs; active tab is visually clear; closing active tab activates a deterministic fallback tab.
 
 ##### Workstream E — Session persistence + workbook-aware resume in multi-runtime context
 
 **Touched files**
+
 - `src/taskpane/sessions.ts`
   - Support runtime-aware persistence hooks
   - Ensure latest-session mapping updates for the runtime being saved/resumed
@@ -294,11 +311,13 @@ Versioned key pattern in `SettingsStore` should be used (e.g. `*.v1.*`).
   - Add helper(s) needed for workbook filtering by session id list
 
 **Checkpoint E**
+
 - After reload, latest session for current workbook restores correctly and tab/session association remains intact.
 
 ##### Workstream F — Workbook lock UX and telemetry
 
 **Touched files**
+
 - `src/ui/pi-sidebar.ts`
   - Show lock wait message (“Waiting for workbook lock…”) when runtime is queued for mutate op
 - `src/taskpane/status-bar.ts`
@@ -307,6 +326,7 @@ Versioned key pattern in `SettingsStore` should be used (e.g. `*.v1.*`).
   - Wire coordinator events to UI
 
 **Checkpoint F**
+
 - During a long mutate operation in tab A, tab B clearly shows queued lock state for its pending mutate operation.
 
 ##### Phase 1 verification checklist

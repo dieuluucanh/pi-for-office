@@ -17,13 +17,13 @@ Preflight suite:
 
 Additional release-flow checks:
 
-6. `npm view pi-for-excel-proxy version` → `0.1.0`
-7. `npx -y pi-for-excel-proxy --http` (startup verified)
+1. `npm view pi-for-office-proxy version` → `0.1.0`
+2. `npx -y pi-for-office-proxy --http` (startup verified)
 
 ## Evidence table snapshot
 
 | ID | Area | Platform | Status | Evidence | Notes |
-|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- |
 | PRE-1 | Preflight command suite | macOS | Pass | command logs in this run | All required preflight commands passed on commit above. |
 | C-1 | Workbook read/selection awareness | macOS | Blocked | N/A | Requires live Excel host + workbook interaction. |
 | C-2 | Session tabs + restore | macOS | Blocked | N/A | Requires taskpane interaction inside Excel. |
@@ -45,5 +45,5 @@ Additional release-flow checks:
 
 ## Notes
 
-- Hosted-site checks to `https://piforexcel.com` were attempted but DNS resolution failed in this environment (`Could not resolve host`).
+- Hosted-site checks to `https://dieuluucanh.github.io/pi-for-office` were attempted but DNS resolution failed in this environment (`Could not resolve host`).
 - This run advances CLI-level release confidence; remaining blockers are predominantly host/manual verification items (Excel Desktop macOS + Windows).

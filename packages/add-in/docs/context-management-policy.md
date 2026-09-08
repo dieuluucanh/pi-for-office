@@ -1,7 +1,7 @@
 # Context Management Policy (cache-safe)
 
 **Status:** Active policy (2026-02-11)  
-**Scope:** How Pi for Excel builds model context across normal turns, tool loops, and long sessions **without regressing prompt caching**.
+**Scope:** How Pi for Office builds model context across normal turns, tool loops, and long sessions **without regressing prompt caching**.
 
 ---
 
@@ -71,7 +71,7 @@ Implications:
 ## Policy by context layer
 
 | Layer | Policy | Reinjection trigger |
-|---|---|---|
+| --- | --- | --- |
 | Base system prompt | Keep minimal and stable per session | Every call (provider APIs are request-based) |
 | Tool schemas | Include a deterministic tool set on every call so continuations can keep using tools (current runtime policy: full set) | Every call |
 | Workbook structural context | Inject as separate context block (not baked repeatedly into base prompt) | Session start + workbook hash/version change |
@@ -192,7 +192,7 @@ Implications:
 ## #424 investigation updates (current)
 
 | Area | Decision | Status | Notes |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | 1) Compaction call-shape | **Defer** behavior change | ✅ documented | Keep isolated summarizer request for now. Memo: `docs/archive/issue-424-compaction-call-shape.md`. |
 | 2) Mid-session model switching | **Implement** cache-safe behavior | ✅ shipped (#428, #442) | Default now matches pi-mono (in-place); optional fork-to-new-tab behavior is available as an advanced setting for non-empty sessions. See `docs/upstream-divergences.md` §1. |
 | 3) Mid-session toolset churn | **Implement** targeted stabilization | ✅ shipped (#436), refined (#444) | Runtime skips no-op `setTools(...)` updates via fingerprinting and uses extension tool revision tracking for schema-stable hot-reload updates (without blanket eager refreshes). See `docs/upstream-divergences.md` §2. |

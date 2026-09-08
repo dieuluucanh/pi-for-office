@@ -1,15 +1,18 @@
 # Tmux bridge contract (v1)
 
 Status:
+
 - Add-in adapter implemented in `src/tools/tmux.ts`
 - Local bridge scaffold implemented in `scripts/tmux-bridge-server.mjs`
 
 The bridge supports two modes:
+
 - `tmux`: real tmux subprocess backend with guardrails
 - `stub`: in-memory tmux simulation for development/testing (does not execute shell commands)
 
 Notes:
-- The one-command helper (`npx pi-for-excel-tmux-bridge`) defaults to `tmux` mode.
+
+- The one-command helper (`npx pi-for-office-tmux-bridge`) defaults to `tmux` mode.
 - The raw server script keeps `stub` as its default for local development/test usage.
 
 ## Availability and gating
@@ -25,13 +28,13 @@ The gate is checked on each tool execution (defense in depth).
 
 ```bash
 # One-command setup (real tmux mode by default)
-npx pi-for-excel-tmux-bridge
+npx pi-for-office-tmux-bridge
 
 # Optional assisted dependency install (macOS/Homebrew)
-npx pi-for-excel-tmux-bridge --install-missing
+npx pi-for-office-tmux-bridge --install-missing
 
 # Force safe simulated mode
-TMUX_BRIDGE_MODE=stub npx pi-for-excel-tmux-bridge
+TMUX_BRIDGE_MODE=stub npx pi-for-office-tmux-bridge
 
 # Source checkout alternative
 npm run tmux:bridge:https
@@ -53,7 +56,7 @@ Then in the add-in:
 Optional auth token:
 
 ```bash
-TMUX_BRIDGE_TOKEN=your-secret npx pi-for-excel-tmux-bridge
+TMUX_BRIDGE_TOKEN=your-secret npx pi-for-office-tmux-bridge
 ```
 
 Store the same token for the tool adapter:
@@ -72,6 +75,7 @@ Store the same token for the tool adapter:
 Content-Type: `application/json`
 
 Optional auth header when configured:
+
 - `Authorization: Bearer <tmux.bridge.token>`
 
 ## Request schema
@@ -119,6 +123,7 @@ Tip: `send_keys` sends input only. Use `capture_pane` or `send_and_capture` when
 ```
 
 Notes:
+
 - Non-2xx HTTP responses are treated as errors by the adapter.
 - `ok: false` is treated as an error by the adapter.
 - Plain-text success responses are accepted as `output` fallback.

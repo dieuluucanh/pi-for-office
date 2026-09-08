@@ -1,7 +1,7 @@
 /**
  * Excel bridge executors.
  *
- * These delegate to the existing, battle-tested pi-for-excel tools so the
+ * These delegate to the existing, battle-tested pi-for-office tools so the
  * bridge path behaves exactly like the in-browser agent path.
  */
 
@@ -10,7 +10,11 @@ import { createWriteCellsTool } from "../tools/write-cells.js";
 import { createFillFormulaTool } from "../tools/fill-formula.js";
 import { createGetWorkbookOverviewTool } from "../tools/get-workbook-overview.js";
 import { createSearchWorkbookTool } from "../tools/search-workbook.js";
-import { guardExecutor, textOfAgentToolResult, type OfficeOpExecutor } from "./ops.js";
+import {
+  guardExecutor,
+  textOfAgentToolResult,
+  type OfficeOpExecutor,
+} from "./ops.js";
 
 /** Run a native tool with a synthetic bridge call id and unwrap its result. */
 async function runTool(

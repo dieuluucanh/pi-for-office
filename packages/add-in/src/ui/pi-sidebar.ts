@@ -1,5 +1,5 @@
 /**
- * Pi for Excel — Sidebar layout component.
+ * Pi for Office — Sidebar layout component.
  *
  * Replaces pi-web-ui's ChatPanel + AgentInterface with a purpose-built
  * layout for the ~350px Excel sidebar. Reuses pi-web-ui's content
@@ -12,7 +12,17 @@ import { customElement, property, query, state } from "lit/decorators.js";
 import type { Agent, AgentEvent } from "@earendil-works/pi-agent-core";
 import type { ToolResultMessage } from "@earendil-works/pi-ai";
 import type { StreamingMessageContainer } from "./messages/streaming-message-container.js";
-import { Archive, ChevronRight, FileText, Keyboard, Puzzle, RotateCcw, Ruler, Settings, Wrench } from "lucide";
+import {
+  Archive,
+  ChevronRight,
+  FileText,
+  Keyboard,
+  Puzzle,
+  RotateCcw,
+  Ruler,
+  Settings,
+  Wrench,
+} from "lucide";
 import "./pi-input.js";
 import "./working-indicator.js";
 import { initToolGrouping } from "./tool-grouping.js";
@@ -54,11 +64,21 @@ function getHorizontalArrowDirection(event: KeyboardEvent): -1 | 1 | null {
   const code = event.code;
   const keyCode = event.keyCode;
 
-  if (key === "ArrowLeft" || key === "Left" || code === "ArrowLeft" || keyCode === 37) {
+  if (
+    key === "ArrowLeft" ||
+    key === "Left" ||
+    code === "ArrowLeft" ||
+    keyCode === 37
+  ) {
     return -1;
   }
 
-  if (key === "ArrowRight" || key === "Right" || code === "ArrowRight" || keyCode === 39) {
+  if (
+    key === "ArrowRight" ||
+    key === "Right" ||
+    code === "ArrowRight" ||
+    keyCode === 39
+  ) {
     return 1;
   }
 
@@ -78,7 +98,8 @@ function formatPayloadShape(shape: PayloadShapeSummary | undefined): string {
 
   const keyPreview = shape.topLevelKeys.slice(0, 4).join(",");
   const keySuffix = shape.topLevelKeys.length > 4 ? ",…" : "";
-  const keysLabel = keyPreview.length > 0 ? `${keyPreview}${keySuffix}` : "(none)";
+  const keysLabel =
+    keyPreview.length > 0 ? `${keyPreview}${keySuffix}` : "(none)";
 
   if (shape.arrayFields.length === 0) {
     return `keys:${keysLabel}`;
@@ -134,7 +155,9 @@ export class PiSidebar extends LitElement {
   @property({ attribute: false }) onDuplicateTab?: (runtimeId: string) => void;
   @property({ attribute: false }) onMoveTabLeft?: (runtimeId: string) => void;
   @property({ attribute: false }) onMoveTabRight?: (runtimeId: string) => void;
-  @property({ attribute: false }) onCloseOtherTabs?: (runtimeId: string) => void;
+  @property({ attribute: false }) onCloseOtherTabs?: (
+    runtimeId: string,
+  ) => void;
   @property({ attribute: false }) onOpenRules?: () => void;
   @property({ attribute: false }) onOpenExtensions?: () => void;
   @property({ attribute: false }) onOpenSettings?: () => void;
@@ -155,10 +178,12 @@ export class PiSidebar extends LitElement {
   @state() private _tabCanScrollLeft = false;
   @state() private _tabCanScrollRight = false;
   @state() private _tabContextMenuRuntimeId: string | null = null;
-  @state() private _tabContextMenuPosition: { x: number; y: number } | null = null;
+  @state() private _tabContextMenuPosition: { x: number; y: number } | null =
+    null;
 
   @query(".pi-messages") private _scrollContainer?: HTMLElement;
-  @query("streaming-message-container") private _streamingContainer?: StreamingMessageContainer;
+  @query("streaming-message-container")
+  private _streamingContainer?: StreamingMessageContainer;
   @query("pi-input") private _input?: PiInput;
   @query(".pi-session-tabs__scroller") private _tabsScroller?: HTMLElement;
 
@@ -183,7 +208,9 @@ export class PiSidebar extends LitElement {
   /** Previous value of `_isStreaming` so we can detect edges in `updated()`. */
   private _wasStreaming = false;
   private _utilitiesMenuClickHandler: ((event: MouseEvent) => void) | undefined;
-  private _tabContextMenuClickHandler: ((event: MouseEvent) => void) | undefined;
+  private _tabContextMenuClickHandler:
+    | ((event: MouseEvent) => void)
+    | undefined;
   private readonly _utilitiesMenuId = "pi-utilities-menu";
   private readonly _tabContextMenuId = "pi-tab-context-menu";
   private readonly _contextPillBodyId = "pi-context-pill-body";
@@ -215,23 +242,32 @@ export class PiSidebar extends LitElement {
     }
   };
 
-  getInput(): PiInput | undefined { return this._input ?? undefined; }
-  getTextarea(): HTMLTextAreaElement | undefined { return this._input?.getTextarea(); }
+  getInput(): PiInput | undefined {
+    return this._input ?? undefined;
+  }
+  getTextarea(): HTMLTextAreaElement | undefined {
+    return this._input?.getTextarea();
+  }
 
   focusTabNavigationAnchor(): boolean {
-    const activeTab = this.querySelector<HTMLButtonElement>(".pi-session-tab.is-active .pi-session-tab__main");
+    const activeTab = this.querySelector<HTMLButtonElement>(
+      ".pi-session-tab.is-active .pi-session-tab__main",
+    );
     if (activeTab) {
       activeTab.focus();
       return true;
     }
 
-    const firstTab = this.querySelector<HTMLButtonElement>(".pi-session-tab__main");
+    const firstTab = this.querySelector<HTMLButtonElement>(
+      ".pi-session-tab__main",
+    );
     if (firstTab) {
       firstTab.focus();
       return true;
     }
 
-    const utilitiesButton = this.querySelector<HTMLButtonElement>(".pi-utilities-btn");
+    const utilitiesButton =
+      this.querySelector<HTMLButtonElement>(".pi-utilities-btn");
     if (utilitiesButton) {
       utilitiesButton.focus();
       return true;
@@ -265,7 +301,9 @@ export class PiSidebar extends LitElement {
     }
   }
 
-  protected override createRenderRoot() { return this; }
+  protected override createRenderRoot() {
+    return this;
+  }
 
   override connectedCallback() {
     super.connectedCallback();
@@ -292,7 +330,10 @@ export class PiSidebar extends LitElement {
     this._resizeObserver = undefined;
 
     if (this._scrollContainerEl && this._scrollListener) {
-      this._scrollContainerEl.removeEventListener("scroll", this._scrollListener);
+      this._scrollContainerEl.removeEventListener(
+        "scroll",
+        this._scrollListener,
+      );
     }
     this._scrollContainerEl = undefined;
     this._scrollListener = undefined;
@@ -498,7 +539,10 @@ export class PiSidebar extends LitElement {
     this._resizeObserver?.disconnect();
 
     if (this._scrollContainerEl && this._scrollListener) {
-      this._scrollContainerEl.removeEventListener("scroll", this._scrollListener);
+      this._scrollContainerEl.removeEventListener(
+        "scroll",
+        this._scrollListener,
+      );
     }
 
     this._scrollContainerEl = container;
@@ -518,9 +562,15 @@ export class PiSidebar extends LitElement {
 
     this._scrollListener = () => {
       const top = container.scrollTop;
-      const distFromBottom = container.scrollHeight - top - container.clientHeight;
-      if (top < this._lastScrollTop && distFromBottom > AUTO_SCROLL_DISENGAGE_PX) this._autoScroll = false;
-      else if (distFromBottom < AUTO_SCROLL_REENGAGE_PX) this._autoScroll = true;
+      const distFromBottom =
+        container.scrollHeight - top - container.clientHeight;
+      if (
+        top < this._lastScrollTop &&
+        distFromBottom > AUTO_SCROLL_DISENGAGE_PX
+      )
+        this._autoScroll = false;
+      else if (distFromBottom < AUTO_SCROLL_REENGAGE_PX)
+        this._autoScroll = true;
       this._lastScrollTop = top;
     };
     container.addEventListener("scroll", this._scrollListener);
@@ -532,7 +582,9 @@ export class PiSidebar extends LitElement {
     this._input?.clear();
   };
 
-  private _onAbort = () => { this.onAbort?.(); };
+  private _onAbort = () => {
+    this.onAbort?.();
+  };
 
   private _onSessionTabKeyDown = (runtimeId: string, event: KeyboardEvent) => {
     const direction = getHorizontalArrowDirection(event);
@@ -584,9 +636,13 @@ export class PiSidebar extends LitElement {
       return;
     }
 
-    const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+    const maxScrollLeft = Math.max(
+      0,
+      scroller.scrollWidth - scroller.clientWidth,
+    );
     const canScrollLeft = maxScrollLeft > 1 && scroller.scrollLeft > 1;
-    const canScrollRight = maxScrollLeft > 1 && scroller.scrollLeft < maxScrollLeft - 1;
+    const canScrollRight =
+      maxScrollLeft > 1 && scroller.scrollLeft < maxScrollLeft - 1;
 
     if (canScrollLeft !== this._tabCanScrollLeft) {
       this._tabCanScrollLeft = canScrollLeft;
@@ -611,7 +667,10 @@ export class PiSidebar extends LitElement {
     });
   }
 
-  private _resolveTabContextMenuPosition(event: MouseEvent): { x: number; y: number } {
+  private _resolveTabContextMenuPosition(event: MouseEvent): {
+    x: number;
+    y: number;
+  } {
     const offset = 6;
     const estimatedMenuWidth = 190;
     const estimatedMenuHeight = 220;
@@ -666,7 +725,11 @@ export class PiSidebar extends LitElement {
   private _detachTabContextMenuDocumentListener(): void {
     if (!this._tabContextMenuClickHandler) return;
 
-    document.removeEventListener("click", this._tabContextMenuClickHandler, true);
+    document.removeEventListener(
+      "click",
+      this._tabContextMenuClickHandler,
+      true,
+    );
     this._tabContextMenuClickHandler = undefined;
   }
 
@@ -700,7 +763,9 @@ export class PiSidebar extends LitElement {
       ${this._renderTabContextMenuOverlay()}
       <div class="pi-messages">
         <div class="pi-messages__inner">
-          ${hasMessages ? html`
+          ${
+            hasMessages
+              ? html`
             <message-list
               .messages=${state.messages}
               .tools=${state.tools}
@@ -715,7 +780,9 @@ export class PiSidebar extends LitElement {
               .pendingToolCalls=${state.pendingToolCalls}
               .toolResultsById=${toolResultsById}
             ></streaming-message-container>
-          ` : ""}
+          `
+              : ""
+          }
         </div>
         ${!hasMessages ? this._renderEmptyState() : ""}
       </div>
@@ -757,8 +824,10 @@ export class PiSidebar extends LitElement {
           </button>
           <div class="pi-session-tabs__scroller" @scroll=${() => this._updateSessionTabOverflow()}>
             ${this.sessionTabs.map((tab) => {
-              const isContextOpen = this._tabContextMenuRuntimeId === tab.runtimeId;
-              const canCloseThisTab = canCloseTabs && tab.lockState !== "holding_lock";
+              const isContextOpen =
+                this._tabContextMenuRuntimeId === tab.runtimeId;
+              const canCloseThisTab =
+                canCloseTabs && tab.lockState !== "holding_lock";
 
               return html`
                 <div
@@ -780,15 +849,20 @@ export class PiSidebar extends LitElement {
                     aria-label=${t("sidebar.tabs.open", { title: tab.title })}
                   >
                     <span class="pi-session-tab__title">${tab.title}</span>
-                    ${tab.lockState === "waiting_for_lock"
-                      ? html`<span class="pi-session-tab__lock">${t("sidebar.tabs.lock")}</span>`
-                      : nothing}
-                    ${tab.isBusy
-                      ? html`<span class="pi-session-tab__busy" aria-hidden="true"></span>`
-                      : nothing}
+                    ${
+                      tab.lockState === "waiting_for_lock"
+                        ? html`<span class="pi-session-tab__lock">${t("sidebar.tabs.lock")}</span>`
+                        : nothing
+                    }
+                    ${
+                      tab.isBusy
+                        ? html`<span class="pi-session-tab__busy" aria-hidden="true"></span>`
+                        : nothing
+                    }
                   </button>
-                  ${canCloseTabs
-                    ? html`
+                  ${
+                    canCloseTabs
+                      ? html`
                       <button
                         class="pi-session-tab__close"
                         @click=${(event: Event) => {
@@ -797,15 +871,18 @@ export class PiSidebar extends LitElement {
                           this.onCloseTab?.(tab.runtimeId);
                         }}
                         ?disabled=${!canCloseThisTab}
-                        title=${tab.lockState === "holding_lock"
-                          ? t("sidebar.tabs.close.wait")
-                          : t("sidebar.tabs.close")}
+                        title=${
+                          tab.lockState === "holding_lock"
+                            ? t("sidebar.tabs.close.wait")
+                            : t("sidebar.tabs.close")
+                        }
                         aria-label=${t("sidebar.tabs.close")}
                       >
                         ×
                       </button>
                     `
-                    : nothing}
+                      : nothing
+                  }
                 </div>
               `;
             })}
@@ -842,10 +919,16 @@ export class PiSidebar extends LitElement {
   private _renderTabContextMenu(tab: SessionTabView) {
     const canCloseTabs = this.sessionTabs.length > 1;
     const closeDisabled = !canCloseTabs || tab.lockState === "holding_lock";
-    const closeOthersDisabled = this.sessionTabs.length <= 1 || !this.onCloseOtherTabs;
-    const tabIndex = this.sessionTabs.findIndex((entry) => entry.runtimeId === tab.runtimeId);
+    const closeOthersDisabled =
+      this.sessionTabs.length <= 1 || !this.onCloseOtherTabs;
+    const tabIndex = this.sessionTabs.findIndex(
+      (entry) => entry.runtimeId === tab.runtimeId,
+    );
     const moveLeftDisabled = tabIndex <= 0 || !this.onMoveTabLeft;
-    const moveRightDisabled = tabIndex < 0 || tabIndex >= this.sessionTabs.length - 1 || !this.onMoveTabRight;
+    const moveRightDisabled =
+      tabIndex < 0 ||
+      tabIndex >= this.sessionTabs.length - 1 ||
+      !this.onMoveTabRight;
 
     return html`
       <div
@@ -853,9 +936,11 @@ export class PiSidebar extends LitElement {
         id=${this._tabContextMenuId}
         role="menu"
         aria-label=${t("sidebar.contextmenu.aria", { title: tab.title })}
-        style=${this._tabContextMenuPosition
-          ? `left:${this._tabContextMenuPosition.x}px;top:${this._tabContextMenuPosition.y}px;`
-          : ""}
+        style=${
+          this._tabContextMenuPosition
+            ? `left:${this._tabContextMenuPosition.x}px;top:${this._tabContextMenuPosition.y}px;`
+            : ""
+        }
       >
         <button
           role="menuitem"
@@ -939,7 +1024,9 @@ export class PiSidebar extends LitElement {
       return nothing;
     }
 
-    const tab = this.sessionTabs.find((entry) => entry.runtimeId === this._tabContextMenuRuntimeId);
+    const tab = this.sessionTabs.find(
+      (entry) => entry.runtimeId === this._tabContextMenuRuntimeId,
+    );
     if (!tab) {
       return nothing;
     }
@@ -976,7 +1063,11 @@ export class PiSidebar extends LitElement {
 
   private _detachUtilitiesMenuDocumentListener() {
     if (!this._utilitiesMenuClickHandler) return;
-    document.removeEventListener("click", this._utilitiesMenuClickHandler, true);
+    document.removeEventListener(
+      "click",
+      this._utilitiesMenuClickHandler,
+      true,
+    );
     this._utilitiesMenuClickHandler = undefined;
   }
 
@@ -988,34 +1079,55 @@ export class PiSidebar extends LitElement {
   private _renderUtilitiesMenu() {
     return html`
       <div class="pi-utilities-menu" id=${this._utilitiesMenuId} role="menu" aria-label=${t("sidebar.utilities.aria")}>
-        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenSettings?.(); }}>
+        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => {
+          this._closeUtilitiesMenu();
+          this.onOpenSettings?.();
+        }}>
           <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(Wrench, "sm")}</span> ${t("sidebar.menu.setup")}
         </button>
-        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenExtensions?.(); }}>
+        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => {
+          this._closeUtilitiesMenu();
+          this.onOpenExtensions?.();
+        }}>
           <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(Puzzle, "sm")}</span> ${t("sidebar.menu.extensions")}
         </button>
 
         <div class="pi-utilities-menu__divider" role="separator"></div>
 
-        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this._onOpenFilesWorkspace(); }}>
+        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => {
+          this._closeUtilitiesMenu();
+          this._onOpenFilesWorkspace();
+        }}>
           <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(FileText, "sm")}</span> ${t("sidebar.menu.files")}
         </button>
-        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenRules?.(); }}>
+        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => {
+          this._closeUtilitiesMenu();
+          this.onOpenRules?.();
+        }}>
           <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(Ruler, "sm")}</span> ${t("sidebar.menu.rules")}
         </button>
 
         <div class="pi-utilities-menu__divider" role="separator"></div>
 
-        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenResumePicker?.(); }}>
+        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => {
+          this._closeUtilitiesMenu();
+          this.onOpenResumePicker?.();
+        }}>
           <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(RotateCcw, "sm")}</span> ${t("sidebar.menu.resume")}
         </button>
-        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenRecovery?.(); }}>
+        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => {
+          this._closeUtilitiesMenu();
+          this.onOpenRecovery?.();
+        }}>
           <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(Archive, "sm")}</span> ${t("sidebar.menu.backups")}
         </button>
 
         <div class="pi-utilities-menu__divider" role="separator"></div>
 
-        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => { this._closeUtilitiesMenu(); this.onOpenShortcuts?.(); }}>
+        <button role="menuitem" class="pi-utilities-menu__item" @click=${() => {
+          this._closeUtilitiesMenu();
+          this.onOpenShortcuts?.();
+        }}>
           <span class="pi-utilities-menu__item-icon" aria-hidden="true">${icon(Keyboard, "sm")}</span> ${t("sidebar.menu.keyboard_shortcuts")}
         </button>
       </div>
@@ -1031,7 +1143,9 @@ export class PiSidebar extends LitElement {
     const ctx = getLastContext(sessionId);
     if (!ctx?.tools) return;
     const json = JSON.stringify(ctx.tools, null, 2);
-    navigator.clipboard.writeText(json).catch(() => { /* ignore */ });
+    navigator.clipboard.writeText(json).catch(() => {
+      /* ignore */
+    });
   }
 
   private _renderContextPill() {
@@ -1039,12 +1153,15 @@ export class PiSidebar extends LitElement {
 
     const sessionId = this.agent?.sessionId;
     const sessionSnapshots = sessionId
-      ? this._payloadSnapshots.filter((snapshot) => snapshot.sessionId === sessionId)
+      ? this._payloadSnapshots.filter(
+          (snapshot) => snapshot.sessionId === sessionId,
+        )
       : this._payloadSnapshots;
 
-    const latestSnapshot = sessionSnapshots.length > 0
-      ? sessionSnapshots[sessionSnapshots.length - 1]
-      : null;
+    const latestSnapshot =
+      sessionSnapshots.length > 0
+        ? sessionSnapshots[sessionSnapshots.length - 1]
+        : null;
 
     const expanded = this._contextPillExpanded;
 
@@ -1068,13 +1185,17 @@ export class PiSidebar extends LitElement {
               <span>${t("sidebar.context_pill.no_calls")}</span>
               <span class="pi-context-pill__chevron ${expanded ? "pi-context-pill__chevron--open" : ""}">${icon(ChevronRight, "sm")}</span>
             </button>
-            ${expanded ? html`
+            ${
+              expanded
+                ? html`
               <div class="pi-context-pill__body" id=${this._contextPillBodyId}>
                 <div class="pi-context-pill__section">
                   <markdown-block .content=${hintMd}></markdown-block>
                 </div>
               </div>
-            ` : nothing}
+            `
+                : nothing
+            }
           </div>
         </div>
       `;
@@ -1091,7 +1212,9 @@ export class PiSidebar extends LitElement {
     const ctx = expanded ? getLastContext(sessionId) : undefined;
 
     const prefixChangeSummary = latestSnapshot.prefixChanged
-      ? t("sidebar.context_pill.yes", { reasons: formatPrefixChange(latestSnapshot.prefixChangeReasons) })
+      ? t("sidebar.context_pill.yes", {
+          reasons: formatPrefixChange(latestSnapshot.prefixChangeReasons),
+        })
       : t("sidebar.context_pill.no");
 
     const summaryRows = [
@@ -1113,15 +1236,22 @@ export class PiSidebar extends LitElement {
     const recentMd = [
       `| call | phase | bundle | tools | prefix | total chars | payload shape |`,
       `|---|---|---|---|---|---|---|`,
-      ...sessionSnapshots.slice(-8).reverse().map((snapshot) => {
-        const phase = snapshot.isToolContinuation ? t("sidebar.context_pill.continuation") : t("sidebar.context_pill.first");
-        const tools = snapshot.toolsIncluded ? String(snapshot.toolCount) : t("sidebar.context_pill.stripped");
-        const prefix = snapshot.prefixChanged
-          ? formatPrefixChange(snapshot.prefixChangeReasons)
-          : t("sidebar.context_pill.stable");
-        const payloadShape = formatPayloadShape(snapshot.payloadShape);
-        return `| #${snapshot.call} | ${phase} | \`${snapshot.toolBundle}\` | ${tools} | ${prefix} | ${snapshot.totalChars.toLocaleString()} | ${payloadShape} |`;
-      }),
+      ...sessionSnapshots
+        .slice(-8)
+        .reverse()
+        .map((snapshot) => {
+          const phase = snapshot.isToolContinuation
+            ? t("sidebar.context_pill.continuation")
+            : t("sidebar.context_pill.first");
+          const tools = snapshot.toolsIncluded
+            ? String(snapshot.toolCount)
+            : t("sidebar.context_pill.stripped");
+          const prefix = snapshot.prefixChanged
+            ? formatPrefixChange(snapshot.prefixChangeReasons)
+            : t("sidebar.context_pill.stable");
+          const payloadShape = formatPayloadShape(snapshot.payloadShape);
+          return `| #${snapshot.call} | ${phase} | \`${snapshot.toolBundle}\` | ${tools} | ${prefix} | ${snapshot.totalChars.toLocaleString()} | ${payloadShape} |`;
+        }),
     ].join("\n");
 
     // Tools table
@@ -1140,7 +1270,9 @@ export class PiSidebar extends LitElement {
     // System prompt rendered as markdown (not in a code fence)
     const systemMd = ctx?.systemPrompt ?? "*(none captured for this call)*";
 
-    const phaseLabel = latestSnapshot.isToolContinuation ? ` · ${t("sidebar.context_pill.continuation")}` : ` · ${t("sidebar.context_pill.first")}`;
+    const phaseLabel = latestSnapshot.isToolContinuation
+      ? ` · ${t("sidebar.context_pill.continuation")}`
+      : ` · ${t("sidebar.context_pill.first")}`;
 
     return html`
       <div class="pi-message-gutter">
@@ -1155,7 +1287,9 @@ export class PiSidebar extends LitElement {
             <span>Context · call #${call}${phaseLabel} · ${formatK(total)} chars</span>
             <span class="pi-context-pill__chevron ${expanded ? "pi-context-pill__chevron--open" : ""}">${icon(ChevronRight, "sm")}</span>
           </button>
-          ${expanded ? html`
+          ${
+            expanded
+              ? html`
             <div class="pi-context-pill__body" id=${this._contextPillBodyId}>
               <div class="pi-context-pill__section">
                 <markdown-block .content=${summaryMd}></markdown-block>
@@ -1176,7 +1310,9 @@ export class PiSidebar extends LitElement {
                 <markdown-block .content=${systemMd}></markdown-block>
               </div>
             </div>
-          ` : nothing}
+          `
+              : nothing
+          }
         </div>
       </div>
     `;
@@ -1215,7 +1351,8 @@ export class PiSidebar extends LitElement {
             ${t("sidebar.empty.tagline")}
           </p>
           <div class="pi-empty__hints">
-            ${this.emptyHints.map((hint) => html`
+            ${this.emptyHints.map(
+              (hint) => html`
               <button
                 class="pi-empty__hint"
                 title=${t("sidebar.empty.hint.title")}
@@ -1224,7 +1361,8 @@ export class PiSidebar extends LitElement {
                 <span class="pi-empty__hint-label">${hint.label}</span>
                 <span class="pi-empty__hint-preview">${this._summarizeHintPrompt(hint.prompt)}</span>
               </button>
-            `)}
+            `,
+            )}
           </div>
         </div>
       </div>

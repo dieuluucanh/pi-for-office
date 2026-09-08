@@ -1,10 +1,10 @@
-# Pi for Excel
+# Pi for Office
 
 English | [简体中文](./README.zh-CN.md)
 
 Open-source, multi-model AI sidebar add-in for Microsoft Excel. Powered by [Pi](https://pi.dev).
 
-Pi for Excel is an AI agent that lives inside Excel. It reads your workbook, makes changes, and does research — using any model you choose. Bring your own API key or OAuth login for Anthropic, OpenAI, Google Gemini, or GitHub Copilot.
+Pi for Office is an AI agent that lives inside Excel. It reads your workbook, makes changes, and does research — using any model you choose. Bring your own API key or OAuth login for Anthropic, OpenAI, Google Gemini, or GitHub Copilot.
 
 ## Features
 
@@ -82,7 +82,7 @@ Pi for Excel is an AI agent that lives inside Excel. It reads your workbook, mak
 
 ```bash
 git clone https://github.com/tmustier/pi-for-excel.git
-cd pi-for-excel
+cd pi-for-office
 npm install
 
 # Generate local HTTPS certs (Office.js requires HTTPS)
@@ -112,7 +112,7 @@ Then sideload the dev manifest into Excel:
 cp manifest.xml ~/Library/Containers/com.microsoft.Excel/Data/Documents/wef/
 ```
 
-Then open Excel → **Insert** → **My Add-ins** → **Pi for Excel**.
+Then open Excel → **Insert** → **My Add-ins** → **Pi for Office**.
 
 **Windows** ([Microsoft docs](https://learn.microsoft.com/en-us/office/dev/add-ins/testing/create-a-network-shared-folder-catalog-for-task-pane-and-content-add-ins)):
 
@@ -121,7 +121,7 @@ Windows desktop Excel can't upload a manifest directly — it installs from a tr
 1. Share a local folder (folder **Properties** → **Sharing** → **Share**) and note its network path.
 2. In Excel: **File** → **Options** → **Trust Center** → **Trust Center Settings** → **Trusted Add-in Catalogs** → add the network path as **Catalog Url**, tick **Show in Menu**, restart Excel.
 3. Copy `manifest.xml` into the shared folder.
-4. **Home** → **Add-ins** → **Advanced** → **SHARED FOLDER** → **Pi for Excel**.
+4. **Home** → **Add-ins** → **Advanced** → **SHARED FOLDER** → **Pi for Office**.
 
 **Excel on the web** ([Microsoft docs](https://learn.microsoft.com/en-us/office/dev/add-ins/testing/sideload-office-add-ins-for-testing)):
 
@@ -149,7 +149,7 @@ The dev manifest points to `https://localhost:3141`. The production manifest (`m
 
 Some OAuth token endpoints are blocked by CORS inside Office webviews. If OAuth login fails:
 
-1. User setup command: `npx pi-for-excel-proxy` (or `curl -fsSL https://piforexcel.com/proxy | sh` if Node is missing)
+1. User setup command: `npx pi-for-office-proxy` (or `curl -fsSL https://dieuluucanh.github.io/pi-for-office/proxy.sh | sh` if Node is missing)
 2. Dev/source setup command: `npm run proxy:https` (defaults to `https://localhost:3003`; if 3003 is busy for another service, copy the random port printed in the terminal)
 3. In Pi → `/settings` → **Proxy** → enable and set the printed URL
 4. Retry login
@@ -160,8 +160,8 @@ API-key auth generally works without the proxy.
 
 Use one-command local bridge helpers:
 
-- Python / LibreOffice bridge: `npx pi-for-excel-python-bridge` (default URL `https://localhost:3340`, real mode)
-- tmux bridge: `npx pi-for-excel-tmux-bridge` (default URL `https://localhost:3341`, real mode)
+- Python / LibreOffice bridge: `npx pi-for-office-python-bridge` (default URL `https://localhost:3340`, real mode)
+- tmux bridge: `npx pi-for-office-tmux-bridge` (default URL `https://localhost:3341`, real mode)
 
 In Pi, these localhost bridge URLs are used by default. Configure `/experimental ...-bridge-url` only when you want a non-default URL.
 
@@ -173,8 +173,8 @@ Real-mode prerequisites:
 
 Optional assisted install (macOS/Homebrew):
 
-- `npx pi-for-excel-python-bridge --install-missing`
-- `npx pi-for-excel-tmux-bridge --install-missing`
+- `npx pi-for-office-python-bridge --install-missing`
+- `npx pi-for-office-tmux-bridge --install-missing`
 
 Manual macOS install:
 
@@ -185,14 +185,14 @@ brew install --cask libreoffice
 
 To force safe simulated mode instead:
 
-- `PYTHON_BRIDGE_MODE=stub npx pi-for-excel-python-bridge`
-- `TMUX_BRIDGE_MODE=stub npx pi-for-excel-tmux-bridge`
+- `PYTHON_BRIDGE_MODE=stub npx pi-for-office-python-bridge`
+- `TMUX_BRIDGE_MODE=stub npx pi-for-office-tmux-bridge`
 
 Source-checkout alternatives remain available via `npm run python:bridge:https` and `npm run tmux:bridge:https`.
 
 ## Architecture
 
-Pi for Excel is a single-page Office taskpane add-in built with:
+Pi for Office is a single-page Office taskpane add-in built with:
 
 - **[Vite](https://vite.dev/)** — dev server + production bundler
 - **[Lit](https://lit.dev/)** — web components for the sidebar UI
@@ -235,9 +235,9 @@ src/
 └── utils/             # Shared helpers (HTML escape, type guards, errors)
 
 scripts/               # Dev helpers — CORS proxy, tmux/python bridges, manifest gen
-pkg/proxy/             # Publishable npm CLI package: `pi-for-excel-proxy`
-pkg/python-bridge/     # Publishable npm CLI package: `pi-for-excel-python-bridge`
-pkg/tmux-bridge/       # Publishable npm CLI package: `pi-for-excel-tmux-bridge`
+pkg/proxy/             # Publishable npm CLI package: `pi-for-office-proxy`
+pkg/python-bridge/     # Publishable npm CLI package: `pi-for-office-python-bridge`
+pkg/tmux-bridge/       # Publishable npm CLI package: `pi-for-office-tmux-bridge`
 tests/                 # Unit + security tests (~50 test files)
 docs/                  # Current docs (install/deploy/features/policy) + archive/ for historical plans
 skills/                # Bundled Agent Skill definitions (web-search, mcp-gateway, tmux-bridge, python-bridge)
@@ -275,7 +275,7 @@ Users install by downloading `manifest.prod.xml` and uploading it in Excel — t
 
 ## Credits
 
-- [Pi](https://github.com/badlogic/pi-mono) by [@badlogic](https://github.com/badlogic) (Mario Zechner) — the agent framework powering this project. Pi for Excel uses pi-agent-core, pi-ai, and pi-web-ui for the agent loop, LLM abstraction, and session storage.
+- [Pi](https://github.com/badlogic/pi-mono) by [@badlogic](https://github.com/badlogic) (Mario Zechner) — the agent framework powering this project. Pi for Office uses pi-agent-core, pi-ai, and pi-web-ui for the agent loop, LLM abstraction, and session storage.
 - [whimsical.ts](https://github.com/mitsuhiko/agent-stuff/blob/main/pi-extensions/whimsical.ts) by [@mitsuhiko](https://github.com/mitsuhiko) (Armin Ronacher) — the rotating "Working…" messages are adapted from his Pi extension, rewritten for a spreadsheet/finance audience.
 
 ## License

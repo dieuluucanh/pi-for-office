@@ -1,25 +1,25 @@
-# pi-for-excel-proxy
+# pi-for-office-proxy
 
-Local HTTPS CORS proxy helper for Pi for Excel OAuth logins.
+Local HTTPS CORS proxy helper for Pi for Office OAuth logins.
 
 ## Usage
 
 ```bash
-npx pi-for-excel-proxy
+npx pi-for-office-proxy
 ```
 
 This command:
 
 1. Ensures `mkcert` exists (installs via Homebrew on macOS if missing)
-2. Creates certificates in `~/.pi-for-excel/certs/` when needed
+2. Creates certificates in `~/.pi-for-office/certs/` when needed
 3. Starts the proxy at `https://localhost:3003`, or reuses an already-running healthy proxy on that URL
 4. Picks a random free port only when 3003 is busy and no compatible default proxy is already running
 5. Starts loopback-only callback listeners for ChatGPT, Anthropic, and Google OAuth so supported logins can complete without copy/paste when possible
-6. Bridges authenticated ChatGPT Codex requests to the upstream WebSocket transport when Pi for Excel requests it (required for GPT-5.6 Luna in Office WebViews)
+6. Bridges authenticated ChatGPT Codex requests to the upstream WebSocket transport when Pi for Office requests it (required for GPT-5.6 Luna in Office WebViews)
 
 The bridge matches native Pi's upstream transport identity and UUIDv7 session semantics, and advertises `X-Pi-For-Excel-Codex-WebSocket-Bridge: 1` on `/healthz`. A pre-`0.2.5-pre` process is intentionally treated as outdated: stop it, then run the current package so Luna is not routed through the unsupported SSE path.
 
-Then in Pi for Excel:
+Then in Pi for Office:
 
 1. Open `/settings`
 2. Enable **Proxy**

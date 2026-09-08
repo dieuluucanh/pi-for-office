@@ -1,7 +1,8 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 
-
-function isTaskpaneRuntimeUtilsPayloadShape(value: DynamicValue): value is DynamicObject {
+function isTaskpaneRuntimeUtilsPayloadShape(
+  value: DynamicValue,
+): value is DynamicObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -34,7 +35,9 @@ function serializeToolParameters(parameters: DynamicValue): string {
  * We intentionally exclude function identity (`execute`) so refresh passes that
  * rebuild tool objects without schema changes can be no-ops.
  */
-export function createRuntimeToolFingerprint(tools: readonly AgentTool[]): string {
+export function createRuntimeToolFingerprint(
+  tools: readonly AgentTool[],
+): string {
   if (tools.length === 0) {
     return "";
   }
@@ -72,14 +75,18 @@ export function shouldApplyRuntimeToolUpdate(args: {
 export function isRuntimeAgentTool(value: DynamicValue): value is AgentTool {
   if (!isTaskpaneRuntimeUtilsPayloadShape(value)) return false;
 
-  return typeof value.name === "string"
-    && typeof value.label === "string"
-    && typeof value.description === "string"
-    && "parameters" in value
-    && typeof value.execute === "function";
+  return (
+    typeof value.name === "string" &&
+    typeof value.label === "string" &&
+    typeof value.description === "string" &&
+    "parameters" in value &&
+    typeof value.execute === "function"
+  );
 }
 
-export function normalizeRuntimeTools(candidates: readonly DynamicValue[]): AgentTool[] {
+export function normalizeRuntimeTools(
+  candidates: readonly DynamicValue[],
+): AgentTool[] {
   const seen = new Set<string>();
   const out: AgentTool[] = [];
 
@@ -90,7 +97,9 @@ export function normalizeRuntimeTools(candidates: readonly DynamicValue[]): Agen
     }
 
     if (seen.has(candidate.name)) {
-      console.warn(`[pi] Ignoring duplicate runtime tool name: ${candidate.name}`);
+      console.warn(
+        `[pi] Ignoring duplicate runtime tool name: ${candidate.name}`,
+      );
       continue;
     }
 
@@ -114,7 +123,32 @@ export function isLikelyCorsErrorMessage(msg: string): boolean {
   return false;
 }
 
-export function createAsyncCoalescer(task: () => Promise<void>): () => Promise<void> {
+/** Proxy target-allowlist policy error (proxy returned 403 "blocked_target_not_allowlisted"). */
+export function isProxyTargetBlockedMessage(msg: string): boolean {
+  const m = msg.toLowerCase();
+  return (
+    m.includes("target host is not allowlisted") ||
+    m.includes("blocked_target_not_allowlisted")
+  );
+}
+
+/** Proxy is running but upstream failed or is unreachable (502, ECONNREFUSED, proxy error). */
+export function isProxyUnreachableMessage(msg: string): boolean {
+  const m = msg.toLowerCase();
+  if (
+    m.includes("proxy error") ||
+    m.includes("502") ||
+    m.includes("bad gateway")
+  )
+    return true;
+  if (m.includes("econnrefused") || m.includes("connection refused"))
+    return true;
+  return false;
+}
+
+export function createAsyncCoalescer(
+  task: () => Promise<void>,
+): () => Promise<void> {
   let inFlight: Promise<void> | null = null;
   let rerunRequested = false;
 

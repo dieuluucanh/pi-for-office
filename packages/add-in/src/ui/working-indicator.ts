@@ -1,5 +1,5 @@
 /**
- * Pi for Excel — Working indicator with rotating hints and whimsical status.
+ * Pi for Office — Working indicator with rotating hints and whimsical status.
  *
  * Shows while the agent is streaming. Two independently rotating texts:
  * - Left: whimsical "working" phrases (rotate every ~6s)
@@ -46,7 +46,9 @@ export class WorkingIndicator extends LitElement {
   private _hintTimer: ReturnType<typeof setInterval> | undefined;
   private _staggerTimeout: ReturnType<typeof setTimeout> | undefined;
 
-  protected override createRenderRoot() { return this; }
+  protected override createRenderRoot() {
+    return this;
+  }
 
   override connectedCallback() {
     super.connectedCallback();
@@ -56,7 +58,11 @@ export class WorkingIndicator extends LitElement {
   }
 
   override updated(changed: Map<string, DynamicValue>) {
-    if (changed.has("active") || changed.has("primaryText") || changed.has("hintText")) {
+    if (
+      changed.has("active") ||
+      changed.has("primaryText") ||
+      changed.has("hintText")
+    ) {
       if (this.active) this._startRotation();
       else this._stopRotation();
     }
@@ -98,9 +104,18 @@ export class WorkingIndicator extends LitElement {
   }
 
   private _stopRotation() {
-    if (this._staggerTimeout) { clearTimeout(this._staggerTimeout); this._staggerTimeout = undefined; }
-    if (this._whimsicalTimer) { clearInterval(this._whimsicalTimer); this._whimsicalTimer = undefined; }
-    if (this._hintTimer) { clearInterval(this._hintTimer); this._hintTimer = undefined; }
+    if (this._staggerTimeout) {
+      clearTimeout(this._staggerTimeout);
+      this._staggerTimeout = undefined;
+    }
+    if (this._whimsicalTimer) {
+      clearInterval(this._whimsicalTimer);
+      this._whimsicalTimer = undefined;
+    }
+    if (this._hintTimer) {
+      clearInterval(this._hintTimer);
+      this._hintTimer = undefined;
+    }
   }
 
   private _rotateHint() {
@@ -108,7 +123,9 @@ export class WorkingIndicator extends LitElement {
     setTimeout(() => {
       // Random pick, avoiding current
       let next: number;
-      do { next = Math.floor(Math.random() * HINT_KEYS.length); } while (next === this._hintIndex && HINT_KEYS.length > 1);
+      do {
+        next = Math.floor(Math.random() * HINT_KEYS.length);
+      } while (next === this._hintIndex && HINT_KEYS.length > 1);
       this._hintIndex = next;
       this._fadingHint = false;
     }, 250); // half of the CSS transition duration
@@ -132,21 +149,22 @@ export class WorkingIndicator extends LitElement {
 
     return html`
       <div class="pi-working ${fixed ? "pi-working--fixed" : ""}">
-        ${fixed
-          ? html`
+        ${
+          fixed
+            ? html`
             <span class="pi-working__pill">
               <span class="pi-working__spinner" aria-hidden="true"></span>
               ${left}
             </span>
           `
-          : html`
+            : html`
             <span class="pi-working__text ${this._fadingWhimsical ? "pi-working--fading" : ""}">
               ${left}
             </span>
           `
         }
 
-        <span class="pi-working__hint ${fixed ? "" : (this._fadingHint ? "pi-working--fading" : "")}">
+        <span class="pi-working__hint ${fixed ? "" : this._fadingHint ? "pi-working--fading" : ""}">
           ${right}
         </span>
       </div>

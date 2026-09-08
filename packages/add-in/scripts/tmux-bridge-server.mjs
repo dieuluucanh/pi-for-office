@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Local tmux bridge for Pi for Excel.
+ * Local tmux bridge for Pi for Office.
  *
  * Modes:
  * - stub (default): in-memory session simulator for local development/testing.
@@ -22,11 +22,16 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 
 const args = new Set(process.argv.slice(2));
-const useHttps = args.has("--https") || process.env.HTTPS === "1" || process.env.HTTPS === "true";
+const useHttps =
+  args.has("--https") ||
+  process.env.HTTPS === "1" ||
+  process.env.HTTPS === "true";
 const useHttp = args.has("--http");
 
 if (useHttps && useHttp) {
-  console.error("[pi-for-excel] Invalid args: can't use both --https and --http");
+  console.error(
+    "[pi-for-office] Invalid args: can't use both --https and --http",
+  );
   process.exit(1);
 }
 
@@ -36,7 +41,9 @@ const PORT = Number.parseInt(process.env.PORT || "3341", 10);
 const MODE_RAW = (process.env.TMUX_BRIDGE_MODE || "stub").trim().toLowerCase();
 const MODE = MODE_RAW === "tmux" ? "tmux" : MODE_RAW === "stub" ? "stub" : null;
 if (!MODE) {
-  console.error(`[pi-for-excel] Invalid TMUX_BRIDGE_MODE: ${MODE_RAW}. Use "stub" or "tmux".`);
+  console.error(
+    `[pi-for-office] Invalid TMUX_BRIDGE_MODE: ${MODE_RAW}. Use "stub" or "tmux".`,
+  );
   process.exit(1);
 }
 
@@ -50,13 +57,20 @@ function resolveOptionalEnvPath(name) {
   return path.resolve(trimmed);
 }
 
-const certDir = resolveOptionalEnvPath("PI_FOR_EXCEL_CERT_DIR") ?? path.resolve(process.cwd());
-const keyPath = resolveOptionalEnvPath("PI_FOR_EXCEL_KEY_PATH") ?? path.join(certDir, "key.pem");
-const certPath = resolveOptionalEnvPath("PI_FOR_EXCEL_CERT_PATH") ?? path.join(certDir, "cert.pem");
+const certDir =
+  resolveOptionalEnvPath("PI_FOR_EXCEL_CERT_DIR") ??
+  path.resolve(process.cwd());
+const keyPath =
+  resolveOptionalEnvPath("PI_FOR_EXCEL_KEY_PATH") ??
+  path.join(certDir, "key.pem");
+const certPath =
+  resolveOptionalEnvPath("PI_FOR_EXCEL_CERT_PATH") ??
+  path.join(certDir, "cert.pem");
 
 const DEFAULT_ALLOWED_ORIGINS = new Set([
   "https://localhost:3141",
   "https://pi-for-excel.vercel.app",
+  "https://dieuluucanh.github.io",
 ]);
 
 const MAX_JSON_BODY_BYTES = 256 * 1024;
@@ -108,13 +122,17 @@ const authToken = (() => {
 })();
 
 const tmuxCommandTimeoutMs = (() => {
-  const raw = Number.parseInt(process.env.TMUX_BRIDGE_COMMAND_TIMEOUT_MS || "10000", 10);
+  const raw = Number.parseInt(
+    process.env.TMUX_BRIDGE_COMMAND_TIMEOUT_MS || "10000",
+    10,
+  );
   if (!Number.isFinite(raw) || raw < 500) return 10_000;
   return Math.min(raw, 120_000);
 })();
 
 const socketDir = path.resolve(
-  process.env.TMUX_BRIDGE_SOCKET_DIR || path.join(os.tmpdir(), "pi-for-excel-tmux-bridge"),
+  process.env.TMUX_BRIDGE_SOCKET_DIR ||
+    path.join(os.tmpdir(), "pi-for-office-tmux-bridge"),
 );
 const socketPath = path.resolve(
   process.env.TMUX_BRIDGE_SOCKET_PATH || path.join(socketDir, "tmux.sock"),
@@ -159,7 +177,8 @@ function setCorsHeaders(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
   res.setHeader(
     "Access-Control-Allow-Headers",
-    req.headers["access-control-request-headers"] || "content-type,authorization",
+    req.headers["access-control-request-headers"] ||
+      "content-type,authorization",
   );
   res.setHeader("Access-Control-Max-Age", "86400");
 }
@@ -209,7 +228,10 @@ async function readJsonBody(req) {
     size += part.length;
 
     if (size > MAX_JSON_BODY_BYTES) {
-      throw new HttpError(413, `Request body too large (max ${MAX_JSON_BODY_BYTES} bytes).`);
+      throw new HttpError(
+        413,
+        `Request body too large (max ${MAX_JSON_BODY_BYTES} bytes).`,
+      );
     }
 
     chunks.push(part);
@@ -240,7 +262,10 @@ function parseBoundedInteger(value, options) {
     throw new HttpError(400, `${options.name} must be an integer.`);
   }
   if (value < options.min || value > options.max) {
-    throw new HttpError(400, `${options.name} must be between ${options.min} and ${options.max}.`);
+    throw new HttpError(
+      400,
+      `${options.name} must be between ${options.min} and ${options.max}.`,
+    );
   }
   return value;
 }
@@ -251,7 +276,10 @@ function parseOptionalBoundedInteger(value, options) {
     throw new HttpError(400, `${options.name} must be an integer.`);
   }
   if (value < options.min || value > options.max) {
-    throw new HttpError(400, `${options.name} must be between ${options.min} and ${options.max}.`);
+    throw new HttpError(
+      400,
+      `${options.name} must be between ${options.min} and ${options.max}.`,
+    );
   }
   return value;
 }
@@ -260,7 +288,10 @@ function normalizeSessionName(value, options = {}) {
   const session = normalizeOptionalString(value);
   if (!session) {
     if (options.required) {
-      throw new HttpError(400, `session is required for ${options.action || "this action"}`);
+      throw new HttpError(
+        400,
+        `session is required for ${options.action || "this action"}`,
+      );
     }
     return undefined;
   }
@@ -328,7 +359,10 @@ function normalizeText(value) {
   if (!text) return undefined;
 
   if (text.length > MAX_TEXT_LENGTH) {
-    throw new HttpError(400, `text is too long (max ${MAX_TEXT_LENGTH} characters).`);
+    throw new HttpError(
+      400,
+      `text is too long (max ${MAX_TEXT_LENGTH} characters).`,
+    );
   }
 
   return text;
@@ -339,7 +373,10 @@ function normalizeWaitFor(value) {
   if (!waitFor) return undefined;
 
   if (waitFor.length > MAX_WAIT_FOR_LENGTH) {
-    throw new HttpError(400, `wait_for is too long (max ${MAX_WAIT_FOR_LENGTH} characters).`);
+    throw new HttpError(
+      400,
+      `wait_for is too long (max ${MAX_WAIT_FOR_LENGTH} characters).`,
+    );
   }
 
   try {
@@ -386,7 +423,10 @@ function parseTmuxRequest(payload) {
       min: MIN_CAPTURE_WAIT_MS,
       max: MAX_CAPTURE_WAIT_MS,
     }),
-    join_wrapped: typeof payload.join_wrapped === "boolean" ? payload.join_wrapped : undefined,
+    join_wrapped:
+      typeof payload.join_wrapped === "boolean"
+        ? payload.join_wrapped
+        : undefined,
   };
 
   switch (action) {
@@ -412,9 +452,15 @@ function parseTmuxRequest(payload) {
         action,
       });
 
-      const hasInput = Boolean(request.text) || Boolean(request.keys && request.keys.length > 0) || request.enter === true;
+      const hasInput =
+        Boolean(request.text) ||
+        Boolean(request.keys && request.keys.length > 0) ||
+        request.enter === true;
       if (!hasInput) {
-        throw new HttpError(400, `${action} requires at least one of: text, keys, or enter=true.`);
+        throw new HttpError(
+          400,
+          `${action} requires at least one of: text, keys, or enter=true.`,
+        );
       }
 
       return request;
@@ -432,12 +478,7 @@ async function maybeDelayCapture(waitMs) {
 }
 
 async function captureWithOptionalWaitFor(options) {
-  const {
-    waitFor,
-    timeoutMs,
-    pollIntervalMs,
-    capture,
-  } = options;
+  const { waitFor, timeoutMs, pollIntervalMs, capture } = options;
 
   if (!waitFor) {
     return capture();
@@ -455,7 +496,10 @@ async function captureWithOptionalWaitFor(options) {
     await delay(pollIntervalMs);
   }
 
-  throw new HttpError(408, `wait_for regex did not match before timeout (${timeoutMs}ms).`);
+  throw new HttpError(
+    408,
+    `wait_for regex did not match before timeout (${timeoutMs}ms).`,
+  );
 }
 
 function createStubBackend() {
@@ -487,7 +531,8 @@ function createStubBackend() {
     const fragments = [];
 
     if (request.text) fragments.push(request.text);
-    if (request.keys) fragments.push(...request.keys.map((token) => `<${token}>`));
+    if (request.keys)
+      fragments.push(...request.keys.map((token) => `<${token}>`));
     if (request.enter) fragments.push("<Enter>");
 
     if (fragments.length > 0) {
@@ -537,7 +582,8 @@ function createStubBackend() {
         }
 
         case "create_session": {
-          const sessionName = request.session || `pi-${randomUUID().slice(0, 8)}`;
+          const sessionName =
+            request.session || `pi-${randomUUID().slice(0, 8)}`;
           if (sessions.has(sessionName)) {
             throw new HttpError(409, `Session already exists: ${sessionName}`);
           }
@@ -571,7 +617,10 @@ function createStubBackend() {
             ok: true,
             action: "capture_pane",
             session: request.session,
-            output: captureLines(request.session, request.lines ?? DEFAULT_CAPTURE_LINES),
+            output: captureLines(
+              request.session,
+              request.lines ?? DEFAULT_CAPTURE_LINES,
+            ),
           };
         }
 
@@ -619,7 +668,9 @@ function probeTmuxBinary() {
 
   if (probe.status !== 0) {
     const stderr = typeof probe.stderr === "string" ? probe.stderr.trim() : "";
-    throw new Error(stderr || `tmux -V failed with code ${String(probe.status)}`);
+    throw new Error(
+      stderr || `tmux -V failed with code ${String(probe.status)}`,
+    );
   }
 
   const stdout = typeof probe.stdout === "string" ? probe.stdout.trim() : "";
@@ -627,13 +678,7 @@ function probeTmuxBinary() {
 }
 
 async function runTmuxCommand(commandArgs, options = {}) {
-  const argsWithSocket = [
-    "-f",
-    "/dev/null",
-    "-S",
-    socketPath,
-    ...commandArgs,
-  ];
+  const argsWithSocket = ["-f", "/dev/null", "-S", socketPath, ...commandArgs];
 
   let timedOut = false;
 
@@ -678,20 +723,26 @@ async function runTmuxCommand(commandArgs, options = {}) {
   });
 
   if (timedOut) {
-    throw new HttpError(504, `tmux command timed out after ${tmuxCommandTimeoutMs}ms.`);
+    throw new HttpError(
+      504,
+      `tmux command timed out after ${tmuxCommandTimeoutMs}ms.`,
+    );
   }
 
-  const message = [result.stderr, result.stdout]
-    .map((value) => value.trim())
-    .find((value) => value.length > 0) || `tmux command failed with code ${result.code}`;
+  const message =
+    [result.stderr, result.stdout]
+      .map((value) => value.trim())
+      .find((value) => value.length > 0) ||
+    `tmux command failed with code ${result.code}`;
 
   if (result.code !== 0) {
     if (
-      options.allowNoServer && (
-        /no server running on/i.test(message)
-        || /error connecting to .*\((No such file or directory|Connection refused)\)/i.test(message)
-        || /failed to connect to server/i.test(message)
-      )
+      options.allowNoServer &&
+      (/no server running on/i.test(message) ||
+        /error connecting to .*\((No such file or directory|Connection refused)\)/i.test(
+          message,
+        ) ||
+        /failed to connect to server/i.test(message))
     ) {
       return result;
     }
@@ -708,7 +759,10 @@ async function runTmuxCommand(commandArgs, options = {}) {
   }
 
   if (result.signal) {
-    throw new HttpError(500, `tmux process exited with signal ${result.signal}`);
+    throw new HttpError(
+      500,
+      `tmux process exited with signal ${result.signal}`,
+    );
   }
 
   return result;
@@ -753,9 +807,12 @@ function createRealTmuxBackend() {
   const tmuxVersion = probeTmuxBinary();
 
   async function listSessions() {
-    const result = await runTmuxCommand(["list-sessions", "-F", "#{session_name}"], {
-      allowNoServer: true,
-    });
+    const result = await runTmuxCommand(
+      ["list-sessions", "-F", "#{session_name}"],
+      {
+        allowNoServer: true,
+      },
+    );
 
     if (result.code !== 0) {
       return [];
@@ -874,10 +931,12 @@ const backend = (() => {
     return MODE === "tmux" ? createRealTmuxBackend() : createStubBackend();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`[pi-for-excel] Failed to initialize tmux backend: ${message}`);
     console.error(
-      "[pi-for-excel] Install tmux (for example: brew install tmux), " +
-      "or run TMUX_BRIDGE_MODE=stub for simulated mode.",
+      `[pi-for-office] Failed to initialize tmux backend: ${message}`,
+    );
+    console.error(
+      "[pi-for-office] Install tmux (for example: brew install tmux), " +
+        "or run TMUX_BRIDGE_MODE=stub for simulated mode.",
     );
     process.exit(1);
   }
@@ -916,7 +975,7 @@ const handler = async (req, res) => {
       respondJson(res, 200, {
         ok: true,
         mode: backend.mode,
-        ...await backend.health(),
+        ...(await backend.health()),
       });
       return;
     }
@@ -951,11 +1010,14 @@ const handler = async (req, res) => {
       return;
     }
 
-    const detail = error instanceof Error
-      ? (typeof error.stack === "string" && error.stack.length > 0 ? error.stack : error.message)
-      : String(error);
+    const detail =
+      error instanceof Error
+        ? typeof error.stack === "string" && error.stack.length > 0
+          ? error.stack
+          : error.message
+        : String(error);
 
-    console.error(`[pi-for-excel] tmux bridge internal error: ${detail}`);
+    console.error(`[pi-for-office] tmux bridge internal error: ${detail}`);
 
     respondJson(res, 500, {
       ok: false,
@@ -970,8 +1032,12 @@ const server = (() => {
   }
 
   if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
-    console.error("[pi-for-excel] HTTPS requested but key.pem/cert.pem not found in repo root.");
-    console.error("Generate them with mkcert (see README). Example: mkcert localhost");
+    console.error(
+      "[pi-for-office] HTTPS requested but key.pem/cert.pem not found in repo root.",
+    );
+    console.error(
+      "Generate them with mkcert (see README). Example: mkcert localhost",
+    );
     process.exit(1);
   }
 
@@ -986,23 +1052,37 @@ const server = (() => {
 
 server.listen(PORT, HOST, () => {
   const scheme = useHttps ? "https" : "http";
-  console.log(`[pi-for-excel] tmux bridge listening on ${scheme}://${HOST}:${PORT}`);
-  console.log(`[pi-for-excel] mode: ${backend.mode}`);
-  console.log(`[pi-for-excel] health: ${scheme}://${HOST}:${PORT}/health`);
-  console.log(`[pi-for-excel] endpoint: ${scheme}://${HOST}:${PORT}/v1/tmux`);
-  console.log(`[pi-for-excel] allowed origins: ${Array.from(allowedOrigins).join(", ")}`);
+  console.log(
+    `[pi-for-office] tmux bridge listening on ${scheme}://${HOST}:${PORT}`,
+  );
+  console.log(`[pi-for-office] mode: ${backend.mode}`);
+  console.log(`[pi-for-office] health: ${scheme}://${HOST}:${PORT}/health`);
+  console.log(`[pi-for-office] endpoint: ${scheme}://${HOST}:${PORT}/v1/tmux`);
+  console.log(
+    `[pi-for-office] allowed origins: ${Array.from(allowedOrigins).join(", ")}`,
+  );
 
   if (authToken) {
-    console.log("[pi-for-excel] auth: bearer token required for POST /v1/tmux");
+    console.log(
+      "[pi-for-office] auth: bearer token required for POST /v1/tmux",
+    );
   } else {
-    console.warn("[pi-for-excel] auth: no bearer token configured — any local process on this machine can drive this bridge.");
-    console.warn("[pi-for-excel] recommended: set TMUX_BRIDGE_TOKEN=<secret> and mirror it in Pi via /experimental tmux-bridge-token <secret>");
+    console.warn(
+      "[pi-for-office] auth: no bearer token configured — any local process on this machine can drive this bridge.",
+    );
+    console.warn(
+      "[pi-for-office] recommended: set TMUX_BRIDGE_TOKEN=<secret> and mirror it in Pi via /experimental tmux-bridge-token <secret>",
+    );
   }
 
   if (backend.mode === "tmux") {
-    console.log(`[pi-for-excel] tmux socket: ${socketPath}`);
+    console.log(`[pi-for-office] tmux socket: ${socketPath}`);
   } else {
-    console.log("[pi-for-excel] stub mode: commands are simulated and not executed in a real shell.");
-    console.log("[pi-for-excel] use TMUX_BRIDGE_MODE=tmux for real command output.");
+    console.log(
+      "[pi-for-office] stub mode: commands are simulated and not executed in a real shell.",
+    );
+    console.log(
+      "[pi-for-office] use TMUX_BRIDGE_MODE=tmux for real command output.",
+    );
   }
 });

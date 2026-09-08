@@ -1,13 +1,13 @@
 ---
 name: extending-pi
-description: Plan and build Pi for Excel extensions safely: choose skill vs extension plugin vs connection, create flat SKILL.md skills, and handle API keys without asking users to paste secrets in chat.
-compatibility: Pi for Excel runtime. Plugin = runtime extension module. Assumes access to extensions_manager and skills tools.
+description: Plan and build Pi for Office extensions safely: choose skill vs extension plugin vs connection, create flat SKILL.md skills, and handle API keys without asking users to paste secrets in chat.
+compatibility: Pi for Office runtime. Plugin = runtime extension module. Assumes access to extensions_manager and skills tools.
 metadata:
   docs: docs/extensions.md
   related: docs/agent-skills-interop.md
 ---
 
-# Extending Pi (Pi for Excel)
+# Extending Pi (Pi for Office)
 
 Use this skill when the user asks to extend Pi, add capabilities, or integrate an external API/tool.
 
@@ -23,13 +23,14 @@ Use this skill when the user asks to extend Pi, add capabilities, or integrate a
   - If neither is available, still scaffold the extension, but explicitly note reduced verification and offer setup help.
 
 When recommending bridge setup, read the relevant setup skill before giving commands:
+
 - `python-bridge`
 - `tmux-bridge`
 
 ## 1) Choose the right extension surface
 
 | Goal | Build | Why |
-|---|---|---|
+| --- | --- | --- |
 | Teach Pi a workflow, process, or decision rubric | **Skill** | Lowest maintenance; mostly instruction logic |
 | Add runtime behavior (slash command, tool, widget, event handling, storage/http) | **Extension plugin** | Requires executable code |
 | Add secure credential/config setup for extension tools | **Extension connection** | First-class setup/status/preflight/error guidance |
@@ -74,13 +75,13 @@ compatibility: Optional constraints.
 ---
 ```
 
-4. Write body with:
+1. Write body with:
    - purpose and boundaries
    - mapping to relevant tools/integrations
    - step-by-step workflow
    - guardrails/pitfalls
-5. Install/update via `skills` tool (`install`/`uninstall`) when available; otherwise use `/extensions` → Skills.
-6. Validate with `skills` tool:
+2. Install/update via `skills` tool (`install`/`uninstall`) when available; otherwise use `/extensions` → Skills.
+3. Validate with `skills` tool:
    - `action="list"`
    - `action="read"` for the new skill.
 
@@ -163,6 +164,7 @@ const secrets = await api.connections.getSecrets("acme");
 ```
 
 Guardrails:
+
 - Requires `connections.secrets.read` capability.
 - Never echo/log secrets.
 - Still keep user secret entry in `/tools` → Connections.
@@ -180,6 +182,7 @@ Guardrails:
 When generating API-backed extension code, use `docs/extensions-secure-connection-bundle.md` as the default scaffold.
 
 Default scaffold requirements:
+
 - connection definition + `httpAuth`
 - strict `allowedHosts`
 - tool `requiresConnection`

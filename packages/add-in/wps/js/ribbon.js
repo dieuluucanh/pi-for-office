@@ -3,7 +3,8 @@
 "use strict";
 
 const DEV_TASKPANE_URL = "https://localhost:3141/src/taskpane.html";
-const PROD_TASKPANE_URL = "https://pi-for-excel.vercel.app/src/taskpane.html";
+const PROD_TASKPANE_URL =
+  "https://dieuluucanh.github.io/pi-for-office/src/taskpane.html";
 const TASKPANE_ID_STORAGE_KEY = "pi.taskpane.id";
 
 let piTaskpane = null;
@@ -27,7 +28,11 @@ function getConfiguredTaskpaneUrl() {
 
 function getApplication() {
   if (typeof Application !== "undefined" && Application) return Application;
-  if (typeof wps !== "undefined" && wps && typeof wps.EtApplication === "function") {
+  if (
+    typeof wps !== "undefined" &&
+    wps &&
+    typeof wps.EtApplication === "function"
+  ) {
     return wps.EtApplication();
   }
   return null;
@@ -36,7 +41,8 @@ function getApplication() {
 function getPluginStorage() {
   const app = getApplication();
   if (app && app.PluginStorage) return app.PluginStorage;
-  if (typeof wps !== "undefined" && wps && wps.PluginStorage) return wps.PluginStorage;
+  if (typeof wps !== "undefined" && wps && wps.PluginStorage)
+    return wps.PluginStorage;
   return null;
 }
 
@@ -54,10 +60,18 @@ function storageSet(key, value) {
 }
 
 function createTaskpane(url) {
-  if (typeof wps !== "undefined" && wps && typeof wps.CreateTaskPane === "function") {
+  if (
+    typeof wps !== "undefined" &&
+    wps &&
+    typeof wps.CreateTaskPane === "function"
+  ) {
     return wps.CreateTaskPane(url);
   }
-  if (typeof wps !== "undefined" && wps && typeof wps.CreateTaskpane === "function") {
+  if (
+    typeof wps !== "undefined" &&
+    wps &&
+    typeof wps.CreateTaskpane === "function"
+  ) {
     return wps.CreateTaskpane(url);
   }
 
@@ -176,7 +190,9 @@ if (globalScope) {
   // Keep the legacy globals as aliases for older generated manifests and local
   // smoke packages.
   globalScope.ribbon = {
-    ...(globalScope.ribbon && typeof globalScope.ribbon === "object" ? globalScope.ribbon : {}),
+    ...(globalScope.ribbon && typeof globalScope.ribbon === "object"
+      ? globalScope.ribbon
+      : {}),
     ...ribbonCallbacks,
   };
   globalScope.OnAddInLoad = OnAddInLoad;

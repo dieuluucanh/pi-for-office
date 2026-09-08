@@ -2,7 +2,7 @@
  * <attachment-tile> — compact tile for a message attachment.
  *
  * First-party replacement for pi-web-ui's AttachmentTile (docs/ui-ownership.md).
- * Pi for Excel cannot create attachments (document parsing is not bundled),
+ * Pi for Office cannot create attachments (document parsing is not bundled),
  * but restored/shared sessions may contain user-with-attachments messages;
  * this keeps them rendering. Preview click-through is intentionally not
  * supported (the upstream overlay was always stubbed out in this app).
@@ -33,7 +33,8 @@ export class AttachmentTile extends LitElement {
     if (!attachment) return html``;
 
     if (attachment.preview) {
-      const mimeType = attachment.type === "image" ? attachment.mimeType : "image/png";
+      const mimeType =
+        attachment.type === "image" ? attachment.mimeType : "image/png";
       return html`
         <img
           class="pi-attachment pi-attachment--img"

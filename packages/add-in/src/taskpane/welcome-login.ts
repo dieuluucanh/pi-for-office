@@ -15,7 +15,6 @@ import {
   DEFAULT_PROXY_IS_REMOTE,
   DEFAULT_PROXY_URL,
   PROXY_HELPER_DOCS_URL,
-  probeProxyReachability,
   resolveConfiguredProxyUrl,
 } from "../auth/proxy-validation.js";
 
@@ -30,31 +29,25 @@ function createElement<K extends keyof HTMLElementTagNameMap>(
   return element;
 }
 
-async function testLocalHttpsProxy(proxyUrl: string): Promise<boolean> {
-  return probeProxyReachability(proxyUrl, 1200);
-}
+export async function showWelcomeLogin(
+  providerKeys: ProviderKeysStore,
+): Promise<void> {
+  const { VISIBLE_PROVIDERS, buildProviderRow } = await import(
+    "../ui/provider-login.js"
+  );
 
-export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise<void> {
-  const { VISIBLE_PROVIDERS, buildProviderRow } = await import("../ui/provider-login.js");
-
-  // Make OAuth flows usable even before the user can access /settings.
+  // Seed a predictable proxy URL so OAuth flows have a default, but do NOT
+  // auto-enable the proxy. Browser-only mode (BYOK / API keys) is the default
+  // and works without any local process; the proxy stays opt-in (via settings)
+  // and is only prompted when an OAuth provider needs it for CORS.
   try {
     const storage = getAppStorage();
-    const enabled = await storage.settings.get("proxy.enabled");
     const url = await storage.settings.get("proxy.url");
 
     const currentUrl = resolveConfiguredProxyUrl(url);
 
     if (url === null) {
       await storage.settings.set("proxy.url", currentUrl);
-    }
-
-    // Auto-enable if a local HTTPS proxy is actually reachable.
-    if (!enabled) {
-      const ok = await testLocalHttpsProxy(currentUrl);
-      if (ok) {
-        await storage.settings.set("proxy.enabled", true);
-      }
     }
   } catch {
     // ignore — welcome overlay should still show
@@ -102,7 +95,10 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
 
     const providerList = createElement("div", "pi-welcome-providers");
 
-    const customGatewayButton = createElement("button", "pi-welcome-custom-gateway");
+    const customGatewayButton = createElement(
+      "button",
+      "pi-welcome-custom-gateway",
+    );
     customGatewayButton.type = "button";
     customGatewayButton.textContent = t("welcome.custom_gateway");
 
@@ -133,7 +129,10 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
 
     proxyTopRow.append(proxyTitle, proxyToggleLabel);
 
-    const proxyUrlRow = createElement("div", "pi-welcome-proxy__row pi-welcome-proxy__row--compact");
+    const proxyUrlRow = createElement(
+      "div",
+      "pi-welcome-proxy__row pi-welcome-proxy__row--compact",
+    );
     const proxyUrlEl = createElement("input", "pi-welcome-proxy__url");
     proxyUrlEl.type = "text";
     proxyUrlEl.spellcheck = false;
@@ -166,20 +165,22 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
 
     proxyPanel.append(proxyTopRow, proxyUrlRow, proxyHint);
 
-
     // Language bar at the top
     const langBar = createElement("div", "pi-welcome-lang-bar");
-    langBar.style.cssText = "display:flex;justify-content:flex-end;gap:4px;padding:4px 8px;";
+    langBar.style.cssText =
+      "display:flex;justify-content:flex-end;gap:4px;padding:4px 8px;";
 
     const engBtn = createElement("button");
     engBtn.type = "button";
     engBtn.textContent = t("language.english");
-    engBtn.style.cssText = "font-size:11px;padding:2px 8px;border:1px solid #ccc;border-radius:4px;background:var(--pi-bg, #fff);cursor:pointer;";
+    engBtn.style.cssText =
+      "font-size:11px;padding:2px 8px;border:1px solid #ccc;border-radius:4px;background:var(--pi-bg, #fff);cursor:pointer;";
 
     const zhBtn = createElement("button");
     zhBtn.type = "button";
     zhBtn.textContent = "中文";
-    zhBtn.style.cssText = "font-size:11px;padding:2px 8px;border:1px solid #ccc;border-radius:4px;background:var(--pi-bg, #fff);cursor:pointer;";
+    zhBtn.style.cssText =
+      "font-size:11px;padding:2px 8px;border:1px solid #ccc;border-radius:4px;background:var(--pi-bg, #fff);cursor:pointer;";
 
     const currentLang2 = getLanguage();
     if (currentLang2 === "zh-CN") {
@@ -198,7 +199,9 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
           const storage = getAppStorage();
           await storage.settings.set("language", "en");
           location.reload();
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
       })();
     });
 
@@ -210,7 +213,9 @@ export async function showWelcomeLogin(providerKeys: ProviderKeysStore): Promise
           const storage = getAppStorage();
           await storage.settings.set("language", "zh-CN");
           location.reload();
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
       })();
     });
 

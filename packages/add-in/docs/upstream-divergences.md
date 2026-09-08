@@ -2,7 +2,7 @@
 
 **Last reviewed:** 2026-07-16
 
-This document records every place Pi for Excel intentionally diverges from
+This document records every place Pi for Office intentionally diverges from
 [pi-mono](https://github.com/badlogic/pi-mono) / `@earendil-works/pi-coding-agent`
 behavior, with rationale and status for each.
 
@@ -16,8 +16,8 @@ don't accumulate silently.
 
 ## 1. Mid-session model switching (fork vs in-place)
 
-| | pi-mono | Pi for Excel (current) |
-|---|---|---|
+| | pi-mono | Pi for Office (current) |
+| --- | --- | --- |
 | Empty session | Switch in place | Switch in place |
 | Non-empty session (default) | Switch in place | Switch in place |
 | Non-empty session (opt-in) | N/A | Fork to a new tab with the new model |
@@ -41,7 +41,7 @@ pi-mono parity (in-place), and kept fork as an advanced opt-in setting.
 
 ## 2. Tool refresh fingerprinting (no-op suppression)
 
-| | pi-mono | Pi for Excel |
+| | pi-mono | Pi for Office |
 |---|---|---|
 | When tools change | Direct `setTools()` on explicit user action | Event-driven capability refreshes; apply `setTools()` only when tool fingerprint or extension tool revision changes |
 
@@ -54,6 +54,7 @@ Each refresh rebuilds tool objects. Without a guard, every pass would assign
 `agent.state.tools = ...` even when schema metadata is identical.
 
 We therefore gate tool updates by:
+
 - stable metadata fingerprint (`name`, `label`, `description`, `parameters`)
 - extension tool revision (increments on extension tool register/unregister/reload)
 
@@ -71,7 +72,7 @@ tracking. Divergence remains architecture-driven.
 
 ## 3. Extension `llm.complete` side-session namespacing
 
-| | pi-mono | Pi for Excel |
+| | pi-mono | Pi for Office |
 |---|---|---|
 | Extension LLM calls | No equivalent host-side `llm.complete` API | Scoped to a separate session ID per extension |
 
@@ -97,8 +98,8 @@ host-side `llm.complete` surface), not a disagreement with upstream.
 
 ## 4. Earlier compaction trigger for large context windows
 
-| | pi-mono | Pi for Excel |
-|---|---|---|
+| | pi-mono | Pi for Office |
+| --- | --- | --- |
 | Hard trigger | `contextWindow - reserveTokens` | `min(contextWindow - reserveTokens, qualityCap)` |
 | Quality cap | None | 88% for ≥128k windows, 85% for ≥200k windows |
 | Soft warning | None | 70% of hard trigger (floor), or hard − 5% of window |
@@ -133,12 +134,12 @@ history + turn-prefix summaries).
 
 ## 5. Context budgets scaled to small context windows
 
-| | pi-mono | Pi for Excel |
-|---|---|---|
+| | pi-mono | Pi for Office |
+| --- | --- | --- |
 | Tool output cap | fixed 50KB / 2000 lines | scaled linearly below 128k windows (floors 8KB / 200 lines) |
 | Verbatim recent tool results | n/a (no model-facing shaping layer) | 6 at ≥128k, scaled down to a floor of 2 |
 
-**Rationale:** Pi for Excel supports custom gateways with 32k–65k windows where
+**Rationale:** Pi for Office supports custom gateways with 32k–65k windows where
 a single fixed-cap tool result can consume ~20% of the window. Scaling keeps
 worst-case tool-loop context proportional to the model's actual capacity (#566).
 
@@ -149,8 +150,8 @@ worst-case tool-loop context proportional to the model's actual capacity (#566).
 
 ## 6. Browser-native Pi AI Models runtime
 
-| | pi-mono / coding-agent | Pi for Excel |
-|---|---|---|
+| | pi-mono / coding-agent | Pi for Office |
+| --- | --- | --- |
 | Provider collection | `createModels()` wrapped by coding-agent's Node/file `ModelRuntime` | `createModels()` wrapped by a taskpane-owned browser runtime |
 | Credentials | filesystem-backed auth storage and provider OAuth | existing IndexedDB key/OAuth stores, adapted to Pi AI's credential contract |
 | Dynamic catalogues | coding-agent models store | IndexedDB `model-catalogs` store |
@@ -158,7 +159,7 @@ worst-case tool-loop context proportional to the model's actual capacity (#566).
 
 **Rationale:** Pi AI 0.80 removed the legacy global registry/dispatch API. The
 coding-agent `ModelRuntime` is not suitable for an Office WebView because it
-owns Node/file lifecycle. Pi for Excel now uses the same `createModels()`,
+owns Node/file lifecycle. Pi for Office now uses the same `createModels()`,
 provider factories, dynamic refresh and stream dispatch primitives with
 browser-native persistence, OAuth, CORS proxying and extension isolation.
 Cached extension/custom discovery entries are reconstructed against the
@@ -180,11 +181,12 @@ the direct browser-safe API subpath.
 
 ## 7. UI localization layer (zero-dep `t()`, zh-CN)
 
-pi-mono has no UI localization; Pi for Excel adds a zero-dependency `t()`
+pi-mono has no UI localization; Pi for Office adds a zero-dependency `t()`
 layer (`src/language/`) with an AI-generated Simplified Chinese locale
 (issue #608, derived from community PR #554).
 
 **Scope limits:**
+
 - All UI strings are in-repo now (the UI layer is fully first-party), so any
   user-visible string can and should go through `t()`.
 - Agent-facing strings (system prompt, tool names/descriptions/schemas,
@@ -201,7 +203,7 @@ placeholder validity, no dead keys, no unknown keys, and no module-scope
 
 ## 8. First-party UI layer (pi-web-ui removed)
 
-| | pi-mono direction | Pi for Excel (current) |
+| | pi-mono direction | Pi for Office (current) |
 |---|---|---|
 | Web UI | `@earendil-works/pi-web-ui` (unmaintained since 0.75.3) + mini-lit + Tailwind v4 | Fully first-party Lit components, semantic CSS, owned preflight |
 
@@ -224,7 +226,7 @@ record.
 
 ### Compaction call shape
 
-Both pi-mono and Pi for Excel use the same pattern: serialize conversation to
+Both pi-mono and Pi for Office use the same pattern: serialize conversation to
 text, send an isolated summarization request, inject the structured summary as a
 user message. We considered a "cache-safe fork compaction" approach (reusing the
 main runtime prefix) but **deferred** it — see

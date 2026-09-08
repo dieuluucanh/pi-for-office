@@ -15,10 +15,16 @@ import {
   type TmuxBridgeDetails,
 } from "../tools/tool-details.js";
 import { t } from "../language/index.js";
-import { AlertTriangle, Check, Copy, Terminal, lucide } from "./lucide-icons.js";
+import {
+  AlertTriangle,
+  Check,
+  Copy,
+  Terminal,
+  lucide,
+} from "./lucide-icons.js";
 
-export const PYTHON_BRIDGE_SETUP_COMMAND = "npx pi-for-excel-python-bridge";
-export const TMUX_BRIDGE_SETUP_COMMAND = "npx pi-for-excel-tmux-bridge";
+export const PYTHON_BRIDGE_SETUP_COMMAND = "npx pi-for-office-python-bridge";
+export const TMUX_BRIDGE_SETUP_COMMAND = "npx pi-for-office-tmux-bridge";
 
 export type BridgeSetupCardDetails =
   | TmuxBridgeDetails
@@ -48,13 +54,19 @@ function selectElementText(element: HTMLElement): void {
   selection.addRange(range);
 }
 
-function copyToClipboard(text: string, onCopied: () => void, fallbackElement: HTMLElement): void {
+function copyToClipboard(
+  text: string,
+  onCopied: () => void,
+  fallbackElement: HTMLElement,
+): void {
   if (!navigator.clipboard?.writeText) {
     selectElementText(fallbackElement);
     return;
   }
 
-  void navigator.clipboard.writeText(text).then(onCopied, () => selectElementText(fallbackElement));
+  void navigator.clipboard
+    .writeText(text)
+    .then(onCopied, () => selectElementText(fallbackElement));
 }
 
 function createCopyableCommand(command: string): HTMLDivElement {
@@ -74,22 +86,29 @@ function createCopyableCommand(command: string): HTMLDivElement {
   let resetTimeout: ReturnType<typeof setTimeout> | null = null;
 
   copyBtn.addEventListener("click", () => {
-    copyToClipboard(command, () => {
-      copyBtn.replaceChildren(lucide(Check));
-      copyBtn.title = t("bridge-setup.copiedTitle");
-      copyBtn.setAttribute("aria-label", t("bridge-setup.copiedTitle"));
+    copyToClipboard(
+      command,
+      () => {
+        copyBtn.replaceChildren(lucide(Check));
+        copyBtn.title = t("bridge-setup.copiedTitle");
+        copyBtn.setAttribute("aria-label", t("bridge-setup.copiedTitle"));
 
-      if (resetTimeout !== null) {
-        clearTimeout(resetTimeout);
-      }
+        if (resetTimeout !== null) {
+          clearTimeout(resetTimeout);
+        }
 
-      resetTimeout = setTimeout(() => {
-        copyBtn.replaceChildren(lucide(Copy));
-        copyBtn.title = t("bridge-setup.copyCommandTitle");
-        copyBtn.setAttribute("aria-label", t("bridge-setup.copyCommandTitle"));
-        resetTimeout = null;
-      }, 1400);
-    }, code);
+        resetTimeout = setTimeout(() => {
+          copyBtn.replaceChildren(lucide(Copy));
+          copyBtn.title = t("bridge-setup.copyCommandTitle");
+          copyBtn.setAttribute(
+            "aria-label",
+            t("bridge-setup.copyCommandTitle"),
+          );
+          resetTimeout = null;
+        }, 1400);
+      },
+      code,
+    );
   });
 
   row.append(code, copyBtn);
@@ -138,10 +157,12 @@ function toTmuxModel(details: TmuxBridgeDetails): BridgeSetupCardModel | null {
     return null;
   }
 
-  if (!isSetupFailure({
-    error: details.error,
-    gateReason: details.gateReason,
-  })) {
+  if (
+    !isSetupFailure({
+      error: details.error,
+      gateReason: details.gateReason,
+    })
+  ) {
     return null;
   }
 
@@ -156,7 +177,9 @@ function toTmuxModel(details: TmuxBridgeDetails): BridgeSetupCardModel | null {
   };
 }
 
-function toPythonModel(details: PythonBridgeDetails): BridgeSetupCardModel | null {
+function toPythonModel(
+  details: PythonBridgeDetails,
+): BridgeSetupCardModel | null {
   if (details.ok !== false) {
     return null;
   }
@@ -165,16 +188,19 @@ function toPythonModel(details: PythonBridgeDetails): BridgeSetupCardModel | nul
     return null;
   }
 
-  if (!isSetupFailure({
-    error: details.error,
-    gateReason: details.gateReason,
-  })) {
+  if (
+    !isSetupFailure({
+      error: details.error,
+      gateReason: details.gateReason,
+    })
+  ) {
     return null;
   }
 
-  const title = details.error === "no_python_runtime"
-    ? t("bridge-setup.pythonUnavailable")
-    : "Python bridge is unavailable";
+  const title =
+    details.error === "no_python_runtime"
+      ? t("bridge-setup.pythonUnavailable")
+      : "Python bridge is unavailable";
 
   return {
     title,
@@ -187,7 +213,9 @@ function toPythonModel(details: PythonBridgeDetails): BridgeSetupCardModel | nul
   };
 }
 
-function toLibreOfficeModel(details: LibreOfficeBridgeDetails): BridgeSetupCardModel | null {
+function toLibreOfficeModel(
+  details: LibreOfficeBridgeDetails,
+): BridgeSetupCardModel | null {
   if (details.ok !== false) {
     return null;
   }
@@ -196,10 +224,12 @@ function toLibreOfficeModel(details: LibreOfficeBridgeDetails): BridgeSetupCardM
     return null;
   }
 
-  if (!isSetupFailure({
-    error: details.error,
-    gateReason: details.gateReason,
-  })) {
+  if (
+    !isSetupFailure({
+      error: details.error,
+      gateReason: details.gateReason,
+    })
+  ) {
     return null;
   }
 
@@ -214,7 +244,9 @@ function toLibreOfficeModel(details: LibreOfficeBridgeDetails): BridgeSetupCardM
   };
 }
 
-function toTransformRangeModel(details: PythonTransformRangeDetails): BridgeSetupCardModel | null {
+function toTransformRangeModel(
+  details: PythonTransformRangeDetails,
+): BridgeSetupCardModel | null {
   if (details.blocked !== false) {
     return null;
   }
@@ -223,10 +255,12 @@ function toTransformRangeModel(details: PythonTransformRangeDetails): BridgeSetu
     return null;
   }
 
-  if (!isSetupFailure({
-    error: details.error,
-    gateReason: details.gateReason,
-  })) {
+  if (
+    !isSetupFailure({
+      error: details.error,
+      gateReason: details.gateReason,
+    })
+  ) {
     return null;
   }
 
@@ -241,7 +275,9 @@ function toTransformRangeModel(details: PythonTransformRangeDetails): BridgeSetu
   };
 }
 
-export function resolveBridgeSetupCardModel(details: DynamicValue): BridgeSetupCardModel | null {
+export function resolveBridgeSetupCardModel(
+  details: DynamicValue,
+): BridgeSetupCardModel | null {
   if (isTmuxBridgeDetails(details)) {
     return toTmuxModel(details);
   }
@@ -261,7 +297,9 @@ export function resolveBridgeSetupCardModel(details: DynamicValue): BridgeSetupC
   return null;
 }
 
-export function shouldShowBridgeSetupCard(details: DynamicValue): details is BridgeSetupCardDetails {
+export function shouldShowBridgeSetupCard(
+  details: DynamicValue,
+): details is BridgeSetupCardDetails {
   return resolveBridgeSetupCardModel(details) !== null;
 }
 
@@ -301,7 +339,8 @@ export function mountBridgeSetupCard(
   const header = document.createElement("div");
   header.className = "pi-bridge-setup__header";
 
-  const iconGlyph = model.command === TMUX_BRIDGE_SETUP_COMMAND ? Terminal : AlertTriangle;
+  const iconGlyph =
+    model.command === TMUX_BRIDGE_SETUP_COMMAND ? Terminal : AlertTriangle;
   const icon = lucide(iconGlyph);
   icon.classList.add("pi-bridge-setup__icon");
 
@@ -355,26 +394,28 @@ export function mountBridgeSetupCard(
     status.textContent = t("bridge-setup.checkingBridge");
     status.className = "pi-bridge-setup__status";
 
-    void probeBridge(probeUrl).then(
-      (reachable) => {
-        if (reachable) {
-          status.textContent = t("bridge-setup.bridgeDetected");
-          status.className = "pi-bridge-setup__status is-ok";
-          return;
-        }
+    void probeBridge(probeUrl)
+      .then(
+        (reachable) => {
+          if (reachable) {
+            status.textContent = t("bridge-setup.bridgeDetected");
+            status.className = "pi-bridge-setup__status is-ok";
+            return;
+          }
 
-        status.textContent = t("bridge-setup.bridgeNotDetected");
-        status.className = "pi-bridge-setup__status is-warn";
-      },
-      () => {
-        status.textContent = t("bridge-setup.cannotCheckBridge");
-        status.className = "pi-bridge-setup__status is-error";
-      },
-    ).finally(() => {
-      checking = false;
-      testButton.disabled = false;
-      testButton.textContent = t("bridge-setup.testConnection");
-    });
+          status.textContent = t("bridge-setup.bridgeNotDetected");
+          status.className = "pi-bridge-setup__status is-warn";
+        },
+        () => {
+          status.textContent = t("bridge-setup.cannotCheckBridge");
+          status.className = "pi-bridge-setup__status is-error";
+        },
+      )
+      .finally(() => {
+        checking = false;
+        testButton.disabled = false;
+        testButton.textContent = t("bridge-setup.testConnection");
+      });
   });
 
   actions.append(testButton, status);

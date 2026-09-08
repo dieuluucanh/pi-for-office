@@ -1,17 +1,17 @@
 ---
 name: wps-windows-smoke
-description: Provision or reuse a local Windows 11 ARM VM as a reusable test harness for validating pi-for-excel inside real China-domestic WPS Spreadsheets. Use when an agent needs to test a specific WPS feature, WPS JSAPI behavior, add-in packaging, China WPS install/login, auth, taskpane boot, workbook operations, or an issue reproduction in real WPS rather than in Excel/Office.js or a browser fallback.
+description: Provision or reuse a local Windows 11 ARM VM as a reusable test harness for validating pi-for-office inside real China-domestic WPS Spreadsheets. Use when an agent needs to test a specific WPS feature, WPS JSAPI behavior, add-in packaging, China WPS install/login, auth, taskpane boot, workbook operations, or an issue reproduction in real WPS rather than in Excel/Office.js or a browser fallback.
 ---
 
 # WPS Windows Test Harness
 
-Use this skill for **feature-specific real WPS Spreadsheets validation** of pi-for-excel. Browser tests and Office.js tests are not enough: WPS does not run Office manifests or Office.js add-ins.
+Use this skill for **feature-specific real WPS Spreadsheets validation** of pi-for-office. Browser tests and Office.js tests are not enough: WPS does not run Office manifests or Office.js add-ins.
 
 This skill is an environment + workflow harness, **not one fixed smoke test**. Before testing, name the feature or regression under test and choose the smallest WPS workbook action that proves it. Do not use a generic “create and format a table” prompt unless the feature being tested is specifically table-like writing/formatting behavior.
 
 Be explicit about the test level:
 
-- **Product-level Pi for Excel proof** must load the real Pi taskpane (`/src/taskpane.html`) and exercise the actual sidebar/chat UI, auth/model setup, agent loop, tool calls, approvals, workbook updates, and final user-visible result.
+- **Product-level Pi for Office proof** must load the real Pi taskpane (`/src/taskpane.html`) and exercise the actual sidebar/chat UI, auth/model setup, agent loop, tool calls, approvals, workbook updates, and final user-visible result.
 - **Low-level WPS JSAPI probes** may use a custom temporary taskpane/page to isolate WPS host APIs, but they are only host-capability evidence. They do **not** prove that the Pi sidebar, agent, auth, or typed Pi tools work for that feature.
 
 ## What agents get wrong
@@ -25,9 +25,9 @@ Be explicit about the test level:
 - Once VirtIO networking works, prefer **WinRM** for all guest commands. VNC typing is fragile, especially with UK keyboard punctuation and passwords containing symbols.
 - WPS personal builds `>= 12.1.0.16910` restrict the enterprise/local `jsplugins.xml`/`oem.ini` path. If a direct `jsplugins.xml` registration silently does nothing, use the **`wpsjs publish` publish-page flow** rather than burning time. Do not hand-edit `authaddin.json` as proof: WPS may regenerate `enable:false`, or if forced to `true` may create `%APPDATA%\Kingsoft\wps\jsaddons\jsaddinblockhost.ini` and suppress ribbon actions. The real trust path is the WPS modal headed `是否信任并安装第三方WPS加载项 ...`.
 - Ordinary WPS personal-account login does **not** unlock this block in the current Windows ARM WPS `12.1.0.26200` harness. The block reproduces after logged-in trust install with a minimal alert-only add-in and with a clean current official ET template built from `wpsjs@2.2.3` (including `functions.json`). It also reproduces when that official template is served directly inside Windows from a fresh local origin (`http://127.0.0.1:3891/`, no macOS portproxy): the publish row can show `正常`, but WPS still writes `authaddin.enable=false` and later `jsaddinblockhost.ini`. Moving `%APPDATA%\\Kingsoft\\wps` aside and repeating from a fresh WPS profile does not help.
-- The 32-bit/x86 WPS 365 build (`12.1.0.26899`, PE machine `I386`) is confirmed to unblock command execution even inside the Windows ARM VM: the official ET sample reaches the in-app first-load trust prompt, writes `authaddin.enable=true`, and fires `OnAction`; the real Pi add-in can show `Pi for Excel`, fire `Open Pi`, and open the real taskpane. If ARM/ARM64EC WPS suppresses actions, switch architecture/build before debugging Pi taskpane/auth code.
+- The 32-bit/x86 WPS 365 build (`12.1.0.26899`, PE machine `I386`) is confirmed to unblock command execution even inside the Windows ARM VM: the official ET sample reaches the in-app first-load trust prompt, writes `authaddin.enable=true`, and fires `OnAction`; the real Pi add-in can show `Pi for Office`, fire `Open Pi`, and open the real taskpane. If ARM/ARM64EC WPS suppresses actions, switch architecture/build before debugging Pi taskpane/auth code.
 - WPS template callback spelling is `OnAddinLoad`; keep the repo's `OnAddInLoad` alias too so either ribbon spelling works. Prefer the official `ribbon.OnAddinLoad` / `ribbon.OnAction` callback namespace in `ribbon.xml`, with global aliases preserved in JS.
-- Real WPS requests add-in-root `/index.html`; it must load `main.js`. Do not assume `wpsjs publish` or WPS generates this entrypoint. For narrow 800px VM screens, insert the Pi tab before Home and use a visible label (`Pi for Excel`) so the test can click the real button instead of hunting a clipped custom tab.
+- Real WPS requests add-in-root `/index.html`; it must load `main.js`. Do not assume `wpsjs publish` or WPS generates this entrypoint. For narrow 800px VM screens, insert the Pi tab before Home and use a visible label (`Pi for Office`) so the test can click the real button instead of hunting a clipped custom tab.
 - WPS's publish-page validator expects `ribbon.xml` to start with `<customUI`; an XML declaration prefix can make the row show `无效` even when WPS can fetch the file.
 - WPS 12.1.0.26200 embeds a WebView with `crypto.getRandomValues` but no `crypto.randomUUID`; keep the app bootstrap compatibility patch installed.
 - If `key.pem`/`cert.pem` exist in the repo root, Vite serves HTTPS. The WPS harness examples use plain HTTP (`http://10.0.2.2:3141/...`); use an isolated worktree without those certs, or deliberately test an HTTPS WPS URL with certificate trust handled and record that choice.
@@ -88,7 +88,7 @@ PS
 `prepare-wps-plugin.mjs` builds a WPS test add-in root with `index.html`, `ribbon.xml`, `main.js`, `manifest.xml`, and `jsplugins.xml`; patches the taskpane URL to the QEMU host gateway; keeps the WPS callback alias; and can generate `publish.html` via `wpsjs publish`. The default output directory is still named `wps-smoke-plugin` for compatibility with existing scripts and evidence paths; it is not tied to one specific test scenario.
 
 ```bash
-npm run dev > /tmp/pi-for-excel-wps-vite.log 2>&1 &
+npm run dev > /tmp/pi-for-office-wps-vite.log 2>&1 &
 
 .agents/skills/wps-windows-smoke/scripts/prepare-wps-plugin.mjs \
   --taskpane-url http://10.0.2.2:3141/src/taskpane.html \
@@ -153,19 +153,23 @@ If the capture is black, the Windows display is probably locked/asleep. Wake/unl
 ## General workflow
 
 1. Start VM and confirm WinRM + guest internet:
+
    ```bash
    .agents/skills/wps-windows-smoke/scripts/wps-win11-vm.sh start
    .agents/skills/wps-windows-smoke/scripts/wps-win11-vm.sh boot-windows  # if EFI shell appears
    .agents/skills/wps-windows-smoke/scripts/wps-win11-vm.sh wait-winrm 180
    .agents/skills/wps-windows-smoke/scripts/wps-win11-vm.sh health
    ```
+
 2. Write the feature-specific test plan above. Avoid broad “prove everything” prompts.
-3. Start pi-for-excel dev server on macOS (`npm run dev`); Vite binds `::`/3141 by default.
+3. Start pi-for-office dev server on macOS (`npm run dev`); Vite binds `::`/3141 by default.
 4. Generate and serve the WPS test add-in with `prepare-wps-plugin.mjs --publish --serve`. For personal publish-mode VM work, set `--plugin-url http://127.0.0.1:3889/` and configure Windows portproxy:
+
    ```powershell
    netsh interface portproxy delete v4tov4 listenaddress=127.0.0.1 listenport=3889 2>$null
    netsh interface portproxy add v4tov4 listenaddress=127.0.0.1 listenport=3889 connectaddress=10.0.2.2 connectport=3889
    ```
+
 5. In Windows, open `http://127.0.0.1:3889/publish.html` in Edge and install the WPS add-in. Use this personal publish flow before trying `jsplugins.xml`. If Edge asks to open WPS Office, allow it, refresh the page after the relay starts if rows do not populate, click the `PiForExcelSmokePublish` install row, then approve the WPS trust modal (`信任并安装`). Do **not** treat a direct WinRM POST to `http://127.0.0.1:58890/deployaddons/runParams` as equivalent; it can hang/skip the user trust path and does not prove product installability.
 6. After install, verify `publish.xml` and `authwebsite.xml` contain the same origin (`http://127.0.0.1:3889`). If WPS later writes `authaddin.json` with `enable:false`, or creates `jsaddinblockhost.ini` after a forced edit, record that as the current WPS trust/action blocker rather than manually overriding it in a proof run. This blocker has reproduced even after logging into a WPS account and even with a minimal official-style ET add-in whose `OnAction` only calls `alert('MIN_ACTION_FIRED')`, so do not keep debugging Pi taskpane/auth code or personal-account login until enterprise/WPS 365 managed deployment or another WPS-supported approval path is tested.
 7. Launch direct Spreadsheets (`et.exe`) rather than the WPS home shell if the home/login webview crashes.
@@ -188,7 +192,7 @@ If the capture is black, the Windows display is probably locked/asleep. Wake/unl
 
 ## Historical evidence from first successful route
 
-These artifacts prove the harness can install and run pi-for-excel in real WPS. They are **historical examples only**, not the required test scenario for future work.
+These artifacts prove the harness can install and run pi-for-office in real WPS. They are **historical examples only**, not the required test scenario for future work.
 
 - `~/VMs/wps-win11/publish-page-cmd-launch.png` — Edge publish page opened the WPS Office protocol handler.
 - `~/VMs/wps-win11/after-trust-install.png` plus WPS publishlist output — add-in installed through the WPS relay service.

@@ -1,17 +1,23 @@
 /**
- * Proxy warning banner.
+ * Proxy helper banner.
  *
- * State-driven inline banner shown above chat messages when the local proxy is
- * unavailable. Expands inline with quick setup guidance.
+ * State-driven inline banner shown above chat messages ONLY when the user has
+ * opted into the local proxy (`proxy.enabled`) but it is not reachable. In
+ * browser-only mode (proxy disabled) nothing is shown — BYOK/API keys work
+ * without any local process.
  */
 
 import { t } from "../language/index.js";
 import { AlertTriangle, Check, Copy, lucide } from "./lucide-icons.js";
 
-const PROXY_COMMAND = "npx pi-for-excel-proxy";
+const PROXY_COMMAND = "npx pi-for-office-proxy";
 const INSTALL_GUIDE_URL = "https://pi.dev/excel#connect";
 
-export type ProxyBannerState = "detected" | "not-detected" | "unknown";
+export type ProxyBannerState =
+  | "detected"
+  | "not-detected"
+  | "unknown"
+  | "disabled";
 
 export interface ProxyBannerHandle {
   root: HTMLElement;
@@ -133,7 +139,9 @@ export function createProxyBanner(): ProxyBannerHandle {
     const shouldOpen = details.hidden === true;
     details.hidden = !shouldOpen;
     root.classList.toggle("is-open", shouldOpen);
-    action.textContent = shouldOpen ? t("proxy-banner.hideSteps") : t("proxy-banner.action");
+    action.textContent = shouldOpen
+      ? t("proxy-banner.hideSteps")
+      : t("proxy-banner.action");
   });
 
   root.append(topRow, details);

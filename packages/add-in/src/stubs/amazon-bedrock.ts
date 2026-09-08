@@ -1,7 +1,7 @@
 /**
  * Stub for Amazon Bedrock provider.
  *
- * Pi for Excel runs in a browser webview. The Bedrock implementation pulls in
+ * Pi for Office runs in a browser webview. The Bedrock implementation pulls in
  * AWS SDK Node-only transports (`@smithy/node-http-handler`, Node `http`/
  * `https`, etc.), which cannot run in the Excel WebView.
  *
@@ -16,9 +16,9 @@
  */
 
 export function stream(): never {
-  throw new Error("Amazon Bedrock is not supported in the Excel add-in build.");
+ throw new Error("Amazon Bedrock is not supported in the Excel add-in build.");
 }
 
 export function streamSimple(): never {
-  throw new Error("Amazon Bedrock is not supported in the Excel add-in build.");
+ throw new Error("Amazon Bedrock is not supported in the Excel add-in build.");
 }

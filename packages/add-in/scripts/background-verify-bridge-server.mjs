@@ -2,7 +2,7 @@
 /**
  * Dev-only background verification bridge for real Excel taskpanes.
  *
- * The real pi-for-excel taskpane initiates outbound HTTPS long-poll requests to
+ * The real pi-for-office taskpane initiates outbound HTTPS long-poll requests to
  * this loopback server. Agents send commands to the server; the server queues
  * them for the taskpane and returns the taskpane's result. This avoids raw GUI
  * input and lets verification run while Excel stays in the background.
@@ -113,7 +113,8 @@ function sendJson(res, statusCode, value, origin) {
 
 function assertToken(actual, expected) {
   if (!expected) throw new Error("Server token is not configured");
-  if (actual !== expected) throw new Error("Invalid background verification token");
+  if (actual !== expected)
+    throw new Error("Invalid background verification token");
 }
 
 function recordString(value, key) {
@@ -124,7 +125,10 @@ function recordString(value, key) {
 
 function sanitizeClientError(value) {
   const name = recordString(value, "name").slice(0, 120) || "Error";
-  const message = (recordString(value, "message") || (typeof value === "string" ? value : "Taskpane command failed")).slice(0, 2_000);
+  const message = (
+    recordString(value, "message") ||
+    (typeof value === "string" ? value : "Taskpane command failed")
+  ).slice(0, 2_000);
   return { name, message };
 }
 
@@ -155,7 +159,11 @@ class BridgeState {
   }
 
   isLiveClient(client, now = Date.now()) {
-    return client.waiters.length > 0 || client.queue.length > 0 || now - client.lastSeenAt <= CLIENT_TTL_MS;
+    return (
+      client.waiters.length > 0 ||
+      client.queue.length > 0 ||
+      now - client.lastSeenAt <= CLIENT_TTL_MS
+    );
   }
 
   liveClients() {
@@ -163,7 +171,8 @@ class BridgeState {
     return Array.from(this.clients.values())
       .filter((client) => this.isLiveClient(client, now))
       .sort((left, right) => {
-        const waitingDelta = Number(right.waiters.length > 0) - Number(left.waiters.length > 0);
+        const waitingDelta =
+          Number(right.waiters.length > 0) - Number(left.waiters.length > 0);
         if (waitingDelta !== 0) return waitingDelta;
         return right.lastSeenAt - left.lastSeenAt;
       });
@@ -173,7 +182,9 @@ class BridgeState {
     if (requestedClientId) {
       const client = this.clients.get(requestedClientId) ?? null;
       if (!client || !this.isLiveClient(client)) {
-        return { error: `Unknown or inactive taskpane client: ${requestedClientId}` };
+        return {
+          error: `Unknown or inactive taskpane client: ${requestedClientId}`,
+        };
       }
       return { client };
     }
@@ -182,7 +193,8 @@ class BridgeState {
     if (clients.length === 0) return { error: "No taskpane client connected" };
     if (clients.length > 1) {
       return {
-        error: "Multiple taskpane clients connected; pass clientId from /health to target a workbook explicitly",
+        error:
+          "Multiple taskpane clients connected; pass clientId from /health to target a workbook explicitly",
         clients: clients.map((client) => client.clientId),
       };
     }
@@ -312,9 +324,14 @@ function createServer({ token, host, port, certPath, keyPath }) {
           sendJson(res, 404, { ok: false, error: "Unknown client" }, origin);
           return;
         }
-        const requestedPollTimeoutMs = Number(body.timeoutMs ?? POLL_TIMEOUT_MS);
+        const requestedPollTimeoutMs = Number(
+          body.timeoutMs ?? POLL_TIMEOUT_MS,
+        );
         const pollTimeoutMs = Number.isFinite(requestedPollTimeoutMs)
-          ? Math.max(1, Math.min(POLL_TIMEOUT_MS, Math.floor(requestedPollTimeoutMs)))
+          ? Math.max(
+              1,
+              Math.min(POLL_TIMEOUT_MS, Math.floor(requestedPollTimeoutMs)),
+            )
           : POLL_TIMEOUT_MS;
         const command = await state.waitForCommand(client, pollTimeoutMs);
         sendJson(res, 200, command ?? { type: "noop" }, origin);
@@ -325,8 +342,10 @@ function createServer({ token, host, port, certPath, keyPath }) {
         const body = await readJsonBody(req);
         assertToken(body.token, token);
         const clientId = typeof body.clientId === "string" ? body.clientId : "";
-        const commandId = typeof body.commandId === "string" ? body.commandId : "";
-        if (!clientId || !commandId) throw new Error("clientId and commandId are required");
+        const commandId =
+          typeof body.commandId === "string" ? body.commandId : "";
+        if (!clientId || !commandId)
+          throw new Error("clientId and commandId are required");
         const ok = body.ok === true;
         const stored = state.storeResult(clientId, commandId, {
           ok,
@@ -343,10 +362,16 @@ function createServer({ token, host, port, certPath, keyPath }) {
         const type = typeof body.type === "string" ? body.type : "";
         if (!type) throw new Error("Command type is required");
         const payload = body.payload ?? {};
-        const requestedClientId = typeof body.clientId === "string" ? body.clientId.trim() : "";
+        const requestedClientId =
+          typeof body.clientId === "string" ? body.clientId.trim() : "";
         const target = state.resolveClientForCommand(requestedClientId);
         if (!target.client) {
-          sendJson(res, 409, { ok: false, error: target.error, clients: target.clients ?? [] }, origin);
+          sendJson(
+            res,
+            409,
+            { ok: false, error: target.error, clients: target.clients ?? [] },
+            origin,
+          );
           return;
         }
         const commandId = randomUUID();
@@ -366,13 +391,30 @@ function createServer({ token, host, port, certPath, keyPath }) {
           await delay(100);
         }
         state.closeCommand(commandId);
-        sendJson(res, 504, { ok: false, error: `Command ${type} timed out after ${timeoutMs}ms`, clientId }, origin);
+        sendJson(
+          res,
+          504,
+          {
+            ok: false,
+            error: `Command ${type} timed out after ${timeoutMs}ms`,
+            clientId,
+          },
+          origin,
+        );
         return;
       }
 
       sendJson(res, 404, { ok: false, error: "Not found" }, origin);
     } catch (error) {
-      sendJson(res, 400, { ok: false, error: error instanceof Error ? error.message : String(error) }, origin);
+      sendJson(
+        res,
+        400,
+        {
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        origin,
+      );
     }
   });
 
@@ -381,39 +423,58 @@ function createServer({ token, host, port, certPath, keyPath }) {
 
 function normalizePort(value) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
-  return Number.isInteger(parsed) && parsed > 0 && parsed < 65536 ? parsed : DEFAULT_PORT;
+  return Number.isInteger(parsed) && parsed > 0 && parsed < 65536
+    ? parsed
+    : DEFAULT_PORT;
 }
 
 function normalizeHost(value) {
   const host = String(value ?? DEFAULT_HOST).trim() || DEFAULT_HOST;
   if (!LOOPBACK_HOSTS.has(host)) {
-    throw new Error(`Background verification bridge must bind to loopback only; refused host ${host}`);
+    throw new Error(
+      `Background verification bridge must bind to loopback only; refused host ${host}`,
+    );
   }
   return host;
 }
 
 function finiteNumber(value) {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 function clampTimeoutMs(value, fallback) {
   const timeoutMs = finiteNumber(value) ?? fallback;
-  return Math.max(1_000, Math.min(COMMAND_MAX_TIMEOUT_MS, Math.floor(timeoutMs)));
+  return Math.max(
+    1_000,
+    Math.min(COMMAND_MAX_TIMEOUT_MS, Math.floor(timeoutMs)),
+  );
 }
 
 function commandTimeoutMs(type, payload, explicitTimeoutMs) {
-  if (finiteNumber(explicitTimeoutMs)) return clampTimeoutMs(explicitTimeoutMs, COMMAND_DEFAULT_TIMEOUT_MS);
+  if (finiteNumber(explicitTimeoutMs))
+    return clampTimeoutMs(explicitTimeoutMs, COMMAND_DEFAULT_TIMEOUT_MS);
   if (type === "submitPrompt") {
-    const promptTimeout = payload && typeof payload === "object" ? finiteNumber(payload.timeoutMs) : undefined;
-    return clampTimeoutMs((promptTimeout ?? 60_000) + 5_000, COMMAND_DEFAULT_TIMEOUT_MS);
+    const promptTimeout =
+      payload && typeof payload === "object"
+        ? finiteNumber(payload.timeoutMs)
+        : undefined;
+    return clampTimeoutMs(
+      (promptTimeout ?? 60_000) + 5_000,
+      COMMAND_DEFAULT_TIMEOUT_MS,
+    );
   }
   return COMMAND_DEFAULT_TIMEOUT_MS;
 }
 
 function normalizeToken(args) {
-  const token = typeof args.token === "string"
-    ? args.token
-    : (typeof process.env.PI_BACKGROUND_VERIFY_TOKEN === "string" ? process.env.PI_BACKGROUND_VERIFY_TOKEN : "");
+  const token =
+    typeof args.token === "string"
+      ? args.token
+      : typeof process.env.PI_BACKGROUND_VERIFY_TOKEN === "string"
+        ? process.env.PI_BACKGROUND_VERIFY_TOKEN
+        : "";
   return token.trim();
 }
 
@@ -422,12 +483,23 @@ function isUsableToken(token) {
 }
 
 function existingCaPaths(...candidates) {
-  return candidates.filter((candidate) => typeof candidate === "string" && candidate.length > 0 && fs.existsSync(candidate));
+  return candidates.filter(
+    (candidate) =>
+      typeof candidate === "string" &&
+      candidate.length > 0 &&
+      fs.existsSync(candidate),
+  );
 }
 
 function defaultMkcertRootPath() {
   if (process.platform === "darwin") {
-    return path.join(os.homedir(), "Library", "Application Support", "mkcert", "rootCA.pem");
+    return path.join(
+      os.homedir(),
+      "Library",
+      "Application Support",
+      "mkcert",
+      "rootCA.pem",
+    );
   }
   return "";
 }
@@ -440,27 +512,32 @@ function localAgent(caPaths) {
 function requestJson(url, payload, caPaths) {
   const body = JSON.stringify(payload);
   return new Promise((resolve, reject) => {
-    const req = https.request(url, {
-      method: "POST",
-      agent: localAgent(caPaths),
-      headers: {
-        "Content-Type": "application/json; charset=utf-8",
-        "Content-Length": Buffer.byteLength(body),
+    const req = https.request(
+      url,
+      {
+        method: "POST",
+        agent: localAgent(caPaths),
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Content-Length": Buffer.byteLength(body),
+        },
       },
-    }, (res) => {
-      let out = "";
-      res.setEncoding("utf8");
-      res.on("data", (chunk) => out += chunk);
-      res.on("end", () => {
-        try {
-          const parsed = JSON.parse(out || "{}");
-          if ((res.statusCode ?? 500) >= 400) reject(new Error(parsed.error ?? `HTTP ${res.statusCode}`));
-          else resolve(parsed);
-        } catch (error) {
-          reject(error);
-        }
-      });
-    });
+      (res) => {
+        let out = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk) => (out += chunk));
+        res.on("end", () => {
+          try {
+            const parsed = JSON.parse(out || "{}");
+            if ((res.statusCode ?? 500) >= 400)
+              reject(new Error(parsed.error ?? `HTTP ${res.statusCode}`));
+            else resolve(parsed);
+          } catch (error) {
+            reject(error);
+          }
+        });
+      },
+    );
     req.on("error", reject);
     req.end(body);
   });
@@ -469,15 +546,23 @@ function requestJson(url, payload, caPaths) {
 async function runServe(args) {
   const token = normalizeToken(args);
   if (!token) {
-    console.error("Refusing to start without PI_BACKGROUND_VERIFY_TOKEN or --token.");
+    console.error(
+      "Refusing to start without PI_BACKGROUND_VERIFY_TOKEN or --token.",
+    );
     process.exit(2);
   }
   if (!isUsableToken(token)) {
-    console.error("Refusing to start with a background verification token shorter than 16 characters.");
+    console.error(
+      "Refusing to start with a background verification token shorter than 16 characters.",
+    );
     process.exit(2);
   }
-  const port = normalizePort(args.port ?? process.env.PI_BACKGROUND_VERIFY_PORT);
-  const host = normalizeHost(args.host ?? process.env.PI_BACKGROUND_VERIFY_HOST ?? DEFAULT_HOST);
+  const port = normalizePort(
+    args.port ?? process.env.PI_BACKGROUND_VERIFY_PORT,
+  );
+  const host = normalizeHost(
+    args.host ?? process.env.PI_BACKGROUND_VERIFY_HOST ?? DEFAULT_HOST,
+  );
   const certPath = path.resolve(String(args.cert ?? DEFAULT_CERT_PATH));
   const keyPath = path.resolve(String(args.key ?? DEFAULT_KEY_PATH));
   const { server } = createServer({ token, host, port, certPath, keyPath });
@@ -489,32 +574,62 @@ async function runServe(args) {
 
 async function runCommand(args) {
   const token = normalizeToken(args);
-  if (!token) throw new Error("PI_BACKGROUND_VERIFY_TOKEN or --token is required.");
-  if (!isUsableToken(token)) throw new Error("Background verification token must be at least 16 characters.");
-  const port = normalizePort(args.port ?? process.env.PI_BACKGROUND_VERIFY_PORT);
-  const host = normalizeHost(args.host ?? process.env.PI_BACKGROUND_VERIFY_HOST ?? DEFAULT_HOST);
+  if (!token)
+    throw new Error("PI_BACKGROUND_VERIFY_TOKEN or --token is required.");
+  if (!isUsableToken(token))
+    throw new Error(
+      "Background verification token must be at least 16 characters.",
+    );
+  const port = normalizePort(
+    args.port ?? process.env.PI_BACKGROUND_VERIFY_PORT,
+  );
+  const host = normalizeHost(
+    args.host ?? process.env.PI_BACKGROUND_VERIFY_HOST ?? DEFAULT_HOST,
+  );
   const type = args._[1];
   if (!type) throw new Error("Command type is required.\n" + usage());
   const payloadRaw = args._[2];
-  const payload = payloadRaw ? JSON.parse(payloadRaw) : {};
-  const clientId = typeof args.clientId === "string" ? args.clientId : (typeof args["client-id"] === "string" ? args["client-id"] : undefined);
+  let payload;
+  if (payloadRaw) {
+    try {
+      payload = JSON.parse(payloadRaw);
+    } catch {
+      throw new Error("Command payload is not valid JSON.");
+    }
+  } else {
+    payload = {};
+  }
+  const clientId =
+    typeof args.clientId === "string"
+      ? args.clientId
+      : typeof args["client-id"] === "string"
+        ? args["client-id"]
+        : undefined;
   const certPath = path.resolve(String(args.cert ?? DEFAULT_CERT_PATH));
   const caPaths = existingCaPaths(
     typeof args.ca === "string" ? path.resolve(args.ca) : "",
-    typeof process.env.PI_BACKGROUND_VERIFY_CA_PATH === "string" ? path.resolve(process.env.PI_BACKGROUND_VERIFY_CA_PATH) : "",
+    typeof process.env.PI_BACKGROUND_VERIFY_CA_PATH === "string"
+      ? path.resolve(process.env.PI_BACKGROUND_VERIFY_CA_PATH)
+      : "",
     defaultMkcertRootPath(),
     certPath,
   );
   if (caPaths.length === 0) {
-    throw new Error("No CA/cert file found for bridge TLS verification. Pass --ca or PI_BACKGROUND_VERIFY_CA_PATH.");
+    throw new Error(
+      "No CA/cert file found for bridge TLS verification. Pass --ca or PI_BACKGROUND_VERIFY_CA_PATH.",
+    );
   }
-  const response = await requestJson(`https://${host}:${port}/command`, {
-    token,
-    type,
-    payload,
-    clientId,
-    timeoutMs: args.timeout ? Number(args.timeout) : undefined,
-  }, caPaths);
+  const response = await requestJson(
+    `https://${host}:${port}/command`,
+    {
+      token,
+      type,
+      payload,
+      clientId,
+      timeoutMs: args.timeout ? Number(args.timeout) : undefined,
+    },
+    caPaths,
+  );
   console.log(JSON.stringify(response, null, 2));
 }
 

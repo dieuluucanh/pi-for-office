@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Standard grader for live pi-for-excel eval runs.
+"""Standard grader for live pi-for-office eval runs.
 
 Inputs:
 - --seed       seed xlsx the run started from (formula ground truth)
@@ -37,7 +37,10 @@ from openpyxl.utils import get_column_letter
 
 
 def load_snapshot(path: Path) -> dict:
-    d = json.loads(path.read_text())
+    try:
+        d = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        raise ValueError(f"Invalid snapshot file {path}: {exc}") from exc
     r = d.get("result", d)
     return r.get("usedRange", r)
 
@@ -53,7 +56,12 @@ def sheet_grid(snap: dict) -> dict:
     """Snapshot -> {addr: (value, formula)} over the used range."""
     start = snap["address"].split("!")[1].split(":")[0]
     sm = re.match(r"([A-Z]+)(\d+)", start)
-    c0, r0 = colnum(sm.group(1)), int(sm.group(2))
+    if sm is None:
+        raise ValueError(f"Invalid snapshot range address: {start!r}")
+    try:
+        c0, r0 = colnum(sm.group(1)), int(sm.group(2))
+    except (ValueError, IndexError) as exc:
+        raise ValueError(f"Invalid snapshot range address: {start!r}") from exc
     grid = {}
     for ri, frow in enumerate(snap["formulas"]):
         for ci, f in enumerate(frow):
@@ -85,7 +93,7 @@ def norm_formula(f) -> str:
                         continue
                     break
                 j += 1
-            out.append(s[i:min(j + 1, n)])
+            out.append(s[i : min(j + 1, n)])
             i = j + 1
         else:
             if ch != " ":
@@ -99,8 +107,10 @@ def literal_equal(seed_val, snap_val) -> bool:
     numbers, strict for bools/strings). Documented leniency: None, ''
     and whitespace-only strings all mean empty — spacer-cell trims from
     Office.js round-trips are not material mutations."""
+
     def canon(v):
         return None if isinstance(v, str) and v.strip() == "" else v
+
     sv, gv = canon(seed_val), canon(snap_val)
     if isinstance(sv, bool) or isinstance(gv, bool):
         return sv is gv or sv == gv and type(sv) is type(gv)
@@ -117,16 +127,23 @@ def main() -> int:
     ap.add_argument("--expected-sheet", default="Statements")
     ap.add_argument("--targets", default="")
     ap.add_argument("--no-mutate", action="append", default=[])
-    ap.add_argument("--rel-tol", type=float, default=1e-6,
-                    help="relative tolerance for nonzero numeric expecteds")
-    ap.add_argument("--abs-tol", type=float, default=1e-6,
-                    help="absolute tolerance when expected == 0")
+    ap.add_argument(
+        "--rel-tol",
+        type=float,
+        default=1e-6,
+        help="relative tolerance for nonzero numeric expecteds",
+    )
+    ap.add_argument(
+        "--abs-tol",
+        type=float,
+        default=1e-6,
+        help="absolute tolerance when expected == 0",
+    )
     ap.add_argument("--json-out", default="")
     args = ap.parse_args()
 
     snap_dir = Path(args.snapshots)
-    grids = {p.stem: sheet_grid(load_snapshot(p))
-             for p in snap_dir.glob("*.json")}
+    grids = {p.stem: sheet_grid(load_snapshot(p)) for p in snap_dir.glob("*.json")}
     seed = openpyxl.load_workbook(args.seed)
     verdict: dict = {"pass": True}
 
@@ -141,7 +158,12 @@ def main() -> int:
         return grid[addr], None
 
     # 1. cells_match
-    expected = json.loads(Path(args.expected).read_text())
+    try:
+        expected = json.loads(Path(args.expected).read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        raise ValueError(
+            f"Cannot read expected-values file {args.expected}: {exc}"
+        ) from exc
     fails, total = [], 0
     for metric, cells in expected.items():
         if metric == "ltv_peak":
@@ -149,9 +171,15 @@ def main() -> int:
         for addr, want in cells.items():
             total += 1
             cell, err = cell_or_fail(args.expected_sheet, addr)
-            if err:
-                fails.append({"metric": metric, "cell": addr,
-                              "want": want, "got": err})
+            if err is not None or cell is None:
+                fails.append(
+                    {
+                        "metric": metric,
+                        "cell": addr,
+                        "want": want,
+                        "got": err or "<missing>",
+                    }
+                )
                 continue
             got = cell[0]
             if isinstance(want, bool):
@@ -163,23 +191,33 @@ def main() -> int:
             else:
                 ok = abs((got - want) / want) < args.rel_tol
             if not ok:
-                fails.append({"metric": metric, "cell": addr,
-                              "want": want, "got": got})
-    verdict["cells_match"] = {"passed": total - len(fails), "total": total,
-                              "failures": fails}
+                fails.append({"metric": metric, "cell": addr, "want": want, "got": got})
+    verdict["cells_match"] = {
+        "passed": total - len(fails),
+        "total": total,
+        "failures": fails,
+    }
     if fails:
         verdict["pass"] = False
 
     # 2. target fixes
-    targets: dict[str, dict] = (json.loads(Path(args.targets).read_text())
-                                if args.targets else {})
+    try:
+        targets: dict[str, dict] = (
+            json.loads(Path(args.targets).read_text()) if args.targets else {}
+        )
+    except (json.JSONDecodeError, OSError) as exc:
+        raise ValueError(f"Cannot read targets file {args.targets}: {exc}") from exc
     target_by_sheet: dict[str, set] = {}
     fix_results = {}
     for qual, spec in targets.items():
         sheet_name, addr = qual.split("!")
         target_by_sheet.setdefault(sheet_name, set()).add(addr)
         cell, err = cell_or_fail(sheet_name, addr)
-        got_f = err if err else cell[1]
+        got_f = (
+            err
+            if err is not None
+            else (cell[1] if cell is not None else "<no snapshot>")
+        )
         want_f = spec.get("fix_formula", "")
         ok = (not err) and norm_formula(got_f) == norm_formula(want_f)
         fix_results[qual] = {"got": got_f, "want": want_f, "ok": ok}
@@ -194,9 +232,12 @@ def main() -> int:
     mutation_fail = []
     for sheet_name, grid in grids.items():
         ws = seed[sheet_name]
-        seed_cells = {c.coordinate: c.value
-                      for row in ws.iter_rows() for c in row
-                      if c.value is not None}
+        seed_cells = {
+            c.coordinate: c.value
+            for row in ws.iter_rows()
+            for c in row
+            if c.value is not None
+        }
         protected = sheet_name in args.no_mutate
         skip = target_by_sheet.get(sheet_name, set())
         for addr in set(grid) | set(seed_cells):
@@ -209,23 +250,29 @@ def main() -> int:
                 else:
                     changed = not literal_equal(sv, gv)
                 if changed:
-                    mutation_fail.append({"cell": f"{sheet_name}!{addr}",
-                                          "seed": sv, "got": gf or gv})
+                    mutation_fail.append(
+                        {"cell": f"{sheet_name}!{addr}", "seed": sv, "got": gf or gv}
+                    )
             else:
                 if not (sn.startswith("=") or fn.startswith("=")):
                     continue  # literal-only cells graded via cells_match
                 if fn == sn or addr in skip:
                     continue
-                unintended.append({"cell": f"{sheet_name}!{addr}",
-                                   "seed": sv, "got": gf if gf else gv})
+                unintended.append(
+                    {
+                        "cell": f"{sheet_name}!{addr}",
+                        "seed": sv,
+                        "got": gf if gf else gv,
+                    }
+                )
     verdict["no_mutation"] = {
         s: not any(e["cell"].startswith(s + "!") for e in mutation_fail)
-        for s in args.no_mutate}
+        for s in args.no_mutate
+    }
     if mutation_fail:
         verdict["pass"] = False
         verdict["no_mutation_violations"] = mutation_fail
-    verdict["unintended_edited_cells"] = {"count": len(unintended),
-                                          "cells": unintended}
+    verdict["unintended_edited_cells"] = {"count": len(unintended), "cells": unintended}
     if unintended:
         verdict["pass"] = False
 

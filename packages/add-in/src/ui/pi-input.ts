@@ -1,5 +1,5 @@
 /**
- * Pi for Excel — Chat input component.
+ * Pi for Office — Chat input component.
  *
  * A clean card with auto-growing textarea and embedded send/abort button.
  * Purpose-built for a narrow sidebar. Replaces pi-web-ui's MessageEditor.
@@ -18,7 +18,11 @@ import { FileText } from "lucide";
 
 import { doesUiClaimStreamingEscape } from "../utils/escape-guard.js";
 import { t } from "../language/index.js";
-import { getSendText, resolveInputAutoGrowHeight, shouldSendOnEnter } from "./pi-input-behavior.js";
+import {
+  getSendText,
+  resolveInputAutoGrowHeight,
+  shouldSendOnEnter,
+} from "./pi-input-behavior.js";
 
 const PLACEHOLDER_HINT_KEYS = [
   "input.placeholder.ask",
@@ -28,7 +32,11 @@ const PLACEHOLDER_HINT_KEYS = [
 ];
 
 function getPlaceholderHintKey(index: number): string {
-  return PLACEHOLDER_HINT_KEYS[index] ?? PLACEHOLDER_HINT_KEYS[0] ?? "input.placeholder.ask";
+  return (
+    PLACEHOLDER_HINT_KEYS[index] ??
+    PLACEHOLDER_HINT_KEYS[0] ??
+    "input.placeholder.ask"
+  );
 }
 
 @customElement("pi-input")
@@ -42,7 +50,9 @@ export class PiInput extends LitElement {
 
   private _placeholderTimer: ReturnType<typeof setInterval> | undefined;
 
-  get value(): string { return this._value; }
+  get value(): string {
+    return this._value;
+  }
   set value(v: string) {
     this._value = v;
     if (this._textarea) {
@@ -51,7 +61,9 @@ export class PiInput extends LitElement {
     }
   }
 
-  getTextarea(): HTMLTextAreaElement { return this._textarea; }
+  getTextarea(): HTMLTextAreaElement {
+    return this._textarea;
+  }
 
   clear(): void {
     this._value = "";
@@ -61,9 +73,13 @@ export class PiInput extends LitElement {
     }
   }
 
-  override focus(): void { this._textarea?.focus(); }
+  override focus(): void {
+    this._textarea?.focus();
+  }
 
-  protected override createRenderRoot() { return this; }
+  protected override createRenderRoot() {
+    return this;
+  }
 
   private _readTextareaValue(): string {
     return this._textarea?.value ?? this._value;
@@ -90,7 +106,15 @@ export class PiInput extends LitElement {
   private _onKeydown = (e: KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       const value = this._syncValueFromTextarea();
-      if (!shouldSendOnEnter({ key: e.key, shiftKey: e.shiftKey, isStreaming: this.isStreaming, value })) return;
+      if (
+        !shouldSendOnEnter({
+          key: e.key,
+          shiftKey: e.shiftKey,
+          isStreaming: this.isStreaming,
+          value,
+        })
+      )
+        return;
       e.preventDefault();
       this._send();
       return;
@@ -126,10 +150,12 @@ export class PiInput extends LitElement {
   private _dispatchFiles(files: File[]): void {
     if (files.length === 0) return;
 
-    this.dispatchEvent(new CustomEvent<{ files: File[] }>("pi-files-drop", {
-      bubbles: true,
-      detail: { files },
-    }));
+    this.dispatchEvent(
+      new CustomEvent<{ files: File[] }>("pi-files-drop", {
+        bubbles: true,
+        detail: { files },
+      }),
+    );
   }
 
   private _onDrop = (event: DragEvent) => {
@@ -168,7 +194,9 @@ export class PiInput extends LitElement {
   private _send() {
     const text = getSendText(this._syncValueFromTextarea());
     if (!text) return;
-    this.dispatchEvent(new CustomEvent("pi-send", { bubbles: true, detail: { text } }));
+    this.dispatchEvent(
+      new CustomEvent("pi-send", { bubbles: true, detail: { text } }),
+    );
   }
 
   private _autoGrow() {
@@ -196,16 +224,22 @@ export class PiInput extends LitElement {
     // Rotate placeholder hints every 8s (mostly default, occasionally slash hint)
     this._placeholderTimer = setInterval(() => {
       if (this.isStreaming || this._value) return; // don't rotate while typing or streaming
-      this._placeholderIndex = (this._placeholderIndex + 1) % PLACEHOLDER_HINT_KEYS.length;
+      this._placeholderIndex =
+        (this._placeholderIndex + 1) % PLACEHOLDER_HINT_KEYS.length;
     }, 8000);
   }
 
   override disconnectedCallback() {
     super.disconnectedCallback();
-    if (this._placeholderTimer) { clearInterval(this._placeholderTimer); this._placeholderTimer = undefined; }
+    if (this._placeholderTimer) {
+      clearInterval(this._placeholderTimer);
+      this._placeholderTimer = undefined;
+    }
   }
 
-  override firstUpdated() { this._textarea?.focus(); }
+  override firstUpdated() {
+    this._textarea?.focus();
+  }
 
   override render() {
     const hasContent = this._value.trim().length > 0;
@@ -240,11 +274,14 @@ export class PiInput extends LitElement {
           @keyup=${this._onInput}
           @keydown=${this._onKeydown}
         ></textarea>
-        ${this._isDragOver
-          ? html`<div class="pi-input-drop-hint">${t("input.drop.hint")}</div>`
-          : null}
-        ${this.isStreaming
-          ? html`
+        ${
+          this._isDragOver
+            ? html`<div class="pi-input-drop-hint">${t("input.drop.hint")}</div>`
+            : null
+        }
+        ${
+          this.isStreaming
+            ? html`
             <button
               class="pi-input-btn pi-input-btn--abort"
               type="button"
@@ -254,7 +291,7 @@ export class PiInput extends LitElement {
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
             </button>`
-          : html`
+            : html`
             <button
               class="pi-input-btn pi-input-btn--send ${hasContent ? "" : "is-disabled"}"
               type="button"

@@ -19,7 +19,9 @@ class MemorySettingsStore {
   private readonly values = new Map<string, DynamicValue>();
 
   get(key: string): Promise<DynamicValue> {
-    return Promise.resolve(this.values.has(key) ? this.values.get(key) ?? null : null);
+    return Promise.resolve(
+      this.values.has(key) ? (this.values.get(key) ?? null) : null,
+    );
   }
 
   set(key: string, value: DynamicValue): Promise<void> {
@@ -28,7 +30,7 @@ class MemorySettingsStore {
   }
 
   readRaw(key: string): DynamicValue {
-    return this.values.has(key) ? this.values.get(key) ?? null : null;
+    return this.values.has(key) ? (this.values.get(key) ?? null) : null;
   }
 
   writeRaw(key: string, value: DynamicValue): void {
@@ -36,12 +38,17 @@ class MemorySettingsStore {
   }
 }
 
-function isBuiltinsRegistryTestPayloadShape(value: DynamicValue): value is DynamicObject {
+function isBuiltinsRegistryTestPayloadShape(
+  value: DynamicValue,
+): value is DynamicObject {
   return typeof value === "object" && value !== null;
 }
 
 void test("builtins registry wires /addons, /experimental, /extensions, /tools, and /files command registration", async () => {
-  const source = await readFile(new URL("../src/commands/builtins/index.ts", import.meta.url), "utf8");
+  const source = await readFile(
+    new URL("../src/commands/builtins/index.ts", import.meta.url),
+    "utf8",
+  );
 
   assert.match(source, /createModelCommands/);
   assert.match(source, /openModelSelector:\s*context\.openModelSelector/);
@@ -61,15 +68,27 @@ void test("builtins registry wires /addons, /experimental, /extensions, /tools, 
   assert.match(source, /createFilesCommands/);
   assert.match(source, /\.\.\.createFilesCommands\(context\)/);
 
-  const extensionApiSource = await readFile(new URL("../src/commands/extension-api.ts", import.meta.url), "utf8");
+  const extensionApiSource = await readFile(
+    new URL("../src/commands/extension-api.ts", import.meta.url),
+    "utf8",
+  );
   const extensionModuleImportSource = await readFile(
     new URL("../src/commands/extension-module-import.ts", import.meta.url),
     "utf8",
   );
 
-  assert.match(extensionModuleImportSource, /glob\("\.\.\/extensions\/\*\.\{ts,js\}"\)/);
-  assert.match(extensionModuleImportSource, /return import\.meta\.env\.DEV === true/);
-  assert.doesNotMatch(extensionModuleImportSource, /typeof \(import\.meta.*\)\.glob !== "function"/);
+  assert.match(
+    extensionModuleImportSource,
+    /glob\("\.\.\/extensions\/\*\.\{ts,js\}"\)/,
+  );
+  assert.match(
+    extensionModuleImportSource,
+    /return import\.meta\.env\.DEV === true/,
+  );
+  assert.doesNotMatch(
+    extensionModuleImportSource,
+    /typeof \(import\.meta.*\)\.glob !== "function"/,
+  );
   assert.match(extensionModuleImportSource, /Local extension module/);
 
   assert.match(extensionApiSource, /isCapabilityEnabled/);
@@ -81,33 +100,57 @@ void test("builtins registry wires /addons, /experimental, /extensions, /tools, 
     /get raw\(\)\s*\{[\s\S]*assertCapability\("agent\.read"\);[\s\S]*assertCapability\("agent\.events\.read"\);/,
   );
 
-  const runtimeManagerSource = await readFile(new URL("../src/extensions/runtime-manager.ts", import.meta.url), "utf8");
+  const runtimeManagerSource = await readFile(
+    new URL("../src/extensions/runtime-manager.ts", import.meta.url),
+    "utf8",
+  );
   assert.match(runtimeManagerSource, /effectiveCapabilities/);
   assert.match(runtimeManagerSource, /permissionsEnforced/);
   assert.match(runtimeManagerSource, /async setExtensionCapability\(/);
   assert.match(runtimeManagerSource, /setExtensionCapabilityAllowed\(/);
-  assert.match(runtimeManagerSource, /await this\.reloadExtension\(entry\.id\);/);
+  assert.match(
+    runtimeManagerSource,
+    /await this\.reloadExtension\(entry\.id\);/,
+  );
   assert.match(runtimeManagerSource, /activateExtensionInSandbox/);
   assert.match(runtimeManagerSource, /extension_sandbox_runtime/);
 
   const extensionsHubPluginsSource = await readFile(
-    new URL("../src/commands/builtins/extensions-hub-plugins.ts", import.meta.url),
+    new URL(
+      "../src/commands/builtins/extensions-hub-plugins.ts",
+      import.meta.url,
+    ),
     "utf8",
   );
   assert.match(extensionsHubPluginsSource, /manager\.setExtensionCapability\(/);
   assert.match(extensionsHubPluginsSource, /confirmInstall\(/);
   assert.match(extensionsHubPluginsSource, /confirmEnable\(/);
-  assert.match(extensionsHubPluginsSource, /ext-hub-plugins\.confirm\.grantedHighRisk/);
-  assert.match(extensionsHubPluginsSource, /createSectionHeader\(\{ label: t\("ext-hub-plugins\.permissions"\) \}\)/);
+  assert.match(
+    extensionsHubPluginsSource,
+    /ext-hub-plugins\.confirm\.grantedHighRisk/,
+  );
+  assert.match(
+    extensionsHubPluginsSource,
+    /createSectionHeader\(\{ label: t\("ext-hub-plugins\.permissions"\) \}\)/,
+  );
   assert.match(extensionsHubPluginsSource, /installFromUrl\(/);
 
-  const extensionsDocsSource = await readFile(new URL("../docs/extensions.md", import.meta.url), "utf8");
+  const extensionsDocsSource = await readFile(
+    new URL("../docs/extensions.md", import.meta.url),
+    "utf8",
+  );
   assert.match(extensionsDocsSource, /## Permission review\/revoke/);
-  assert.match(extensionsDocsSource, /Install from URL\/code asks for confirmation/);
+  assert.match(
+    extensionsDocsSource,
+    /Install from URL\/code asks for confirmation/,
+  );
   assert.match(extensionsDocsSource, /extensions\.registry\.v2/);
   assert.match(extensionsDocsSource, /extension-widget-v2/);
 
-  const experimentalFlagsSource = await readFile(new URL("../src/experiments/flags.ts", import.meta.url), "utf8");
+  const experimentalFlagsSource = await readFile(
+    new URL("../src/experiments/flags.ts", import.meta.url),
+    "utf8",
+  );
   assert.match(experimentalFlagsSource, /extension_permission_gates/);
   assert.match(experimentalFlagsSource, /extension-permissions/);
   assert.match(experimentalFlagsSource, /extension_sandbox_runtime/);
@@ -121,7 +164,10 @@ void test("builtins registry wires /addons, /experimental, /extensions, /tools, 
 });
 
 void test("taskpane init keeps getIntegrationToolNames imported when used", async () => {
-  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
+  const initSource = await readFile(
+    new URL("../src/taskpane/init.ts", import.meta.url),
+    "utf8",
+  );
   if (!/getIntegrationToolNames\(\)/.test(initSource)) {
     return;
   }
@@ -133,9 +179,15 @@ void test("taskpane init keeps getIntegrationToolNames imported when used", asyn
 });
 
 void test("taskpane init waits for local services probe and refreshes capabilities", async () => {
-  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
+  const initSource = await readFile(
+    new URL("../src/taskpane/init.ts", import.meta.url),
+    "utf8",
+  );
 
-  assert.match(initSource, /let localServicesReady: Promise<void> = Promise\.resolve\(\);/);
+  assert.match(
+    initSource,
+    /let localServicesReady: Promise<void> = Promise\.resolve\(\);/,
+  );
   assert.match(initSource, /await localServicesReady;/);
   assert.match(
     initSource,
@@ -144,14 +196,20 @@ void test("taskpane init waits for local services probe and refreshes capabiliti
 });
 
 void test("tools builtins expose /tools without /integrations alias", async () => {
-  const source = await readFile(new URL("../src/commands/builtins/tools.ts", import.meta.url), "utf8");
+  const source = await readFile(
+    new URL("../src/commands/builtins/tools.ts", import.meta.url),
+    "utf8",
+  );
 
   assert.match(source, /TOOLS_COMMAND_NAME/);
   assert.doesNotMatch(source, /INTEGRATIONS_COMMAND_NAME/);
 });
 
 void test("extensions builtins expose /extensions without /addons alias", async () => {
-  const source = await readFile(new URL("../src/commands/builtins/addons.ts", import.meta.url), "utf8");
+  const source = await readFile(
+    new URL("../src/commands/builtins/addons.ts", import.meta.url),
+    "utf8",
+  );
 
   assert.match(source, /name:\s*"extensions"/);
   assert.doesNotMatch(source, /name:\s*"addons"/);
@@ -160,19 +218,31 @@ void test("extensions builtins expose /extensions without /addons alias", async 
 
 void test("extensions hub connections tab includes MCP test flow", async () => {
   const source = await readFile(
-    new URL("../src/commands/builtins/extensions-hub-connections.ts", import.meta.url),
+    new URL(
+      "../src/commands/builtins/extensions-hub-connections.ts",
+      import.meta.url,
+    ),
     "utf8",
   );
 
   assert.match(source, /label: t\("extensions-hub-connections\.mcpSection"\)/);
   assert.match(source, /extensions-hub-connections\.addServer/);
-  assert.match(source, /createConfigRow\(t\("extensions-hub-connections\.availability"\)/);
-  assert.match(source, /scopeSummary\.textContent = t\("extensions-hub-connections\.scope-controls"\)/);
+  assert.match(
+    source,
+    /createConfigRow\(t\("extensions-hub-connections\.availability"\)/,
+  );
+  assert.match(
+    source,
+    /scopeSummary\.textContent = t\("extensions-hub-connections\.scope-controls"\)/,
+  );
   assert.match(source, /probeMcpServer/);
 });
 
 void test("taskpane init wires Files workspace opener", async () => {
-  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
+  const initSource = await readFile(
+    new URL("../src/taskpane/init.ts", import.meta.url),
+    "utf8",
+  );
 
   assert.match(initSource, /showFilesWorkspaceDialog/);
   assert.match(
@@ -182,18 +252,30 @@ void test("taskpane init wires Files workspace opener", async () => {
 });
 
 void test("taskpane init wires extensions menu opener", async () => {
-  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
+  const initSource = await readFile(
+    new URL("../src/taskpane/init.ts", import.meta.url),
+    "utf8",
+  );
 
-  assert.match(initSource, /const openExtensionsHub = \(tab\?: ExtensionsHubTab\): void =>/);
+  assert.match(
+    initSource,
+    /const openExtensionsHub = \(tab\?: ExtensionsHubTab\): void =>/,
+  );
   assert.match(initSource, /openSettings\(tab \?\? "connections"\)/);
   assert.match(initSource, /extensionManager/);
   assert.match(initSource, /configureSettingsPages/);
   assert.match(initSource, /registerBuiltins\([\s\S]*openExtensionsHub/);
-  assert.match(initSource, /sidebar\.onOpenExtensions\s*=\s*\(\)\s*=>\s*\{\s*openExtensionsHub\(\);\s*\};/);
+  assert.match(
+    initSource,
+    /sidebar\.onOpenExtensions\s*=\s*\(\)\s*=>\s*\{\s*openExtensionsHub\(\);\s*\};/,
+  );
 });
 
 void test("taskpane init wires gear settings to unified settings overlay", async () => {
-  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
+  const initSource = await readFile(
+    new URL("../src/taskpane/init.ts", import.meta.url),
+    "utf8",
+  );
 
   assert.match(initSource, /openSettings/);
   assert.match(
@@ -202,20 +284,35 @@ void test("taskpane init wires gear settings to unified settings overlay", async
   );
   assert.match(initSource, /configureSettingsPages\(\{[\s\S]*getExecutionMode/);
   assert.match(initSource, /configureSettingsPages\(\{[\s\S]*setExecutionMode/);
-  assert.match(initSource, /configureSettingsPages\(\{[\s\S]*getModelSwitchBehavior/);
-  assert.match(initSource, /configureSettingsPages\(\{[\s\S]*setModelSwitchBehavior/);
+  assert.match(
+    initSource,
+    /configureSettingsPages\(\{[\s\S]*getModelSwitchBehavior/,
+  );
+  assert.match(
+    initSource,
+    /configureSettingsPages\(\{[\s\S]*setModelSwitchBehavior/,
+  );
 });
 
 void test("taskpane init mounts proxy banner and reacts to proxy state changes", async () => {
-  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
+  const initSource = await readFile(
+    new URL("../src/taskpane/init.ts", import.meta.url),
+    "utf8",
+  );
 
   assert.match(initSource, /createProxyBanner/);
-  assert.match(initSource, /document\.addEventListener\("pi:proxy-state-changed"/);
+  assert.match(
+    initSource,
+    /document\.addEventListener\("pi:proxy-state-changed"/,
+  );
   assert.match(initSource, /proxyBanner\.update\(getProxyState\(\)\)/);
 });
 
 void test("status bar keeps model, thinking, context, and mode without rules\/proxy badges", async () => {
-  const statusBarSource = await readFile(new URL("../src/taskpane/status-bar.ts", import.meta.url), "utf8");
+  const statusBarSource = await readFile(
+    new URL("../src/taskpane/status-bar.ts", import.meta.url),
+    "utf8",
+  );
 
   assert.match(statusBarSource, /pi-status-model/);
   assert.match(statusBarSource, /pi-status-thinking/);
@@ -226,9 +323,15 @@ void test("status bar keeps model, thinking, context, and mode without rules\/pr
 });
 
 void test("sidebar utilities menu includes extensions label", async () => {
-  const sidebarSource = await readFile(new URL("../src/ui/pi-sidebar.ts", import.meta.url), "utf8");
+  const sidebarSource = await readFile(
+    new URL("../src/ui/pi-sidebar.ts", import.meta.url),
+    "utf8",
+  );
 
-  assert.match(sidebarSource, /aria-label=\$\{t\("sidebar\.utilities\.aria"\)\}/);
+  assert.match(
+    sidebarSource,
+    /aria-label=\$\{t\("sidebar\.utilities\.aria"\)\}/,
+  );
   assert.match(sidebarSource, /sidebar\.menu\.extensions/);
   assert.match(sidebarSource, /sidebar\.menu\.files/);
   assert.doesNotMatch(sidebarSource, /Extensions…/);
@@ -237,7 +340,10 @@ void test("sidebar utilities menu includes extensions label", async () => {
 });
 
 void test("disclosure bar reuses shared toggle rows", async () => {
-  const disclosureSource = await readFile(new URL("../src/ui/disclosure-bar.ts", import.meta.url), "utf8");
+  const disclosureSource = await readFile(
+    new URL("../src/ui/disclosure-bar.ts", import.meta.url),
+    "utf8",
+  );
 
   assert.match(disclosureSource, /createToggleRow/);
   assert.doesNotMatch(disclosureSource, /pi-toggle__track/);
@@ -245,19 +351,31 @@ void test("disclosure bar reuses shared toggle rows", async () => {
 
 void test("extensions pages expose connections, plugins, and skills in the settings shell", async () => {
   const pagesSource = await readFile(
-    new URL("../src/commands/builtins/settings-pages/extensions-pages.ts", import.meta.url),
+    new URL(
+      "../src/commands/builtins/settings-pages/extensions-pages.ts",
+      import.meta.url,
+    ),
     "utf8",
   );
   const connectionsSource = await readFile(
-    new URL("../src/commands/builtins/extensions-hub-connections.ts", import.meta.url),
+    new URL(
+      "../src/commands/builtins/extensions-hub-connections.ts",
+      import.meta.url,
+    ),
     "utf8",
   );
   const pluginsSource = await readFile(
-    new URL("../src/commands/builtins/extensions-hub-plugins.ts", import.meta.url),
+    new URL(
+      "../src/commands/builtins/extensions-hub-plugins.ts",
+      import.meta.url,
+    ),
     "utf8",
   );
   const skillsSource = await readFile(
-    new URL("../src/commands/builtins/extensions-hub-skills.ts", import.meta.url),
+    new URL(
+      "../src/commands/builtins/extensions-hub-skills.ts",
+      import.meta.url,
+    ),
     "utf8",
   );
 
@@ -271,25 +389,52 @@ void test("extensions pages expose connections, plugins, and skills in the setti
 });
 
 void test("context pill headers expose expanded state and controlled body", async () => {
-  const sidebarSource = await readFile(new URL("../src/ui/pi-sidebar.ts", import.meta.url), "utf8");
+  const sidebarSource = await readFile(
+    new URL("../src/ui/pi-sidebar.ts", import.meta.url),
+    "utf8",
+  );
 
-  assert.match(sidebarSource, /private readonly _contextPillBodyId = "pi-context-pill-body";/);
-  assert.match(sidebarSource, /class="pi-context-pill__header"[\s\S]*aria-controls=\$\{this\._contextPillBodyId\}/);
-  assert.match(sidebarSource, /class="pi-context-pill__header"[\s\S]*aria-expanded=\$\{expanded \? "true" : "false"\}/);
-  assert.match(sidebarSource, /class="pi-context-pill__body" id=\$\{this\._contextPillBodyId\}/);
+  assert.match(
+    sidebarSource,
+    /private readonly _contextPillBodyId = "pi-context-pill-body";/,
+  );
+  assert.match(
+    sidebarSource,
+    /class="pi-context-pill__header"[\s\S]*aria-controls=\$\{this\._contextPillBodyId\}/,
+  );
+  assert.match(
+    sidebarSource,
+    /class="pi-context-pill__header"[\s\S]*aria-expanded=\$\{expanded \? "true" : "false"\}/,
+  );
+  assert.match(
+    sidebarSource,
+    /class="pi-context-pill__body" id=\$\{this\._contextPillBodyId\}/,
+  );
 });
 
 void test("input paperclip opens Files workspace through sidebar callback", async () => {
-  const inputSource = await readFile(new URL("../src/ui/pi-input.ts", import.meta.url), "utf8");
-  const sidebarSource = await readFile(new URL("../src/ui/pi-sidebar.ts", import.meta.url), "utf8");
+  const inputSource = await readFile(
+    new URL("../src/ui/pi-input.ts", import.meta.url),
+    "utf8",
+  );
+  const sidebarSource = await readFile(
+    new URL("../src/ui/pi-sidebar.ts", import.meta.url),
+    "utf8",
+  );
 
   assert.match(inputSource, /pi-open-files/);
   assert.match(sidebarSource, /onOpenFilesWorkspace/);
-  assert.match(sidebarSource, /@pi-open-files=\$\{this\._onOpenFilesWorkspace\}/);
+  assert.match(
+    sidebarSource,
+    /@pi-open-files=\$\{this\._onOpenFilesWorkspace\}/,
+  );
 });
 
 void test("session builtins include recovery and manual-backup commands", async () => {
-  const sessionSource = await readFile(new URL("../src/commands/builtins/session.ts", import.meta.url), "utf8");
+  const sessionSource = await readFile(
+    new URL("../src/commands/builtins/session.ts", import.meta.url),
+    "utf8",
+  );
 
   assert.match(sessionSource, /name:\s*"history"/);
   assert.match(sessionSource, /openRecoveryDialog/);
@@ -300,23 +445,47 @@ void test("session builtins include recovery and manual-backup commands", async 
 });
 
 void test("resume overlay surfaces recently closed tabs and taskpane wires reopen callback", async () => {
-  const resumeSource = await readFile(new URL("../src/commands/builtins/resume-overlay.ts", import.meta.url), "utf8");
-  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
+  const resumeSource = await readFile(
+    new URL("../src/commands/builtins/resume-overlay.ts", import.meta.url),
+    "utf8",
+  );
+  const initSource = await readFile(
+    new URL("../src/taskpane/init.ts", import.meta.url),
+    "utf8",
+  );
 
   assert.match(resumeSource, /resume\.recentlyClosed/);
-  assert.match(resumeSource, /getRecentlyClosedItems\?: \(\) => readonly ResumeRecentlyClosedItem\[]/);
-  assert.match(resumeSource, /onReopenRecentlyClosed\?: \(item: ResumeRecentlyClosedItem\) => Promise<boolean>/);
+  assert.match(
+    resumeSource,
+    /getRecentlyClosedItems\?: \(\) => readonly ResumeRecentlyClosedItem\[]/,
+  );
+  assert.match(
+    resumeSource,
+    /onReopenRecentlyClosed\?: \(item: ResumeRecentlyClosedItem\) => Promise<boolean>/,
+  );
   assert.match(resumeSource, /resume\.recentlyClosedMeta/);
 
-  assert.match(initSource, /getRecentlyClosedItems:\s*\(\)\s*=>\s*recentlyClosed\.snapshot\(\)/);
+  assert.match(
+    initSource,
+    /getRecentlyClosedItems:\s*\(\)\s*=>\s*recentlyClosed\.snapshot\(\)/,
+  );
   assert.match(initSource, /onReopenRecentlyClosed:\s*async \(item\) =>/);
-  assert.match(initSource, /const reopenRecentlyClosedById = async \(recentlyClosedId: string\): Promise<boolean> =>/);
+  assert.match(
+    initSource,
+    /const reopenRecentlyClosedById = async \([^)]*recentlyClosedId: string[^)]*\): Promise<boolean> =>/,
+  );
   assert.match(initSource, /recentlyClosed\.removeById\(recentlyClosedId\)/);
-  assert.match(initSource, /if \(reopenResult === "failed"\) \{\s*recentlyClosed\.push\(item\);\s*\}/);
+  assert.match(
+    initSource,
+    /if \(reopenResult === "failed"\) \{\s*recentlyClosed\.push\(item\);\s*\}/,
+  );
 });
 
 void test("settings builtins route to unified settings overlay", async () => {
-  const settingsSource = await readFile(new URL("../src/commands/builtins/settings.ts", import.meta.url), "utf8");
+  const settingsSource = await readFile(
+    new URL("../src/commands/builtins/settings.ts", import.meta.url),
+    "utf8",
+  );
 
   assert.match(settingsSource, /name:\s*"settings"/);
   assert.match(settingsSource, /showSettingsDialog/);
@@ -329,8 +498,17 @@ void test("settings builtins route to unified settings overlay", async () => {
 });
 
 void test("provider and experimental overlays are aliases into settings sections", async () => {
-  const providerSource = await readFile(new URL("../src/commands/builtins/provider-overlay.ts", import.meta.url), "utf8");
-  const experimentalSource = await readFile(new URL("../src/commands/builtins/experimental-overlay.ts", import.meta.url), "utf8");
+  const providerSource = await readFile(
+    new URL("../src/commands/builtins/provider-overlay.ts", import.meta.url),
+    "utf8",
+  );
+  const experimentalSource = await readFile(
+    new URL(
+      "../src/commands/builtins/experimental-overlay.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
 
   assert.match(providerSource, /openSettings\("providers"\)/);
   assert.match(experimentalSource, /openSettings\("experimental"\)/);
@@ -339,10 +517,22 @@ void test("provider and experimental overlays are aliases into settings sections
 });
 
 void test("extensions and alias commands deep-link to hub tabs", async () => {
-  const addonsSource = await readFile(new URL("../src/commands/builtins/addons.ts", import.meta.url), "utf8");
-  const toolsSource = await readFile(new URL("../src/commands/builtins/tools.ts", import.meta.url), "utf8");
-  const extensionsSource = await readFile(new URL("../src/commands/builtins/extensions.ts", import.meta.url), "utf8");
-  const skillsSource = await readFile(new URL("../src/commands/builtins/skills.ts", import.meta.url), "utf8");
+  const addonsSource = await readFile(
+    new URL("../src/commands/builtins/addons.ts", import.meta.url),
+    "utf8",
+  );
+  const toolsSource = await readFile(
+    new URL("../src/commands/builtins/tools.ts", import.meta.url),
+    "utf8",
+  );
+  const extensionsSource = await readFile(
+    new URL("../src/commands/builtins/extensions.ts", import.meta.url),
+    "utf8",
+  );
+  const skillsSource = await readFile(
+    new URL("../src/commands/builtins/skills.ts", import.meta.url),
+    "utf8",
+  );
 
   assert.match(addonsSource, /name:\s*"extensions"/);
   assert.doesNotMatch(addonsSource, /name:\s*"addons"/);
@@ -354,17 +544,29 @@ void test("extensions and alias commands deep-link to hub tabs", async () => {
 });
 
 void test("settings shell guards navigation and pages adopt shared controls", async () => {
-  const shellSource = await readFile(new URL("../src/ui/settings-shell.ts", import.meta.url), "utf8");
+  const shellSource = await readFile(
+    new URL("../src/ui/settings-shell.ts", import.meta.url),
+    "utf8",
+  );
   const rootSource = await readFile(
-    new URL("../src/commands/builtins/settings-pages/root-page.ts", import.meta.url),
+    new URL(
+      "../src/commands/builtins/settings-pages/root-page.ts",
+      import.meta.url,
+    ),
     "utf8",
   );
   const providersSource = await readFile(
-    new URL("../src/commands/builtins/settings-pages/providers-page.ts", import.meta.url),
+    new URL(
+      "../src/commands/builtins/settings-pages/providers-page.ts",
+      import.meta.url,
+    ),
     "utf8",
   );
   const proxySource = await readFile(
-    new URL("../src/commands/builtins/settings-pages/proxy-page.ts", import.meta.url),
+    new URL(
+      "../src/commands/builtins/settings-pages/proxy-page.ts",
+      import.meta.url,
+    ),
     "utf8",
   );
 
@@ -381,15 +583,24 @@ void test("settings shell guards navigation and pages adopt shared controls", as
 
 void test("slash-command busy policy is centralized and shared across entry points", async () => {
   const keyboardActionsSource = await readFile(
-    new URL("../src/taskpane/keyboard-shortcuts/editor-actions.ts", import.meta.url),
+    new URL(
+      "../src/taskpane/keyboard-shortcuts/editor-actions.ts",
+      import.meta.url,
+    ),
     "utf8",
   );
-  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
+  const initSource = await readFile(
+    new URL("../src/taskpane/init.ts", import.meta.url),
+    "utf8",
+  );
   const slashExecutionSource = await readFile(
     new URL("../src/commands/slash-command-execution.ts", import.meta.url),
     "utf8",
   );
-  const busyPolicySource = await readFile(new URL("../src/commands/busy-command-policy.ts", import.meta.url), "utf8");
+  const busyPolicySource = await readFile(
+    new URL("../src/commands/busy-command-policy.ts", import.meta.url),
+    "utf8",
+  );
 
   assert.match(keyboardActionsSource, /executeSlashCommand/);
   assert.match(initSource, /executeSlashCommand/);
@@ -408,12 +619,27 @@ void test("slash-command busy policy is centralized and shared across entry poin
 });
 
 void test("escape guard scopes widget claims to streaming abort paths", async () => {
-  const escapeGuardSource = await readFile(new URL("../src/utils/escape-guard.ts", import.meta.url), "utf8");
-  const keyboardShortcutsSource = await readFile(new URL("../src/taskpane/keyboard-shortcuts.ts", import.meta.url), "utf8");
-  const inputSource = await readFile(new URL("../src/ui/pi-input.ts", import.meta.url), "utf8");
-  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
+  const escapeGuardSource = await readFile(
+    new URL("../src/utils/escape-guard.ts", import.meta.url),
+    "utf8",
+  );
+  const keyboardShortcutsSource = await readFile(
+    new URL("../src/taskpane/keyboard-shortcuts.ts", import.meta.url),
+    "utf8",
+  );
+  const inputSource = await readFile(
+    new URL("../src/ui/pi-input.ts", import.meta.url),
+    "utf8",
+  );
+  const initSource = await readFile(
+    new URL("../src/taskpane/init.ts", import.meta.url),
+    "utf8",
+  );
 
-  assert.match(escapeGuardSource, /export function doesExtensionWidgetClaimEscape/);
+  assert.match(
+    escapeGuardSource,
+    /export function doesExtensionWidgetClaimEscape/,
+  );
   assert.match(escapeGuardSource, /export function doesUiClaimStreamingEscape/);
   assert.match(escapeGuardSource, /#pi-widget-slot:not\(:empty\)/);
   assert.match(escapeGuardSource, /#pi-widget-slot-below:not\(:empty\)/);
@@ -424,24 +650,45 @@ void test("escape guard scopes widget claims to streaming abort paths", async ()
 });
 
 void test("taskpane init wires recovery overlay opener", async () => {
-  const initSource = await readFile(new URL("../src/taskpane/init.ts", import.meta.url), "utf8");
+  const initSource = await readFile(
+    new URL("../src/taskpane/init.ts", import.meta.url),
+    "utf8",
+  );
 
   assert.match(initSource, /openSettings\("backups"\)/);
-  assert.match(initSource, /const openRecoveryDialog = async \(\): Promise<void> =>/);
-  assert.match(initSource, /sidebar\.onOpenRecovery\s*=\s*\(\)\s*=>\s*\{\s*void openRecoveryDialog\(\);\s*\};/);
-  assert.match(initSource, /onCreateManualFullBackup:\s*async \(\)\s*=>\s*\{\s*return createManualFullBackup\(\);\s*\}/);
+  assert.match(
+    initSource,
+    /const openRecoveryDialog = async \(\): Promise<void> =>/,
+  );
+  assert.match(
+    initSource,
+    /sidebar\.onOpenRecovery\s*=\s*\(\)\s*=>\s*\{\s*void openRecoveryDialog\(\);\s*\};/,
+  );
+  assert.match(
+    initSource,
+    /onCreateManualFullBackup:\s*async \(\)\s*=>\s*\{\s*return createManualFullBackup\(\);\s*\}/,
+  );
 });
 
 void test("backups page includes manual full-backup action", async () => {
   const overlaySource = await readFile(
-    new URL("../src/commands/builtins/settings-pages/backups-page.ts", import.meta.url),
+    new URL(
+      "../src/commands/builtins/settings-pages/backups-page.ts",
+      import.meta.url,
+    ),
     "utf8",
   );
 
-  assert.match(overlaySource, /onCreateManualFullBackup\?: \(\) => Promise<ManualFullBackupSummary>/);
+  assert.match(
+    overlaySource,
+    /onCreateManualFullBackup\?: \(\) => Promise<ManualFullBackupSummary>/,
+  );
   assert.match(overlaySource, /createButton\(t\("recovery\.downloadBackup"\)/);
   assert.match(overlaySource, /recovery\.toast\.backupDownloaded/);
-  assert.match(overlaySource, /retentionInput\.max = String\(MAX_RECOVERY_ENTRIES\)/);
+  assert.match(
+    overlaySource,
+    /retentionInput\.max = String\(MAX_RECOVERY_ENTRIES\)/,
+  );
 });
 
 void test("permission helper updates one capability without mutating others", () => {
@@ -467,14 +714,24 @@ void test("permission helper updates one capability without mutating others", ()
     downloadFile: true,
   };
 
-  const updated = setExtensionCapabilityAllowed(permissions, "tools.register", true);
+  const updated = setExtensionCapabilityAllowed(
+    permissions,
+    "tools.register",
+    true,
+  );
 
   assert.equal(isExtensionCapabilityAllowed(updated, "tools.register"), true);
-  assert.equal(isExtensionCapabilityAllowed(updated, "commands.register"), true);
+  assert.equal(
+    isExtensionCapabilityAllowed(updated, "commands.register"),
+    true,
+  );
   assert.equal(isExtensionCapabilityAllowed(updated, "agent.read"), false);
 
   // original object remains unchanged
-  assert.equal(isExtensionCapabilityAllowed(permissions, "tools.register"), false);
+  assert.equal(
+    isExtensionCapabilityAllowed(permissions, "tools.register"),
+    false,
+  );
 });
 
 void test("extension registry seeds default snake extension when storage is empty", async () => {
@@ -541,11 +798,17 @@ void test("extension registry migrates legacy v1 entries to v2 permissions", asy
 });
 
 void test("tool disclosure bundles remain centralized in capabilities metadata", async () => {
-  const disclosureSource = await readFile(new URL("../src/context/tool-disclosure.ts", import.meta.url), "utf8");
+  const disclosureSource = await readFile(
+    new URL("../src/context/tool-disclosure.ts", import.meta.url),
+    "utf8",
+  );
   assert.match(disclosureSource, /type ToolDisclosureBundleId/);
   assert.doesNotMatch(disclosureSource, /TOOL_DISCLOSURE_BUNDLES\s*=/);
 
-  const capabilitiesSource = await readFile(new URL("../src/tools/capabilities.ts", import.meta.url), "utf8");
+  const capabilitiesSource = await readFile(
+    new URL("../src/tools/capabilities.ts", import.meta.url),
+    "utf8",
+  );
   assert.match(capabilitiesSource, /TOOL_DISCLOSURE_BUNDLES/);
   assert.match(capabilitiesSource, /core:\s*buildCoreDisclosureBundle/);
   assert.match(capabilitiesSource, /analysis:\s*buildCoreDisclosureBundle/);

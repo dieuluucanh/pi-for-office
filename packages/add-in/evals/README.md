@@ -1,13 +1,13 @@
 # Agent evals harness
 
-Thin tooling for running and grading **real-Excel** evals of the pi-for-excel
+Thin tooling for running and grading **real-Excel** evals of the pi-for-office
 agent, per [docs/proposals/agent-evals.md](../docs/proposals/agent-evals.md).
 The task set is the asset; this harness stays deliberately thin.
 
 ## Repo / corpus split
 
 | Lives here (public repo) | Lives in the private corpus (local-only) |
-|---|---|
+| --- | --- |
 | Grader, bridge helpers, shared libs | Seed workbooks + fixture builders |
 | Task **schema** + example spec | Real task YAMLs (some derived from licensed training materials) |
 | Proposal + research docs | Run reports, snapshots, expected-value oracles |

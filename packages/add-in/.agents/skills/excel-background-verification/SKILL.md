@@ -1,11 +1,11 @@
 ---
 name: excel-background-verification
-description: Verify pi-for-excel work against a real local Excel desktop host while keeping Excel in the background. Use after changes to workbook tools, recovery, taskpane UI, Office.js host behavior, chart/image paths, or any adversarial verification where browser-only tests are insufficient.
+description: Verify pi-for-office work against a real local Excel desktop host while keeping Excel in the background. Use after changes to workbook tools, recovery, taskpane UI, Office.js host behavior, chart/image paths, or any adversarial verification where browser-only tests are insufficient.
 ---
 
 # Excel Background Verification
 
-Use this skill to verify work in **real Excel with the real pi-for-excel taskpane** without taking over the user's foreground app.
+Use this skill to verify work in **real Excel with the real pi-for-office taskpane** without taking over the user's foreground app.
 
 The workflow has two channels:
 
@@ -38,8 +38,8 @@ echo $! > /tmp/pi-background-verify-bridge-server.pid
 VITE_PI_BACKGROUND_VERIFY_URL=https://localhost:3157 \
 VITE_PI_BACKGROUND_VERIFY_TOKEN="$TOKEN" \
   npm run dev \
-  > /tmp/pi-for-excel-vite-background-verify.log 2>&1 &
-echo $! > /tmp/pi-for-excel-vite-background-verify.pid
+  > /tmp/pi-for-office-vite-background-verify.log 2>&1 &
+echo $! > /tmp/pi-for-office-vite-background-verify.pid
 ```
 
 Check server health:
@@ -60,13 +60,13 @@ Run Pi in strict AX mode and allow only observation/search tools unless a semant
 PI_COMPUTER_USE_STEALTH=1 PI_COMPUTER_USE_STRICT_AX=1 \
 pi --tools list_apps,list_windows,observe,search_ui,inspect_ui \
   --no-context-files --no-skills \
-  -p 'Use only computer-use tools. Do not focus any window and do not call act. Report the frontmost app, observe Microsoft Excel, and find evidence of Pi for Excel, Open Pi, the taskpane prompt, model/status footer, and any feature under test.'
+  -p 'Use only computer-use tools. Do not focus any window and do not call act. Report the frontmost app, observe Microsoft Excel, and find evidence of Pi for Office, Open Pi, the taskpane prompt, model/status footer, and any feature under test.'
 ```
 
 Required evidence:
 
 - Excel window title/id and `isOnscreen=true`.
-- Taskpane evidence (`Pi for Excel`, `Open Pi`, prompt/model/status or feature-specific text).
+- Taskpane evidence (`Pi for Office`, `Open Pi`, prompt/model/status or feature-specific text).
 - Frontmost app before/after is the same non-Excel app.
 - Optional screenshot saved with a helper script or `observe` image.
 
@@ -142,7 +142,7 @@ For adversarial verification, wrap mutating and read-back commands with a frontm
 
 ```bash
 kill "$(cat /tmp/pi-background-verify-bridge-server.pid)" 2>/dev/null || true
-kill "$(cat /tmp/pi-for-excel-vite-background-verify.pid)" 2>/dev/null || true
+kill "$(cat /tmp/pi-for-office-vite-background-verify.pid)" 2>/dev/null || true
 rm -f "$TOKEN_FILE"
 ```
 

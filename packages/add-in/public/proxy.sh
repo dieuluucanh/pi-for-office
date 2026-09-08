@@ -7,18 +7,18 @@ if ! command -v node >/dev/null 2>&1; then
   if command -v brew >/dev/null 2>&1; then
     answer="Y"
     if [ -r /dev/tty ]; then
-      printf "Install Node.js via Homebrew now? [Y/n] " > /dev/tty
-      read -r answer < /dev/tty || answer="Y"
+      printf "Install Node.js via Homebrew now? [Y/n] " >/dev/tty
+      read -r answer </dev/tty || answer="Y"
     fi
 
     case "${answer:-Y}" in
-      y|Y|yes|YES)
-        brew install node
-        ;;
-      *)
-        echo "Please install Node.js from https://nodejs.org and re-run this script."
-        exit 1
-        ;;
+    y | Y | yes | YES)
+      brew install node
+      ;;
+    *)
+      echo "Please install Node.js from https://nodejs.org and re-run this script."
+      exit 1
+      ;;
     esac
   else
     echo "Please install Node.js from https://nodejs.org and re-run this script."
@@ -26,4 +26,4 @@ if ! command -v node >/dev/null 2>&1; then
   fi
 fi
 
-exec npx pi-for-excel-proxy "$@"
+exec npx pi-for-office-proxy "$@"

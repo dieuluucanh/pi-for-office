@@ -10,7 +10,7 @@ The top of the sidebar currently renders three stacked elements:
 
 ```
 ┌──────────────────────────────────────┐  ← Office chrome (not ours)
-│  Pi for Excel                    ⓘ  │     title bar + native info button
+│  Pi for Office                    ⓘ  │     title bar + native info button
 ├──────────────────────────────────────┤
 │  Pi                              ⋯  │  ← Our header (from branch work)
 ├──────────────────────────────────────┤
@@ -25,7 +25,7 @@ The top of the sidebar currently renders three stacked elements:
 
 **Problems:**
 
-1. **"Pi" header is redundant** — Office chrome already shows "Pi for Excel" in the taskpane title bar. Our header wastes ~30px of vertical space just to repeat the name.
+1. **"Pi" header is redundant** — Office chrome already shows "Pi for Office" in the taskpane title bar. Our header wastes ~30px of vertical space just to repeat the name.
 2. **Tab titles from first message are noisy** — when auto-generated from the user's first prompt, tabs become unreadable ("Analyze the revenue data on…" truncated to 12 chars).
 3. **Workbook label row is low-value** — the user already knows which file they have open. A full row for it is wasteful.
 4. **Settings / Instructions are hard to find** — reachable only via `/settings`, `/instructions`, or a tiny status-bar badge. No persistent, obvious entry point.
@@ -45,7 +45,7 @@ The top of the sidebar currently renders three stacked elements:
 
 ## Constraints
 
-- **Office taskpane chrome is fixed.** We cannot remove or modify the "Pi for Excel" title bar or its ⓘ button. Every pixel of our own header stacks *below* it.
+- **Office taskpane chrome is fixed.** We cannot remove or modify the "Pi for Office" title bar or its ⓘ button. Every pixel of our own header stacks *below* it.
 - **Tab strip is needed** for multi-session (#31 Phase 1).
 - **Footer status bar already holds** context %, model picker, thinking level, instructions badge, lock state. It should not get more crowded.
 
@@ -59,7 +59,7 @@ No separate header bar. The `⋯` menu button sits at the end of the tab strip r
 
 ```
 ┌──────────────────────────────────────┐  ← Office chrome (fixed)
-│  Pi for Excel                    ⓘ  │
+│  Pi for Office                    ⓘ  │
 ├──────────────────────────────────────┤
 │  [Chat 1] [Chat 2]      [+]  [⋯]   │  ← single combined row
 ├──────────────────────────────────────┤
@@ -89,7 +89,7 @@ No separate header bar. The `⋯` menu button sits at the end of the tab strip r
 ### Tab naming
 
 | Situation | Tab title |
-|-----------|-----------|
+| ----------- | ----------- |
 | New tab, no explicit name | `Agent 1`, `Agent 2`, … (monotonic counter per session) |
 | User runs `/name My Analysis` | `My Analysis` |
 | Resumed session with existing explicit name | Restored name |
@@ -114,6 +114,7 @@ The menu provides a single discoverable entry point for things that don't need t
 ```
 
 **Item ordering rationale:**
+
 - Instructions + Settings first: most common non-chat actions (tier 1).
 - Resume: session management.
 - Shortcuts last: reference, not frequent.
@@ -125,6 +126,7 @@ Everything else stays as `/` slash commands (export, compact, copy, name, debug,
 **Remove the dedicated row.** The workbook name is already known to the user (it's in Excel's title bar) and is injected into the agent's context automatically.
 
 If needed in the future (e.g., cross-workbook resume disambiguation), surface it as:
+
 - A line in the `⋯` menu: `Workbook: <name>` (non-interactive, muted text).
 - Or a tooltip on the tab strip area.
 
@@ -139,22 +141,26 @@ When a tab is waiting for the workbook write lock, the tab itself shows the "loc
 ## Interaction details
 
 ### `⋯` menu behavior
+
 - Click `⋯` → toggle menu open/closed.
 - Click outside menu → close.
 - Escape → close.
 - Menu items dispatch their action and close the menu.
 
 ### `+` button behavior
+
 - **Click**: new blank tab (instant, no menu).
 - **Right-click** (optional, Phase 2): context menu with `New tab`, `Resume session…`, recent sessions.
 
 ### Tab close behavior
+
 - Click `×` on a tab → close tab.
 - If actively streaming → confirm dialog ("Stop and close" / "Cancel").
 - If holding write lock → `×` disabled until write completes.
 - On close: force-save session, push to recently-closed stack, show undo toast.
 
 ### Keyboard shortcuts
+
 - `Cmd/Ctrl+Shift+T`: reopen last closed tab.
 - Other existing shortcuts unchanged.
 
@@ -163,6 +169,7 @@ When a tab is waiting for the workbook write lock, the tab itself shows the "loc
 ## Visual spec (approximate)
 
 ### Dimensions
+
 - Tab strip row height: ~32px (same as current).
 - `⋯` button: 24×24px, same border-radius (6px) as `+`.
 - No separate header row → saves ~30px.
@@ -170,11 +177,13 @@ When a tab is waiting for the workbook write lock, the tab itself shows the "loc
 - **Net vertical space saved: ~56px** returned to messages.
 
 ### Spacing
+
 - Tab strip: `padding: 7px 8px 6px` (unchanged).
 - `+` and `⋯` grouped at right edge with `gap: 4px`.
 - Menu dropdown: `min-width: 190px`, anchored to `⋯` button top-right, offset `4px` below.
 
 ### Colors / treatment
+
 - `⋯` button: same muted style as `+` (transparent bg, muted-foreground, hover highlight).
 - Menu: glass background (`oklch(1 0 0 / 0.92)`, blur, shadow) matching existing overlay style.
 - Menu items: `12.5px` font-sans, full-width hover highlight.

@@ -1,6 +1,7 @@
 # LLM Request Static Payload Comparison
 
 The static content included in each LLM request. Two channels:
+
 1. **System prompt** — text string (Anthropic: `system` blocks, OpenAI: `developer` message)
 2. **Tool schemas** — JSON objects defining tool name, description, parameter schema
 
@@ -139,10 +140,10 @@ curl -s http://localhost:3000/ | head -c 100
 The key ingredients: **subshell `(...)`** isolates the background process, **`exec`** in the script replaces the shell (no lingering parent), and **`</dev/null`** closes stdin. Without all three, the pipe stays open and pi hangs.
 
 ## Fork Workflow (tmustier)
+
 - Push branches to `tmustier/<repo>` fork, not upstream
 - Exclude noisy files (package-lock.json) unless requested
 - Use conventional commits: `feat(scope):`, `fix(scope):`
-
 
 ## /Users/thomasmustier/projects/excel/AGENTS.md
 
@@ -158,6 +159,7 @@ Notes for agents working in this repo:
 ## High-leverage repo conventions (keep consistent)
 
 ### Tool registry is the single source of truth
+
 - Core tool names + construction live in `src/tools/registry.ts` (`CORE_TOOL_NAMES`, `CoreToolName`, `createCoreTools()`).
 - **Do not** create new tool-name lists in UI/prompt/docs — import `CORE_TOOL_NAMES`.
 - When adding/removing a core tool, update in the same PR:
@@ -167,18 +169,21 @@ Notes for agents working in this repo:
   - `src/prompt/system-prompt.ts` (documented tool list), if applicable
 
 ### Structured tool results (`ToolResultMessage.details`) — additive metadata
+
 - Tools should keep human-readable markdown in `result.content`.
 - Put stable, machine-readable metadata in `result.details` (range addresses, blocked state, error counts, etc.).
 - **Compatibility rule:** prefer `details` in the UI, but keep a fallback for older persisted sessions that have no `details`.
 - Centralize types/guards in `src/tools/tool-details.ts` and reuse them in tools + renderers.
 
 ### Workbook identity + per-workbook session restore
+
 - Workbook identity is **local-only** and must never persist raw `Office.context.document.url`.
   - Use `getWorkbookContext()` from `src/workbook/context.ts` (returns hashed IDs like `url_sha256:<hex>`).
 - Session↔workbook mapping is stored in `SettingsStore` (not session metadata).
   - Use helpers in `src/workbook/session-association.ts` (versioned keys `*.v1.*`).
 
 ### Security / HTML sinks
+
 - Avoid `innerHTML` for any user/tool/session data.
   - Prefer DOM APIs, or escape with `src/utils/html.ts` (`escapeHtml`, `escapeAttr`).
 - Markdown safety is enforced by `installMarkedSafetyPatch()` (`src/compat/marked-safety.ts`).
@@ -186,6 +191,7 @@ Notes for agents working in this repo:
 - The local CORS proxy (`scripts/cors-proxy-server.mjs`) has an **origin allowlist**. Don’t loosen it to `*`.
 
 ### Bundle hygiene (Office WebView)
+
 - Avoid Node-only imports and side-effect barrel imports that defeat tree-shaking.
 - When changing imports/deps, run `npm run build` and sanity-check:
   - output chunk sizes (and any newly emitted large assets)
@@ -203,35 +209,39 @@ Notes for agents working in this repo:
 - Avoid non-null assertions (`thing!`) when practical (lint warns). Prefer runtime checks + early throws.
 
 Verification helpers:
+
 - `npm run check` (lint + typecheck)
 - `npm run build`
 - `npm run test:models`
 - Manual Excel smoke test when changes touch session persistence, tools, auth, or UI wiring
 
 Pre-commit hook:
+
 - Runs both checks automatically (see `.githooks/pre-commit`, installed via `npm install`).
 - Bypass when needed: `git commit --no-verify`
 
 ## Excel Add-in dev: sideloaded manifest gotcha
 
 Excel Mac loads the add-in from a **sideloaded manifest** stored at:
+
 ```
 ~/Library/Containers/com.microsoft.Excel/Data/Documents/wef/{add-in-id}.manifest.xml
 ```
 
 This file is **separate from** the repo's `manifest.xml`. If local CSS/JS changes aren't appearing in the sidebar despite the Vite dev server running correctly:
 
-1. **Check the sideloaded manifest first.** It may point to a production URL (e.g. `https://pi-for-excel.vercel.app/…`) instead of `https://localhost:3000/…`.
+1. **Check the sideloaded manifest first.** It may point to a production URL (e.g. `https://dieuluucanh.github.io/pi-for-office/…`) instead of `https://localhost:3000/…`.
 2. Fix it by copying the repo manifest over: `cp manifest.xml ~/Library/Containers/com.microsoft.Excel/Data/Documents/wef/a1b2c3d4-e5f6-7890-abcd-ef1234567890.manifest.xml`
 3. Quit Excel fully and reopen.
 
 If the manifest URL is correct and changes still don't appear, clear the WKWebView cache:
+
 ```
 rm -rf ~/Library/Containers/com.microsoft.Excel/Data/Library/WebKit/
 rm -rf ~/Library/Containers/com.microsoft.Excel/Data/Library/Caches/WebKit/
 ```
-Then quit + reopen Excel.
 
+Then quit + reopen Excel.
 
 ## /Users/thomasmustier/.pi/agent/CLAUDE.md
 
@@ -240,9 +250,6 @@ Then quit + reopen Excel.
 Claude-specific guidelines. Loaded when using Anthropic models.
 
 <!-- Add your Claude-specific preferences here -->
-
-
-
 
 The following skills provide specialized instructions for specific tasks.
 Use the read tool to load a skill's file when the task matches its description.
@@ -322,6 +329,7 @@ When a skill file references a relative path, resolve it against the skill direc
 </available_skills>
 Current date and time: Tuesday, February 10, 2026 at 11:04:53 PM GMT
 Current working directory: /Users/thomasmustier/projects/excel
+
 ```
 
 ## Tool Schemas
@@ -822,7 +830,7 @@ Descriptions transcribed from extension source code (`registerTool` calls).
 ### Pi totals
 
 | Component | Chars |
-|---|---|
+| --- | --- |
 | System prompt | 14,745 |
 | Built-in tool schemas (4) | 2,072 |
 | Extension tool schemas (7) | 11,823 |
@@ -1595,7 +1603,7 @@ Apply named styles in format_cells using the \
 ### Excel totals
 
 | Component | Chars |
-|---|---|
+| --- | --- |
 | System prompt | 2,394 |
 | Tool schemas (11) | 8,727 |
 | **Total static payload** | **11,121** |
@@ -1606,7 +1614,7 @@ Apply named styles in format_cells using the \
 # Comparison
 
 | | Pi (this session) | Pi-for-Excel |
-|---|---|---|
+| --- | --- | --- |
 | System prompt | 14,745 | 2,394 |
 | Tool schemas | 13,895 (11 tools) | 8,727 (11 tools) |
 | **Total** | **28,640 (~7,160 tok)** | **11,121 (~2,780 tok)** |
@@ -1624,7 +1632,7 @@ Apply named styles in format_cells using the \
 The static payload cost depends on how many LLM requests a user message triggers:
 
 | Scenario | LLM calls | Static payload sent |
-|---|---|---|
+| --- | --- | --- |
 | Simple question (no tools) | 1 | 1x |
 | One round of tool calls | 2 | 2x (Pi) / 1x tools + 1x system-only (Excel) |
 | Two rounds of tool calls | 3 | 3x (Pi) / 1x tools + 2x system-only (Excel) |

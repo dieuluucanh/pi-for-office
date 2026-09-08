@@ -51,6 +51,9 @@
     "test:interop": "npm run build && node tests/pane-interop.mjs",
     "test": "npm run test:smoke && npm run test:interop"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=20"
   }

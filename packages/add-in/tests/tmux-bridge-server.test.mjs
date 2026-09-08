@@ -3,10 +3,13 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import net from "node:net";
 import { once } from "node:events";
+import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 
 const ORIGIN = "https://localhost:3141";
-const BRIDGE_SCRIPT_PATH = new URL("../scripts/tmux-bridge-server.mjs", import.meta.url).pathname;
+const BRIDGE_SCRIPT_PATH = fileURLToPath(
+  new URL("../scripts/tmux-bridge-server.mjs", import.meta.url),
+);
 
 function hasTmuxBinary() {
   const result = spawnSync("tmux", ["-V"], {
@@ -72,7 +75,11 @@ async function startBridge(extraEnv = {}) {
     });
 
     child.once("exit", (code, signal) => {
-      reject(new Error(`bridge exited before ready (code=${String(code)} signal=${String(signal)})\n${stdout}\n${stderr}`));
+      reject(
+        new Error(
+          `bridge exited before ready (code=${String(code)} signal=${String(signal)})\n${stdout}\n${stderr}`,
+        ),
+      );
     });
   });
 
@@ -195,19 +202,36 @@ test("tmux bridge enforces bearer token when configured", async (t) => {
     await bridge.stop();
   });
 
-  const unauthorized = await fetch(`http://127.0.0.1:${bridge.port}/v1/tmux`, requestInit("POST", {
-    action: "list_sessions",
-  }));
+  const unauthorized = await fetch(
+    `http://127.0.0.1:${bridge.port}/v1/tmux`,
+    requestInit("POST", {
+      action: "list_sessions",
+    }),
+  );
   assert.equal(unauthorized.status, 401);
 
-  const wrongToken = await fetch(`http://127.0.0.1:${bridge.port}/v1/tmux`, requestInit("POST", {
-    action: "list_sessions",
-  }, "wrong-token"));
+  const wrongToken = await fetch(
+    `http://127.0.0.1:${bridge.port}/v1/tmux`,
+    requestInit(
+      "POST",
+      {
+        action: "list_sessions",
+      },
+      "wrong-token",
+    ),
+  );
   assert.equal(wrongToken.status, 401);
 
-  const authorized = await fetch(`http://127.0.0.1:${bridge.port}/v1/tmux`, requestInit("POST", {
-    action: "list_sessions",
-  }, "local-secret"));
+  const authorized = await fetch(
+    `http://127.0.0.1:${bridge.port}/v1/tmux`,
+    requestInit(
+      "POST",
+      {
+        action: "list_sessions",
+      },
+      "local-secret",
+    ),
+  );
   assert.equal(authorized.status, 200);
 
   const payload = await authorized.json();
@@ -222,46 +246,64 @@ test("stub mode supports create/list/send/capture/kill lifecycle", async (t) => 
     await bridge.stop();
   });
 
-  const createSession = await fetch(`http://127.0.0.1:${bridge.port}/v1/tmux`, requestInit("POST", {
-    action: "create_session",
-    session: "demo",
-  }));
+  const createSession = await fetch(
+    `http://127.0.0.1:${bridge.port}/v1/tmux`,
+    requestInit("POST", {
+      action: "create_session",
+      session: "demo",
+    }),
+  );
   assert.equal(createSession.status, 200);
 
-  const listAfterCreate = await fetch(`http://127.0.0.1:${bridge.port}/v1/tmux`, requestInit("POST", {
-    action: "list_sessions",
-  }));
+  const listAfterCreate = await fetch(
+    `http://127.0.0.1:${bridge.port}/v1/tmux`,
+    requestInit("POST", {
+      action: "list_sessions",
+    }),
+  );
   const listPayload = await listAfterCreate.json();
   assert.deepEqual(listPayload.sessions, ["demo"]);
 
-  const send = await fetch(`http://127.0.0.1:${bridge.port}/v1/tmux`, requestInit("POST", {
-    action: "send_keys",
-    session: "demo",
-    text: "echo hello",
-    enter: true,
-  }));
+  const send = await fetch(
+    `http://127.0.0.1:${bridge.port}/v1/tmux`,
+    requestInit("POST", {
+      action: "send_keys",
+      session: "demo",
+      text: "echo hello",
+      enter: true,
+    }),
+  );
   assert.equal(send.status, 200);
 
-  const capture = await fetch(`http://127.0.0.1:${bridge.port}/v1/tmux`, requestInit("POST", {
-    action: "capture_pane",
-    session: "demo",
-    lines: 50,
-  }));
+  const capture = await fetch(
+    `http://127.0.0.1:${bridge.port}/v1/tmux`,
+    requestInit("POST", {
+      action: "capture_pane",
+      session: "demo",
+      lines: 50,
+    }),
+  );
   assert.equal(capture.status, 200);
 
   const capturePayload = await capture.json();
   assert.equal(capturePayload.action, "capture_pane");
   assert.match(capturePayload.output, /echo hello/);
 
-  const kill = await fetch(`http://127.0.0.1:${bridge.port}/v1/tmux`, requestInit("POST", {
-    action: "kill_session",
-    session: "demo",
-  }));
+  const kill = await fetch(
+    `http://127.0.0.1:${bridge.port}/v1/tmux`,
+    requestInit("POST", {
+      action: "kill_session",
+      session: "demo",
+    }),
+  );
   assert.equal(kill.status, 200);
 
-  const listAfterKill = await fetch(`http://127.0.0.1:${bridge.port}/v1/tmux`, requestInit("POST", {
-    action: "list_sessions",
-  }));
+  const listAfterKill = await fetch(
+    `http://127.0.0.1:${bridge.port}/v1/tmux`,
+    requestInit("POST", {
+      action: "list_sessions",
+    }),
+  );
   const afterKillPayload = await listAfterKill.json();
   assert.deepEqual(afterKillPayload.sessions, []);
 });
@@ -272,31 +314,43 @@ test("capture_pane wait_ms delays response in stub mode", async (t) => {
     await bridge.stop();
   });
 
-  const createSession = await fetch(`http://127.0.0.1:${bridge.port}/v1/tmux`, requestInit("POST", {
-    action: "create_session",
-    session: "slow-capture",
-  }));
+  const createSession = await fetch(
+    `http://127.0.0.1:${bridge.port}/v1/tmux`,
+    requestInit("POST", {
+      action: "create_session",
+      session: "slow-capture",
+    }),
+  );
   assert.equal(createSession.status, 200);
 
-  const send = await fetch(`http://127.0.0.1:${bridge.port}/v1/tmux`, requestInit("POST", {
-    action: "send_keys",
-    session: "slow-capture",
-    text: "echo hello",
-    enter: true,
-  }));
+  const send = await fetch(
+    `http://127.0.0.1:${bridge.port}/v1/tmux`,
+    requestInit("POST", {
+      action: "send_keys",
+      session: "slow-capture",
+      text: "echo hello",
+      enter: true,
+    }),
+  );
   assert.equal(send.status, 200);
 
   const startedAt = Date.now();
-  const capture = await fetch(`http://127.0.0.1:${bridge.port}/v1/tmux`, requestInit("POST", {
-    action: "capture_pane",
-    session: "slow-capture",
-    lines: 20,
-    wait_ms: 250,
-  }));
+  const capture = await fetch(
+    `http://127.0.0.1:${bridge.port}/v1/tmux`,
+    requestInit("POST", {
+      action: "capture_pane",
+      session: "slow-capture",
+      lines: 20,
+      wait_ms: 250,
+    }),
+  );
   const elapsedMs = Date.now() - startedAt;
 
   assert.equal(capture.status, 200);
-  assert.ok(elapsedMs >= 180, `Expected capture to wait at least ~180ms, got ${String(elapsedMs)}ms`);
+  assert.ok(
+    elapsedMs >= 180,
+    `Expected capture to wait at least ~180ms, got ${String(elapsedMs)}ms`,
+  );
 
   const payload = await capture.json();
   assert.match(payload.output, /echo hello/);
@@ -308,21 +362,27 @@ test("send_and_capture wait_for matches in stub mode", async (t) => {
     await bridge.stop();
   });
 
-  const createSession = await fetch(`http://127.0.0.1:${bridge.port}/v1/tmux`, requestInit("POST", {
-    action: "create_session",
-    session: "wait-for-demo",
-  }));
+  const createSession = await fetch(
+    `http://127.0.0.1:${bridge.port}/v1/tmux`,
+    requestInit("POST", {
+      action: "create_session",
+      session: "wait-for-demo",
+    }),
+  );
   assert.equal(createSession.status, 200);
 
-  const sendAndCapture = await fetch(`http://127.0.0.1:${bridge.port}/v1/tmux`, requestInit("POST", {
-    action: "send_and_capture",
-    session: "wait-for-demo",
-    text: "echo ready",
-    enter: true,
-    wait_for: "echo ready",
-    timeout_ms: 1000,
-    lines: 20,
-  }));
+  const sendAndCapture = await fetch(
+    `http://127.0.0.1:${bridge.port}/v1/tmux`,
+    requestInit("POST", {
+      action: "send_and_capture",
+      session: "wait-for-demo",
+      text: "echo ready",
+      enter: true,
+      wait_for: "echo ready",
+      timeout_ms: 1000,
+      lines: 20,
+    }),
+  );
 
   assert.equal(sendAndCapture.status, 200);
 
@@ -337,9 +397,12 @@ test("tmux bridge rejects invalid action payloads", async (t) => {
     await bridge.stop();
   });
 
-  const response = await fetch(`http://127.0.0.1:${bridge.port}/v1/tmux`, requestInit("POST", {
-    action: "not_real",
-  }));
+  const response = await fetch(
+    `http://127.0.0.1:${bridge.port}/v1/tmux`,
+    requestInit("POST", {
+      action: "not_real",
+    }),
+  );
 
   assert.equal(response.status, 400);
   const payload = await response.json();

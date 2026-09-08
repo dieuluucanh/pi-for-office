@@ -2,11 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import net from "node:net";
+import { join, parse } from "node:path";
 import { once } from "node:events";
+import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 
 const ORIGIN = "https://localhost:3141";
-const BRIDGE_SCRIPT_PATH = new URL("../scripts/python-bridge-server.mjs", import.meta.url).pathname;
+const BRIDGE_SCRIPT_PATH = fileURLToPath(
+  new URL("../scripts/python-bridge-server.mjs", import.meta.url),
+);
 
 async function getFreePort() {
   return new Promise((resolve, reject) => {
@@ -64,7 +68,11 @@ async function startBridge(extraEnv = {}) {
     });
 
     child.once("exit", (code, signal) => {
-      reject(new Error(`bridge exited before ready (code=${String(code)} signal=${String(signal)})\n${stdout}\n${stderr}`));
+      reject(
+        new Error(
+          `bridge exited before ready (code=${String(code)} signal=${String(signal)})\n${stdout}\n${stderr}`,
+        ),
+      );
     });
   });
 
@@ -192,7 +200,7 @@ test("stub mode python endpoint returns deterministic payload", async (t) => {
     `http://127.0.0.1:${bridge.port}/v1/python-run`,
     requestInit("POST", {
       code: "result = {'value': 1}",
-      input_json: "{\"hello\":\"world\"}",
+      input_json: '{"hello":"world"}',
     }),
   );
 
@@ -203,7 +211,7 @@ test("stub mode python endpoint returns deterministic payload", async (t) => {
   assert.equal(payload.action, "run_python");
   assert.equal(payload.exit_code, 0);
   assert.match(payload.stdout, /simulated/i);
-  assert.equal(payload.result_json, "{\"hello\":\"world\"}");
+  assert.equal(payload.result_json, '{"hello":"world"}');
 });
 
 test("stub mode libreoffice endpoint returns derived output path", async (t) => {
@@ -225,7 +233,10 @@ test("stub mode libreoffice endpoint returns derived output path", async (t) => 
   const payload = await response.json();
   assert.equal(payload.ok, true);
   assert.equal(payload.action, "convert");
-  assert.equal(payload.output_path, "/tmp/source.csv");
+  // The bridge derives the output path with path.parse/path.join, so the
+  // expected path follows the host platform's separators.
+  const expectedOutputPath = join(parse("/tmp/source.xlsx").dir, "source.csv");
+  assert.equal(payload.output_path, expectedOutputPath);
   assert.equal(payload.converter, "stub");
 });
 

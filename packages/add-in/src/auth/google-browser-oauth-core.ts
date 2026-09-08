@@ -34,7 +34,9 @@ export type GoogleOAuthFlowConfig = {
   ) => Promise<string>;
 };
 
-function isGoogleBrowserOauthCorePayloadShape(value: DynamicValue): value is DynamicObject {
+function isGoogleBrowserOauthCorePayloadShape(
+  value: DynamicValue,
+): value is DynamicObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -84,8 +86,13 @@ function parseAuthorizationInput(input: string): ParsedAuthorizationInput {
   }
 
   if (value.includes("code=")) {
-    const params = new URLSearchParams(value.startsWith("?") ? value.slice(1) : value);
-    return createParsedAuthorizationInput(params.get("code"), params.get("state"));
+    const params = new URLSearchParams(
+      value.startsWith("?") ? value.slice(1) : value,
+    );
+    return createParsedAuthorizationInput(
+      params.get("code"),
+      params.get("state"),
+    );
   }
 
   return { code: value };
@@ -109,10 +116,10 @@ function parseTokenPayload(
       : fallbackRefreshToken;
 
   if (
-    typeof accessToken !== "string"
-    || typeof refreshToken !== "string"
-    || refreshToken.trim().length === 0
-    || typeof expiresIn !== "number"
+    typeof accessToken !== "string" ||
+    typeof refreshToken !== "string" ||
+    refreshToken.trim().length === 0 ||
+    typeof expiresIn !== "number"
   ) {
     return null;
   }
@@ -146,7 +153,9 @@ async function exchangeAuthorizationCode(
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => "");
-    throw new Error(`Google token exchange failed (${response.status}): ${errorText}`);
+    throw new Error(
+      `Google token exchange failed (${response.status}): ${errorText}`,
+    );
   }
 
   const payload = parseTokenPayload(await response.json());
@@ -176,7 +185,9 @@ async function refreshAccessToken(
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => "");
-    throw new Error(`Google token refresh failed (${response.status}): ${errorText}`);
+    throw new Error(
+      `Google token refresh failed (${response.status}): ${errorText}`,
+    );
   }
 
   const payload = parseTokenPayload(await response.json(), refreshToken);
@@ -189,11 +200,14 @@ async function refreshAccessToken(
 
 async function getUserEmail(accessToken: string): Promise<string | undefined> {
   try {
-    const response = await fetch("https://www.googleapis.com/oauth2/v1/userinfo?alt=json", {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
+    const response = await fetch(
+      "https://www.googleapis.com/oauth2/v1/userinfo?alt=json",
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
       },
-    });
+    );
 
     if (!response.ok) {
       return undefined;
@@ -224,7 +238,12 @@ async function loginGoogleOAuth(
   const { verifier, challenge } = await generatePKCE();
   const state = createState();
 
-  const authUrl = new URL(GOOGLE_AUTH_URL);
+  let authUrl: URL;
+  try {
+    authUrl = new URL(GOOGLE_AUTH_URL);
+  } catch {
+    throw new Error("Invalid Google authorization URL configuration");
+  }
   authUrl.searchParams.set("client_id", config.clientId);
   authUrl.searchParams.set("response_type", "code");
   authUrl.searchParams.set("redirect_uri", config.redirectUri);
@@ -238,8 +257,8 @@ async function loginGoogleOAuth(
   callbacks.onAuth({
     url: authUrl.toString(),
     instructions:
-      "After sign-in, Pi for Excel will try to capture the localhost callback automatically if the local proxy is running. " +
-      "If it does not continue, copy the full callback URL from the browser address bar and paste it back in Pi for Excel.",
+      "After sign-in, Pi for Office will try to capture the localhost callback automatically if the local proxy is running. " +
+      "If it does not continue, copy the full callback URL from the browser address bar and paste it back in Pi for Office.",
   });
 
   if (callbacks.signal?.aborted) {
@@ -320,7 +339,9 @@ export function createGoogleBrowserOAuthProvider(
       return loginGoogleOAuth(config, callbacks);
     },
 
-    async refreshToken(credentials: OAuthCredentials): Promise<OAuthCredentials> {
+    async refreshToken(
+      credentials: OAuthCredentials,
+    ): Promise<OAuthCredentials> {
       return refreshGoogleOAuth(config, credentials);
     },
 

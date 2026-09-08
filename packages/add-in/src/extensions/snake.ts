@@ -1,5 +1,5 @@
 /**
- * Snake game extension for Pi for Excel.
+ * Snake game extension for Pi for Office.
  * Renders as an inline widget above the input — messages stay visible above.
  */
 
@@ -27,7 +27,8 @@ export function activate(api: ExcelExtensionAPI): void {
       `;
 
       const header = document.createElement("div");
-      header.style.cssText = "font-family: var(--font-mono); font-size: 10.5px; color: var(--muted-foreground); width: 100%; display: flex; justify-content: space-between;";
+      header.style.cssText =
+        "font-family: var(--font-mono); font-size: 10.5px; color: var(--muted-foreground); width: 100%; display: flex; justify-content: space-between;";
       setSafeInnerHTML(
         header,
         `<span>Score: 0</span><span style="opacity: 0.5">arrows · esc quit</span>`,
@@ -50,7 +51,11 @@ export function activate(api: ExcelExtensionAPI): void {
       }
       const ctx2d = ctx;
       ctx2d.scale(dpr, dpr);
-      let snake: Pt[] = [{ x: 11, y: 6 }, { x: 10, y: 6 }, { x: 9, y: 6 }];
+      let snake: Pt[] = [
+        { x: 11, y: 6 },
+        { x: 10, y: 6 },
+        { x: 9, y: 6 },
+      ];
       let food = spawnFood(snake);
       let dir: Dir = "right";
       let nextDir: Dir = "right";
@@ -59,8 +64,12 @@ export function activate(api: ExcelExtensionAPI): void {
 
       function spawnFood(s: Pt[]): Pt {
         let f: Pt;
-        do { f = { x: Math.floor(Math.random() * COLS), y: Math.floor(Math.random() * ROWS) }; }
-        while (s.some(p => p.x === f.x && p.y === f.y));
+        do {
+          f = {
+            x: Math.floor(Math.random() * COLS),
+            y: Math.floor(Math.random() * ROWS),
+          };
+        } while (s.some((p) => p.x === f.x && p.y === f.y));
         return f;
       }
 
@@ -70,21 +79,44 @@ export function activate(api: ExcelExtensionAPI): void {
 
         // Grid (subtle)
         ctx2d.strokeStyle = "rgba(0,0,0,0.03)";
-        for (let x = 0; x <= COLS; x++) { ctx2d.beginPath(); ctx2d.moveTo(x * CELL, 0); ctx2d.lineTo(x * CELL, ROWS * CELL); ctx2d.stroke(); }
-        for (let y = 0; y <= ROWS; y++) { ctx2d.beginPath(); ctx2d.moveTo(0, y * CELL); ctx2d.lineTo(COLS * CELL, y * CELL); ctx2d.stroke(); }
+        for (let x = 0; x <= COLS; x++) {
+          ctx2d.beginPath();
+          ctx2d.moveTo(x * CELL, 0);
+          ctx2d.lineTo(x * CELL, ROWS * CELL);
+          ctx2d.stroke();
+        }
+        for (let y = 0; y <= ROWS; y++) {
+          ctx2d.beginPath();
+          ctx2d.moveTo(0, y * CELL);
+          ctx2d.lineTo(COLS * CELL, y * CELL);
+          ctx2d.stroke();
+        }
 
         // Food
         ctx2d.fillStyle = "#d44";
         ctx2d.beginPath();
-        ctx2d.arc(food.x * CELL + CELL / 2, food.y * CELL + CELL / 2, CELL / 2.5, 0, Math.PI * 2);
+        ctx2d.arc(
+          food.x * CELL + CELL / 2,
+          food.y * CELL + CELL / 2,
+          CELL / 2.5,
+          0,
+          Math.PI * 2,
+        );
         ctx2d.fill();
 
         // Snake
         snake.forEach((p, i) => {
           const r = i === 0 ? 3 : 2;
-          ctx2d.fillStyle = i === 0 ? "oklch(0.40 0.12 160)" : "oklch(0.50 0.10 160)";
+          ctx2d.fillStyle =
+            i === 0 ? "oklch(0.40 0.12 160)" : "oklch(0.50 0.10 160)";
           ctx2d.beginPath();
-          ctx2d.roundRect(p.x * CELL + 1, p.y * CELL + 1, CELL - 2, CELL - 2, r);
+          ctx2d.roundRect(
+            p.x * CELL + 1,
+            p.y * CELL + 1,
+            CELL - 2,
+            CELL - 2,
+            r,
+          );
           ctx2d.fill();
         });
 
@@ -96,7 +128,11 @@ export function activate(api: ExcelExtensionAPI): void {
           ctx2d.textAlign = "center";
           ctx2d.fillText("GAME OVER", logicalW / 2, logicalH / 2 - 8);
           ctx2d.font = "12px sans-serif";
-          ctx2d.fillText(`Score: ${score} · R restart · ESC quit`, logicalW / 2, logicalH / 2 + 12);
+          ctx2d.fillText(
+            `Score: ${score} · R restart · ESC quit`,
+            logicalW / 2,
+            logicalH / 2 + 12,
+          );
         }
       }
 
@@ -122,12 +158,20 @@ export function activate(api: ExcelExtensionAPI): void {
         }
 
         const moves: Record<Dir, Pt> = {
-          up: { x: head.x, y: head.y - 1 }, down: { x: head.x, y: head.y + 1 },
-          left: { x: head.x - 1, y: head.y }, right: { x: head.x + 1, y: head.y },
+          up: { x: head.x, y: head.y - 1 },
+          down: { x: head.x, y: head.y + 1 },
+          left: { x: head.x - 1, y: head.y },
+          right: { x: head.x + 1, y: head.y },
         };
         const nh = moves[dir];
 
-        if (nh.x < 0 || nh.x >= COLS || nh.y < 0 || nh.y >= ROWS || snake.some(s => s.x === nh.x && s.y === nh.y)) {
+        if (
+          nh.x < 0 ||
+          nh.x >= COLS ||
+          nh.y < 0 ||
+          nh.y >= ROWS ||
+          snake.some((s) => s.x === nh.x && s.y === nh.y)
+        ) {
           gameOver = true;
           draw();
           updateHeader();
@@ -146,23 +190,50 @@ export function activate(api: ExcelExtensionAPI): void {
       }
 
       const keyHandler = (e: KeyboardEvent) => {
-        if (e.key === "Escape") { e.stopPropagation(); e.preventDefault(); cleanup(); api.widget.dismiss(); return; }
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          e.preventDefault();
+          cleanup();
+          api.widget.dismiss();
+          return;
+        }
         if (e.key === "r" || e.key === "R") {
           if (gameOver) {
-            snake = [{ x: 11, y: 6 }, { x: 10, y: 6 }, { x: 9, y: 6 }];
+            snake = [
+              { x: 11, y: 6 },
+              { x: 10, y: 6 },
+              { x: 9, y: 6 },
+            ];
             food = spawnFood(snake);
-            dir = "right"; nextDir = "right"; score = 0; gameOver = false;
+            dir = "right";
+            nextDir = "right";
+            score = 0;
+            gameOver = false;
             updateHeader();
             draw();
           }
           return;
         }
-        const map: Record<string, Dir> = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right", w: "up", s: "down", a: "left", d: "right" };
+        const map: Record<string, Dir> = {
+          ArrowUp: "up",
+          ArrowDown: "down",
+          ArrowLeft: "left",
+          ArrowRight: "right",
+          w: "up",
+          s: "down",
+          a: "left",
+          d: "right",
+        };
         const d = map[e.key];
         if (d) {
           e.preventDefault();
           e.stopPropagation();
-          const opp: Record<Dir, Dir> = { up: "down", down: "up", left: "right", right: "left" };
+          const opp: Record<Dir, Dir> = {
+            up: "down",
+            down: "up",
+            left: "right",
+            right: "left",
+          };
           if (d !== opp[dir]) nextDir = d;
         }
       };

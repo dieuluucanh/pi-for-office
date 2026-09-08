@@ -14,7 +14,7 @@ The Python bridge gives Pi access to native Python on the user's machine. It is 
 ## Pyodide (default) vs Native bridge
 
 | | Pyodide (default) | Native bridge |
-|---|---|---|
+| --- | --- | --- |
 | Setup | None — works out of the box | Requires local bridge process |
 | Packages | Pure-Python only (numpy, pandas, scipy via micropip) | Full ecosystem (C extensions, ML libs, etc.) |
 | Filesystem | No local filesystem access | Full local filesystem |
@@ -28,18 +28,20 @@ The Python bridge gives Pi access to native Python on the user's machine. It is 
 ### 1. Start the bridge
 
 ```bash
-npx pi-for-excel-python-bridge
+npx pi-for-office-python-bridge
 ```
 
 This defaults to **real execution mode** on `https://localhost:3340`.
 
 Options:
+
 - `--install-missing` — auto-install Python/LibreOffice via Homebrew (macOS)
 - `PYTHON_BRIDGE_MODE=stub` — safe simulated mode
 - `PYTHON_BRIDGE_TOKEN=your-secret` — require auth token
 - `PYTHON_BRIDGE_PYTHON_BIN=python3.12` — specify Python binary
 
 Requirements:
+
 - `python3` must be on `PATH` (or set `PYTHON_BRIDGE_PYTHON_BIN`)
 - LibreOffice (`soffice`) is optional — only needed for `libreoffice_convert`
 
@@ -79,7 +81,7 @@ The first time Python runs through the native bridge, Pi will ask for explicit u
 
 ## Troubleshooting
 
-- **Falls back to Pyodide unexpectedly** — the bridge process isn't running. Start it with `npx pi-for-excel-python-bridge`.
+- **Falls back to Pyodide unexpectedly** — the bridge process isn't running. Start it with `npx pi-for-office-python-bridge`.
 - **Import errors on Pyodide** — the package likely has C extensions. Set up the native bridge.
 - **LibreOffice convert fails** — ensure `soffice` is on PATH. Install with `brew install --cask libreoffice` (macOS).
 - **CORS/cert errors** — visit `https://localhost:3340` in your browser and accept the certificate.

@@ -14,6 +14,7 @@ The tmux bridge gives Pi access to a real local terminal on the user's machine. 
 ## What it does
 
 When the bridge is running, the `tmux` tool can:
+
 - **list_sessions** — see active tmux sessions
 - **create_session** — start a new shell session (optionally in a specific directory)
 - **send_keys** — type commands into a session
@@ -26,12 +27,14 @@ When the bridge is running, the `tmux` tool can:
 The tmux pane is a normal local shell. If `pi` is installed, you can invoke it directly with `send_keys`/`send_and_capture` text like any other command.
 
 Recommended flow:
+
 1. `list_sessions` then `create_session` (or reuse an existing session)
 2. Optional one-time check: `command -v pi`
 3. Send the `pi ...` command
 4. Monitor output with `capture_pane`
 
 For long-running jobs, avoid rapid repeated captures. Prefer:
+
 - `capture_pane` with `wait_ms` (for example 15000-30000), or
 - `send_and_capture` with `wait_for` + `timeout_ms` when you know a completion pattern.
 
@@ -42,12 +45,13 @@ For long-running jobs, avoid rapid repeated captures. Prefer:
 The bridge is a local HTTPS server. Run it from a terminal:
 
 ```bash
-npx pi-for-excel-tmux-bridge
+npx pi-for-office-tmux-bridge
 ```
 
 This defaults to **real tmux mode** on `https://localhost:3341`.
 
 Options:
+
 - `--install-missing` — auto-install tmux via Homebrew (macOS)
 - `TMUX_BRIDGE_MODE=stub` — safe simulated mode (no real shell execution)
 - `TMUX_BRIDGE_TOKEN=your-secret` — require auth token
@@ -80,6 +84,6 @@ The `tmux` tool stays registered but returns an error if the bridge is unreachab
 
 ## Troubleshooting
 
-- **"bridge URL is unavailable"** — the bridge process isn't running. Start it with `npx pi-for-excel-tmux-bridge`.
+- **"bridge URL is unavailable"** — the bridge process isn't running. Start it with `npx pi-for-office-tmux-bridge`.
 - **"timed out"** — the bridge is running but the command took too long. Default timeout is 15s; use `timeout_ms` for longer operations.
 - **CORS/cert errors** — visit the bridge URL directly in your browser and accept the certificate.

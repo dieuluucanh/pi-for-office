@@ -1,8 +1,8 @@
 # Org-hosted central CORS proxy
 
-**Audience:** IT admins / platform teams rolling out Pi for Excel across an organisation.
+**Audience:** IT admins / platform teams rolling out Pi for Office across an organisation.
 
-By default, Pi for Excel expects each user to run the CORS proxy locally (`https://localhost:3003`, see [install.md](./install.md#oauth-logins-and-cors-proxy)). That requires Node.js on every machine. For managed rollouts you can instead run **one proxy on a central server** and build the add-in so it points there by default.
+By default, Pi for Office expects each user to run the CORS proxy locally (`https://localhost:3003`, see [install.md](./install.md#oauth-logins-and-cors-proxy)). That requires Node.js on every machine. For managed rollouts you can instead run **one proxy on a central server** and build the add-in so it points there by default.
 
 This guide covers both halves:
 
@@ -24,7 +24,7 @@ node scripts/cors-proxy-server.mjs --https
 ### Environment variables
 
 | Variable | Default | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `HOST` | `localhost` (https) / `127.0.0.1` (http) | Bind address. Use your server's interface address (or `0.0.0.0` behind a firewall). |
 | `PORT` | `3003` | Listen port. If unset and 3003 is busy, the local helper may choose a random free port; central deployments should set `PORT` explicitly for a stable URL. |
 | `HTTPS=1` / `--https` | off | Serve TLS directly. Recommended unless you terminate TLS at a reverse proxy. |
@@ -71,7 +71,7 @@ At startup the proxy logs its effective client, origin, and target policies — 
 Central deployments self-host the static build (fork or CI job). Two build-time env vars configure the client:
 
 | Variable | Example | Effect |
-|---|---|---|
+| --- | --- | --- |
 | `VITE_PI_DEFAULT_PROXY_URL` | `https://pi-proxy.example.com:3003` | Default proxy URL baked into the build (users can still change it in `/settings`). Must be `https://`. |
 | `VITE_PI_ALLOWED_PROVIDERS` | `deepseek,openai` | Only show these provider ids in the connect UI. Ids match `ALL_PROVIDERS` in `src/ui/provider-login.ts` (e.g. `anthropic`, `openai-codex`, `openai`, `google`, `deepseek`, `mistral`, `groq`, `xai`, ...). **UI filter only** — pair it with `ALLOWED_TARGET_HOSTS` on the proxy for actual enforcement. |
 
@@ -120,4 +120,4 @@ Then in Excel: open the add-in → `/settings` → Proxy should show your org UR
 
 - **No client auth token yet** — client restriction is network + CIDR based. Tracked in [#595](https://github.com/tmustier/pi-for-excel/issues/595).
 - `ALLOWED_CLIENT_CIDRS` is IPv4-only.
-- The official hosted build (`pi-for-excel.vercel.app`) cannot use an org proxy because of its CSP; central-proxy setups must self-host the static build.
+- The official hosted build (`dieuluucanh.github.io/pi-for-office`) cannot use an org proxy because of its CSP; central-proxy setups must self-host the static build.

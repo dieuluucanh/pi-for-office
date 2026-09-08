@@ -5,12 +5,15 @@
  * dispatches a custom event so UI surfaces can react.
  */
 
-import { DEFAULT_PROXY_URL, normalizeProxyUrl } from "../auth/proxy-validation.js";
+import {
+  DEFAULT_PROXY_URL,
+  normalizeProxyUrl,
+} from "../auth/proxy-validation.js";
 
 const CHECK_INTERVAL_MS = 30_000;
 const CHECK_TIMEOUT_MS = 1_500;
 
-export type ProxyState = "detected" | "not-detected" | "unknown";
+export type ProxyState = "detected" | "not-detected" | "unknown" | "disabled";
 
 let currentState: ProxyState = "unknown";
 let intervalId: ReturnType<typeof setInterval> | undefined;
@@ -28,7 +31,10 @@ async function probeProxy(proxyUrl: string): Promise<boolean> {
     // add-in origins, so status detection does not depend on target allowlists
     // or a browser accepting an error response body from `/`.
     const url = `${normalizeProxyUrl(proxyUrl)}/healthz`;
-    const resp = await fetch(url, { cache: "no-store", signal: controller.signal });
+    const resp = await fetch(url, {
+      cache: "no-store",
+      signal: controller.signal,
+    });
     return resp.ok;
   } catch {
     return false;
@@ -38,14 +44,35 @@ async function probeProxy(proxyUrl: string): Promise<boolean> {
 }
 
 function dispatchProxyStateChanged(state: ProxyState): void {
-  document.dispatchEvent(new CustomEvent("pi:proxy-state-changed", { detail: { state } }));
+  document.dispatchEvent(
+    new CustomEvent("pi:proxy-state-changed", { detail: { state } }),
+  );
 }
 
 interface ProxySettingsReader {
   get<T>(key: string): Promise<T | null>;
 }
 
-export async function checkProxyOnce(settings: ProxySettingsReader): Promise<ProxyState> {
+export async function checkProxyOnce(
+  settings: ProxySettingsReader,
+): Promise<ProxyState> {
+  // Only probe when the user has opted into the proxy. In browser-only mode
+  // (API keys / no local process) there is nothing to detect, so report
+  // "disabled" instead of nagging about a default URL that is not running.
+  try {
+    const enabled = await settings.get<boolean>("proxy.enabled");
+    if (enabled !== true) {
+      const newState: ProxyState = "disabled";
+      if (newState !== currentState) {
+        currentState = newState;
+        dispatchProxyStateChanged(newState);
+      }
+      return newState;
+    }
+  } catch {
+    // Fall through and probe with defaults.
+  }
+
   let proxyUrl: string = DEFAULT_PROXY_URL;
   try {
     const raw = await settings.get<string>("proxy.url");

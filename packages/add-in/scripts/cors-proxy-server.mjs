@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
 /**
- * Minimal CORS proxy for Pi for Excel.
+ * Minimal CORS proxy for Pi for Office.
  *
  * Why this exists:
  * - Some provider OAuth/token endpoints (and some LLM APIs) block browser requests via CORS.
  * - In dev we rely on Vite's proxy. In production, you can run this locally and point
- *   Pi for Excel's proxy setting at it (default: https://localhost:3003; if
+ *   Pi for Office's proxy setting at it (default: https://localhost:3003; if
  *   3003 is busy and PORT is not set, the helper chooses a random free port).
  *
  * Usage:
@@ -45,29 +45,40 @@ import {
 } from "./proxy-client-policy.mjs";
 
 const args = new Set(process.argv.slice(2));
-const useHttps = args.has("--https") || process.env.HTTPS === "1" || process.env.HTTPS === "true";
+const useHttps =
+  args.has("--https") ||
+  process.env.HTTPS === "1" ||
+  process.env.HTTPS === "true";
 const useHttp = args.has("--http");
 
 if (useHttps && useHttp) {
-  console.error("[pi-for-excel] Invalid args: can't use both --https and --http");
+  console.error(
+    "[pi-for-office] Invalid args: can't use both --https and --http",
+  );
   process.exit(1);
 }
 
 const DEFAULT_PORT = 3003;
-const hasExplicitHost = typeof process.env.HOST === "string" && process.env.HOST.trim().length > 0;
-const HOST = hasExplicitHost ? process.env.HOST.trim() : (useHttps ? "localhost" : "127.0.0.1");
+const hasExplicitHost =
+  typeof process.env.HOST === "string" && process.env.HOST.trim().length > 0;
+const HOST = hasExplicitHost
+  ? process.env.HOST.trim()
+  : useHttps
+    ? "localhost"
+    : "127.0.0.1";
 const LISTEN_HOSTS = hasExplicitHost
   ? [HOST]
   : useHttps
     ? ["127.0.0.1", "::1"]
     : [HOST];
-const hasExplicitPort = typeof process.env.PORT === "string" && process.env.PORT.trim().length > 0;
+const hasExplicitPort =
+  typeof process.env.PORT === "string" && process.env.PORT.trim().length > 0;
 
 function parsePort(rawPort) {
   const port = Number.parseInt(rawPort, 10);
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
-    console.error(`[pi-for-excel] Invalid PORT: ${rawPort}`);
-    console.error("[pi-for-excel] Expected an integer from 0 to 65535.");
+    console.error(`[pi-for-office] Invalid PORT: ${rawPort}`);
+    console.error("[pi-for-office] Expected an integer from 0 to 65535.");
     process.exit(1);
   }
   return port;
@@ -98,13 +109,17 @@ const OAUTH_CALLBACK_PROVIDER_CONFIGS = [
     providerId: "google-gemini-cli",
     label: "Google Code Assist",
     path: "/oauth2callback",
-    port: parsePort(process.env.GOOGLE_GEMINI_CLI_OAUTH_CALLBACK_PORT || "8085"),
+    port: parsePort(
+      process.env.GOOGLE_GEMINI_CLI_OAUTH_CALLBACK_PORT || "8085",
+    ),
   },
   {
     providerId: "google-antigravity",
     label: "Google Antigravity",
     path: "/oauth-callback",
-    port: parsePort(process.env.GOOGLE_ANTIGRAVITY_OAUTH_CALLBACK_PORT || "51121"),
+    port: parsePort(
+      process.env.GOOGLE_ANTIGRAVITY_OAUTH_CALLBACK_PORT || "51121",
+    ),
   },
 ];
 
@@ -121,12 +136,18 @@ const allowedClientCidrs = (() => {
 
   const { cidrs, invalid } = parseClientCidrAllowlist(raw);
   if (invalid.length > 0) {
-    console.error(`[pi-for-excel] Invalid ALLOWED_CLIENT_CIDRS entries: ${invalid.join(", ")}`);
-    console.error("[pi-for-excel] Expected comma-separated IPv4 CIDRs (e.g. 10.96.0.0/13) or bare IPv4 addresses. /0 is not allowed.");
+    console.error(
+      `[pi-for-office] Invalid ALLOWED_CLIENT_CIDRS entries: ${invalid.join(", ")}`,
+    );
+    console.error(
+      "[pi-for-office] Expected comma-separated IPv4 CIDRs (e.g. 10.96.0.0/13) or bare IPv4 addresses. /0 is not allowed.",
+    );
     process.exit(1);
   }
   if (cidrs.length === 0) {
-    console.error("[pi-for-excel] ALLOWED_CLIENT_CIDRS was set but contained no valid entries.");
+    console.error(
+      "[pi-for-office] ALLOWED_CLIENT_CIDRS was set but contained no valid entries.",
+    );
     process.exit(1);
   }
   return cidrs;
@@ -149,6 +170,7 @@ const HOP_BY_HOP_HEADERS = new Set([
 const DEFAULT_ALLOWED_ORIGINS = new Set([
   "https://localhost:3141",
   "https://pi-for-excel.vercel.app",
+  "https://dieuluucanh.github.io",
 ]);
 
 const allowedOrigins = (() => {
@@ -200,8 +222,8 @@ const allowPrivateTargets = envFlag("ALLOW_PRIVATE_TARGETS");
 const strictTargetResolution = envFlag("STRICT_TARGET_RESOLUTION");
 
 const hasConfiguredAllowedTargetHosts =
-  typeof process.env.ALLOWED_TARGET_HOSTS === "string"
-  && process.env.ALLOWED_TARGET_HOSTS.trim().length > 0;
+  typeof process.env.ALLOWED_TARGET_HOSTS === "string" &&
+  process.env.ALLOWED_TARGET_HOSTS.trim().length > 0;
 
 const configuredAllowedTargetHosts = hasConfiguredAllowedTargetHosts
   ? parseAllowedTargetHosts(process.env.ALLOWED_TARGET_HOSTS)
@@ -211,9 +233,16 @@ const configuredAllowedTargetHosts = hasConfiguredAllowedTargetHosts
 // Falling back to the default allowlist would silently re-enable legacy
 // override semantics (loopback/private bypass, GitHub-enterprise path
 // bypass) that a configured central proxy relies on being off.
-if (hasConfiguredAllowedTargetHosts && configuredAllowedTargetHosts.size === 0) {
-  console.error("[pi-for-excel] ALLOWED_TARGET_HOSTS was set but contained no valid host entries.");
-  console.error("[pi-for-excel] Expected comma-separated hostnames or IP literals (e.g. api.deepseek.com,10.97.193.77).");
+if (
+  hasConfiguredAllowedTargetHosts &&
+  configuredAllowedTargetHosts.size === 0
+) {
+  console.error(
+    "[pi-for-office] ALLOWED_TARGET_HOSTS was set but contained no valid host entries.",
+  );
+  console.error(
+    "[pi-for-office] Expected comma-separated hostnames or IP literals (e.g. api.deepseek.com,10.97.193.77).",
+  );
   process.exit(1);
 }
 
@@ -235,13 +264,19 @@ const TARGET_POLICY_MESSAGES = {
   blocked_target_invalid_host: "Invalid target host",
   blocked_target_not_allowlisted:
     "Target host is not allowlisted. Configure ALLOWED_TARGET_HOSTS or set ALLOW_ALL_TARGET_HOSTS=1 to disable host allowlisting.",
-  blocked_target_loopback: "Loopback target URLs are blocked by default. Set ALLOW_LOOPBACK_TARGETS=1 to override.",
-  blocked_target_private_ip: "Private/local target URLs are blocked by default. Set ALLOW_PRIVATE_TARGETS=1 to override.",
-  blocked_target_resolution_failed: "Target hostname could not be resolved (STRICT_TARGET_RESOLUTION=1)",
+  blocked_target_loopback:
+    "Loopback target URLs are blocked by default. Set ALLOW_LOOPBACK_TARGETS=1 to override.",
+  blocked_target_private_ip:
+    "Private/local target URLs are blocked by default. Set ALLOW_PRIVATE_TARGETS=1 to override.",
+  blocked_target_resolution_failed:
+    "Target hostname could not be resolved (STRICT_TARGET_RESOLUTION=1)",
 };
 
 function isGitHubEnterpriseOAuthPathname(pathname) {
-  return pathname === "/login/device/code" || pathname === "/login/oauth/access_token";
+  return (
+    pathname === "/login/device/code" ||
+    pathname === "/login/oauth/access_token"
+  );
 }
 
 function isGitHubEnterpriseCopilotPathname(pathname) {
@@ -257,7 +292,10 @@ function shouldBypassHostAllowlistForGitHubEnterprise(targetUrl) {
   }
 
   if (isGitHubEnterpriseCopilotPathname(targetUrl.pathname)) {
-    if (hostname === "api.github.com" || hostname === "api.individual.githubcopilot.com") {
+    if (
+      hostname === "api.github.com" ||
+      hostname === "api.individual.githubcopilot.com"
+    ) {
       return false;
     }
 
@@ -274,14 +312,17 @@ function setCorsHeaders(req, res) {
     res.setHeader("Vary", "Origin");
   }
 
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+  res.setHeader(
+    "Access-Control-Allow-Methods",
+    "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+  );
   res.setHeader(
     "Access-Control-Allow-Headers",
     req.headers["access-control-request-headers"] || "*",
   );
   res.setHeader(
     "Access-Control-Expose-Headers",
-    `*, X-Pi-For-Excel-Proxy, ${CODEX_WEBSOCKET_BRIDGE_HEADER}`,
+    `*, X-Pi-For-Office-Proxy, ${CODEX_WEBSOCKET_BRIDGE_HEADER}`,
   );
   res.setHeader("Access-Control-Max-Age", "86400");
 }
@@ -296,7 +337,9 @@ function rejectWithReason(res, reason) {
 const oauthCallbackCaptures = new Map();
 
 function findOAuthCallbackProvider(providerId) {
-  return OAUTH_CALLBACK_PROVIDER_CONFIGS.find((config) => config.providerId === providerId);
+  return OAUTH_CALLBACK_PROVIDER_CONFIGS.find(
+    (config) => config.providerId === providerId,
+  );
 }
 
 function oauthCallbackKey(providerId, state) {
@@ -318,10 +361,12 @@ function pruneOAuthCallbackCaptures(now = Date.now()) {
 }
 
 function isSafeOAuthState(state) {
-  return typeof state === "string"
-    && state.length > 0
-    && state.length <= 512
-    && /^[A-Za-z0-9._~-]+$/.test(state);
+  return (
+    typeof state === "string" &&
+    state.length > 0 &&
+    state.length <= 512 &&
+    /^[A-Za-z0-9._~-]+$/.test(state)
+  );
 }
 
 function htmlEscape(value) {
@@ -357,19 +402,24 @@ function storeOAuthCallbackCapture(config, callbackUrl) {
     receivedAt: Date.now(),
   };
 
-  oauthCallbackCaptures.set(oauthCallbackKey(capture.providerId, state), capture);
+  oauthCallbackCaptures.set(
+    oauthCallbackKey(capture.providerId, state),
+    capture,
+  );
   return capture;
 }
 
 function buildOAuthCallbackHtml(config, capture) {
   const fallbackUrl = capture?.url || "";
-  const title = capture ? `${config.label} login captured` : `${config.label} login callback was incomplete`;
+  const title = capture
+    ? `${config.label} login captured`
+    : `${config.label} login callback was incomplete`;
   const lead = capture
-    ? "You can return to Pi for Excel. The add-in should continue automatically in a moment."
-    : "Pi for Excel could not find an authorization code in this callback. Return to Pi for Excel and try logging in again.";
+    ? "You can return to Pi for Office. The add-in should continue automatically in a moment."
+    : "Pi for Office could not find an authorization code in this callback. Return to Pi for Office and try logging in again.";
   const closeHint = "This browser tab can be closed.";
   const fallbackBlock = capture
-    ? `<details><summary>If Pi for Excel did not continue automatically</summary><p>Copy this callback URL and paste it into Pi for Excel:</p><code>${htmlEscape(fallbackUrl)}</code></details>`
+    ? `<details><summary>If Pi for Office did not continue automatically</summary><p>Copy this callback URL and paste it into Pi for Office:</p><code>${htmlEscape(fallbackUrl)}</code></details>`
     : "";
 
   return `<!doctype html>
@@ -377,7 +427,7 @@ function buildOAuthCallbackHtml(config, capture) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Pi for Excel login captured</title>
+<title>Pi for Office login captured</title>
 <style>
   body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f8faf8; color: #17211b; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
   main { width: min(560px, calc(100vw - 32px)); padding: 28px; border: 1px solid #dfe7df; border-radius: 18px; background: white; box-shadow: 0 18px 55px rgba(15, 23, 18, 0.12); }
@@ -408,7 +458,9 @@ function handleOAuthProviderCallbackRequest(configs, port, req, res) {
     res.statusCode = 403;
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.end("forbidden");
-    console.warn(`[oauth-callback] blocked non-loopback client: ${remote || "unknown"}`);
+    console.warn(
+      `[oauth-callback] blocked non-loopback client: ${remote || "unknown"}`,
+    );
     return;
   }
 
@@ -423,7 +475,9 @@ function handleOAuthProviderCallbackRequest(configs, port, req, res) {
     return;
   }
 
-  const config = configs.find((candidate) => candidate.path === callbackUrl.pathname);
+  const config = configs.find(
+    (candidate) => candidate.path === callbackUrl.pathname,
+  );
   if (!config) {
     res.statusCode = 404;
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
@@ -459,7 +513,9 @@ function handleOAuthCallbackApiRequest(rawUrl, res) {
 
   let providerId;
   try {
-    providerId = decodeURIComponent(requestUrl.pathname.slice("/oauth/callback/".length));
+    providerId = decodeURIComponent(
+      requestUrl.pathname.slice("/oauth/callback/".length),
+    );
   } catch {
     sendJson(res, 400, { status: "error", error: "invalid_provider" });
     return;
@@ -478,7 +534,9 @@ function handleOAuthCallbackApiRequest(rawUrl, res) {
 
   pruneOAuthCallbackCaptures();
 
-  const capture = oauthCallbackCaptures.get(oauthCallbackKey(providerId, state));
+  const capture = oauthCallbackCaptures.get(
+    oauthCallbackKey(providerId, state),
+  );
   if (!capture) {
     sendJson(res, 200, { status: "pending" });
     return;
@@ -496,7 +554,9 @@ function handleOAuthCallbackApiRequest(rawUrl, res) {
 
 function extractProxyTransport(rawUrl) {
   try {
-    return new URL(rawUrl, "http://proxy.local").searchParams.get("pi_transport");
+    return new URL(rawUrl, "http://proxy.local").searchParams.get(
+      "pi_transport",
+    );
   } catch {
     return null;
   }
@@ -576,7 +636,7 @@ const handler = async (req, res) => {
     }
     res.statusCode = 200;
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
-    res.setHeader("X-Pi-For-Excel-Proxy", "1");
+    res.setHeader("X-Pi-For-Office-Proxy", "1");
     res.setHeader(CODEX_WEBSOCKET_BRIDGE_HEADER, "1");
     res.end("ok");
     return;
@@ -587,7 +647,9 @@ const handler = async (req, res) => {
     res.statusCode = 403;
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.end("forbidden");
-    console.warn(`[proxy] blocked request from disallowed origin: ${origin || "(none)"}`);
+    console.warn(
+      `[proxy] blocked request from disallowed origin: ${origin || "(none)"}`,
+    );
     return;
   }
 
@@ -637,23 +699,30 @@ const handler = async (req, res) => {
   let resolvedIps = [];
   if (!isIpLiteral(targetHost)) {
     try {
-      const records = await dnsLookup(targetHost, { all: true, verbatim: true });
+      const records = await dnsLookup(targetHost, {
+        all: true,
+        verbatim: true,
+      });
       resolvedIps = records.map((r) => r.address);
     } catch (err) {
       const errorText = err instanceof Error ? err.message : String(err);
       if (strictTargetResolution) {
         rejectWithReason(res, "blocked_target_resolution_failed");
-        console.warn(`[proxy] blocked target (blocked_target_resolution_failed): ${safeTarget} (${errorText})`);
+        console.warn(
+          `[proxy] blocked target (blocked_target_resolution_failed): ${safeTarget} (${errorText})`,
+        );
         return;
       }
-      console.warn(`[proxy] DNS lookup failed for ${targetHost}: ${errorText} (continuing)`);
+      console.warn(
+        `[proxy] DNS lookup failed for ${targetHost}: ${errorText} (continuing)`,
+      );
     }
   }
 
   const bypassHostAllowlistForGitHubEnterprise =
-    !allowAllTargetHosts
-    && configuredAllowedTargetHosts.size === 0
-    && shouldBypassHostAllowlistForGitHubEnterprise(targetUrl);
+    !allowAllTargetHosts &&
+    configuredAllowedTargetHosts.size === 0 &&
+    shouldBypassHostAllowlistForGitHubEnterprise(targetUrl);
 
   const effectiveAllowedTargetHosts = bypassHostAllowlistForGitHubEnterprise
     ? EMPTY_ALLOWED_TARGET_HOSTS
@@ -678,11 +747,16 @@ const handler = async (req, res) => {
   }
 
   if (bypassHostAllowlistForGitHubEnterprise) {
-    console.log(`[proxy] allowing GitHub enterprise endpoint outside default host allowlist: ${safeTarget}`);
+    console.log(
+      `[proxy] allowing GitHub enterprise endpoint outside default host allowlist: ${safeTarget}`,
+    );
   }
 
   const requestedTransport = extractProxyTransport(rawUrl);
-  if (requestedTransport && requestedTransport !== CODEX_WEBSOCKET_BRIDGE_TRANSPORT) {
+  if (
+    requestedTransport &&
+    requestedTransport !== CODEX_WEBSOCKET_BRIDGE_TRANSPORT
+  ) {
     res.statusCode = 400;
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.end("Unsupported pi_transport value");
@@ -693,14 +767,23 @@ const handler = async (req, res) => {
     if (!isCodexWebSocketBridgeTarget(targetUrl)) {
       res.statusCode = 400;
       res.setHeader("Content-Type", "text/plain; charset=utf-8");
-      res.end("Codex WebSocket bridge target must be https://chatgpt.com/backend-api/codex/responses");
+      res.end(
+        "Codex WebSocket bridge target must be https://chatgpt.com/backend-api/codex/responses",
+      );
       return;
     }
 
     const startedAt = Date.now();
     const headers = buildOutboundHeaders(req.headers);
-    await bridgeCodexWebSocketToSse({ req, res, targetUrl, outboundHeaders: headers });
-    console.log(`[proxy] ${req.method || "GET"} ${safeTarget} via Codex WebSocket bridge (${Date.now() - startedAt}ms)`);
+    await bridgeCodexWebSocketToSse({
+      req,
+      res,
+      targetUrl,
+      outboundHeaders: headers,
+    });
+    console.log(
+      `[proxy] ${req.method || "GET"} ${safeTarget} via Codex WebSocket bridge (${Date.now() - startedAt}ms)`,
+    );
     return;
   }
 
@@ -721,7 +804,9 @@ const handler = async (req, res) => {
     });
 
     // Log without query string to avoid leaking tokens
-    console.log(`[proxy] ${req.method || "GET"} ${safeTarget} -> ${upstream.status} (${Date.now() - startedAt}ms)`);
+    console.log(
+      `[proxy] ${req.method || "GET"} ${safeTarget} -> ${upstream.status} (${Date.now() - startedAt}ms)`,
+    );
 
     res.statusCode = upstream.status;
 
@@ -762,7 +847,9 @@ const handler = async (req, res) => {
     });
     nodeStream.pipe(res);
   } catch (err) {
-    console.warn(`[proxy] ${req.method || "GET"} ${targetUrl.origin}${targetUrl.pathname} -> ERROR (${err instanceof Error ? err.message : String(err)})`);
+    console.warn(
+      `[proxy] ${req.method || "GET"} ${targetUrl.origin}${targetUrl.pathname} -> ERROR (${err instanceof Error ? err.message : String(err)})`,
+    );
     res.statusCode = 502;
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.end(`Proxy error: ${err instanceof Error ? err.message : String(err)}`);
@@ -775,11 +862,21 @@ function createProxyServer() {
   }
 
   if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
-    console.error("[pi-for-excel] HTTPS requested but TLS key/cert not found:");
-    console.error(`  key:  ${keyPath}${fs.existsSync(keyPath) ? "" : "  (missing)"}`);
-    console.error(`  cert: ${certPath}${fs.existsSync(certPath) ? "" : "  (missing)"}`);
-    console.error("For local dev, generate key.pem/cert.pem with mkcert (see README). Example: mkcert localhost");
-    console.error("For central deployments, set TLS_KEY_PATH/TLS_CERT_PATH (see docs/central-proxy.md).");
+    console.error(
+      "[pi-for-office] HTTPS requested but TLS key/cert not found:",
+    );
+    console.error(
+      `  key:  ${keyPath}${fs.existsSync(keyPath) ? "" : "  (missing)"}`,
+    );
+    console.error(
+      `  cert: ${certPath}${fs.existsSync(certPath) ? "" : "  (missing)"}`,
+    );
+    console.error(
+      "For local dev, generate key.pem/cert.pem with mkcert (see README). Example: mkcert localhost",
+    );
+    console.error(
+      "For central deployments, set TLS_KEY_PATH/TLS_CERT_PATH (see docs/central-proxy.md).",
+    );
     process.exit(1);
   }
 
@@ -794,46 +891,72 @@ function createProxyServer() {
 
 function logStartup(listeningPort, listeningHosts) {
   const scheme = useHttps ? "https" : "http";
-  const formattedHost = HOST.includes(":") && !HOST.startsWith("[") ? `[${HOST}]` : HOST;
+  const formattedHost =
+    HOST.includes(":") && !HOST.startsWith("[") ? `[${HOST}]` : HOST;
   const proxyUrl = `${scheme}://${formattedHost}:${listeningPort}`;
-  console.log(`[pi-for-excel] CORS proxy listening on ${proxyUrl}`);
+  console.log(`[pi-for-office] CORS proxy listening on ${proxyUrl}`);
   if (listeningHosts.length > 1) {
-    console.log(`[pi-for-excel] Listening on loopback addresses: ${listeningHosts.join(", ")}`);
+    console.log(
+      `[pi-for-office] Listening on loopback addresses: ${listeningHosts.join(", ")}`,
+    );
   }
-  console.log(`[pi-for-excel] Format: ${proxyUrl}/?url=<target-url>`);
+  console.log(`[pi-for-office] Format: ${proxyUrl}/?url=<target-url>`);
   if (listeningPort !== DEFAULT_PORT) {
-    console.log(`[pi-for-excel] Update Pi for Excel /settings → Proxy URL to ${proxyUrl}`);
+    console.log(
+      `[pi-for-office] Update Pi for Office /settings → Proxy URL to ${proxyUrl}`,
+    );
   }
-  console.log(`[pi-for-excel] Allowed origins: ${Array.from(allowedOrigins).join(", ")}`);
+  console.log(
+    `[pi-for-office] Allowed origins: ${Array.from(allowedOrigins).join(", ")}`,
+  );
 
   if (allowedClientCidrs.length > 0) {
-    console.log(`[pi-for-excel] WARNING: accepting non-loopback clients from: ${allowedClientCidrs.map((c) => c.entry).join(", ")} (ALLOWED_CLIENT_CIDRS)`);
-    console.log("[pi-for-excel] Ensure network-level controls also restrict who can reach this proxy.");
+    console.log(
+      `[pi-for-office] WARNING: accepting non-loopback clients from: ${allowedClientCidrs.map((c) => c.entry).join(", ")} (ALLOWED_CLIENT_CIDRS)`,
+    );
+    console.log(
+      "[pi-for-office] Ensure network-level controls also restrict who can reach this proxy.",
+    );
   } else {
-    console.log("[pi-for-excel] Client policy: loopback only");
+    console.log("[pi-for-office] Client policy: loopback only");
   }
 
   if (allowAllTargetHosts) {
-    console.log("[pi-for-excel] WARNING: target host allowlisting disabled (ALLOW_ALL_TARGET_HOSTS=1)");
+    console.log(
+      "[pi-for-office] WARNING: target host allowlisting disabled (ALLOW_ALL_TARGET_HOSTS=1)",
+    );
   } else {
-    const source = configuredAllowedTargetHosts.size > 0 ? "ALLOWED_TARGET_HOSTS" : "default";
-    console.log(`[pi-for-excel] Allowed target hosts (${source}): ${Array.from(allowedTargetHosts).join(", ")}`);
+    const source =
+      configuredAllowedTargetHosts.size > 0
+        ? "ALLOWED_TARGET_HOSTS"
+        : "default";
+    console.log(
+      `[pi-for-office] Allowed target hosts (${source}): ${Array.from(allowedTargetHosts).join(", ")}`,
+    );
 
     if (configuredAllowedTargetHosts.size === 0) {
-      console.log("[pi-for-excel] GitHub enterprise OAuth/Copilot endpoints on custom domains are allowed by path.");
+      console.log(
+        "[pi-for-office] GitHub enterprise OAuth/Copilot endpoints on custom domains are allowed by path.",
+      );
     }
   }
 
   if (allowLoopbackTargets) {
-    console.log("[pi-for-excel] WARNING: loopback target blocking disabled (ALLOW_LOOPBACK_TARGETS=1)");
+    console.log(
+      "[pi-for-office] WARNING: loopback target blocking disabled (ALLOW_LOOPBACK_TARGETS=1)",
+    );
   }
 
   if (allowPrivateTargets) {
-    console.log("[pi-for-excel] WARNING: private/local target blocking disabled (ALLOW_PRIVATE_TARGETS=1)");
+    console.log(
+      "[pi-for-office] WARNING: private/local target blocking disabled (ALLOW_PRIVATE_TARGETS=1)",
+    );
   }
 
   if (strictTargetResolution) {
-    console.log("[pi-for-excel] Strict DNS resolution enabled (STRICT_TARGET_RESOLUTION=1)");
+    console.log(
+      "[pi-for-office] Strict DNS resolution enabled (STRICT_TARGET_RESOLUTION=1)",
+    );
   }
 }
 
@@ -854,7 +977,9 @@ const oauthCallbackServers = OAUTH_CALLBACK_SERVER_ENABLED
   ? Array.from(groupOAuthCallbackProvidersByPort(), ([port, configs]) => ({
       port,
       configs,
-      server: http.createServer((req, res) => handleOAuthProviderCallbackRequest(configs, port, req, res)),
+      server: http.createServer((req, res) =>
+        handleOAuthProviderCallbackRequest(configs, port, req, res),
+      ),
     }))
   : [];
 
@@ -870,13 +995,17 @@ function listenOAuthCallbackServer(entry) {
   const onError = (err) => {
     cleanup();
     const code = typeof err?.code === "string" ? err.code : "listen_error";
-    console.warn(`[pi-for-excel] OAuth callback capture listener unavailable (${code}).`);
-    console.warn("[pi-for-excel] Affected OAuth logins will still work with manual callback URL paste.");
+    console.warn(
+      `[pi-for-office] OAuth callback capture listener unavailable (${code}).`,
+    );
+    console.warn(
+      "[pi-for-office] Affected OAuth logins will still work with manual callback URL paste.",
+    );
   };
 
   const onListening = () => {
     cleanup();
-    console.log("[pi-for-excel] OAuth callback capture listener started.");
+    console.log("[pi-for-office] OAuth callback capture listener started.");
   };
 
   entry.server.once("error", onError);
@@ -941,7 +1070,10 @@ async function listen(port) {
       } catch (error) {
         await closeServer(server);
         const code = typeof error?.code === "string" ? error.code : "";
-        if (!hasExplicitHost && (code === "EAFNOSUPPORT" || code === "EADDRNOTAVAIL")) {
+        if (
+          !hasExplicitHost &&
+          (code === "EAFNOSUPPORT" || code === "EADDRNOTAVAIL")
+        ) {
           skippedHosts.push(host);
           continue;
         }
@@ -950,7 +1082,8 @@ async function listen(port) {
       }
 
       const address = server.address();
-      const actualPort = address && typeof address !== "string" ? address.port : selectedPort;
+      const actualPort =
+        address && typeof address !== "string" ? address.port : selectedPort;
       if (selectedPort === 0) {
         selectedPort = actualPort;
       }
@@ -966,21 +1099,32 @@ async function listen(port) {
     }
 
     if (skippedHosts.length > 0) {
-      console.warn(`[pi-for-excel] Skipped unavailable loopback addresses: ${skippedHosts.join(", ")}`);
+      console.warn(
+        `[pi-for-office] Skipped unavailable loopback addresses: ${skippedHosts.join(", ")}`,
+      );
     }
-    logStartup(selectedPort, entries.map((entry) => entry.host));
+    logStartup(
+      selectedPort,
+      entries.map((entry) => entry.host),
+    );
   } catch (error) {
     const code = typeof error?.code === "string" ? error.code : "";
     if (code === "EADDRINUSE" && !hasExplicitPort && port === DEFAULT_PORT) {
-      console.warn(`[pi-for-excel] Port ${DEFAULT_PORT} is already in use; choosing a random available port instead.`);
+      console.warn(
+        `[pi-for-office] Port ${DEFAULT_PORT} is already in use; choosing a random available port instead.`,
+      );
       await listen(0);
       return;
     }
 
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`[pi-for-excel] Failed to listen on ${HOST}:${port}: ${message}`);
+    console.error(
+      `[pi-for-office] Failed to listen on ${HOST}:${port}: ${message}`,
+    );
     if (hasExplicitPort) {
-      console.error("[pi-for-excel] Choose a different port with PORT=0 (random) or PORT=<port>.");
+      console.error(
+        "[pi-for-office] Choose a different port with PORT=0 (random) or PORT=<port>.",
+      );
     }
     process.exit(1);
   }

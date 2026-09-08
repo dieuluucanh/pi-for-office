@@ -20,6 +20,7 @@ Native bridge usage requires:
 3. user confirms the first Python/LibreOffice execution per effective bridge URL
 
 Notes:
+
 - `libreoffice_convert` is bridge-only and blocked when these checks fail.
 - `python_run` / `python_transform_range` can still execute via Pyodide fallback when checks fail (for example, no override is set and the default bridge URL is offline).
 
@@ -35,13 +36,13 @@ Optional bearer auth:
 
 ```bash
 # One-command setup (real local execution mode by default)
-npx pi-for-excel-python-bridge
+npx pi-for-office-python-bridge
 
 # Optional assisted dependency install (macOS/Homebrew)
-npx pi-for-excel-python-bridge --install-missing
+npx pi-for-office-python-bridge --install-missing
 
 # Force safe simulated mode
-PYTHON_BRIDGE_MODE=stub npx pi-for-excel-python-bridge
+PYTHON_BRIDGE_MODE=stub npx pi-for-office-python-bridge
 
 # Source checkout alternative
 npm run python:bridge:https

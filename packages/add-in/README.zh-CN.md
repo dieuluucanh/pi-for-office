@@ -1,4 +1,4 @@
-# Pi for Excel
+# Pi for Office
 
 [English](./README.md) | 简体中文
 
@@ -7,7 +7,7 @@
 
 > 本文档是简要中文指南，仅涵盖 **Microsoft Excel 加载项**的**安装**与**模型配置**。完整功能说明、开发者文档等请参阅[英文版 README](./README.md) 与 [docs/](./docs/README.md) 目录。WPS 表格支持另见英文文档 [docs/wps-support.md](./docs/wps-support.md)。
 
-Pi for Excel 是一款开源、多模型的 Microsoft Excel AI 侧边栏加载项,由 [Pi](https://pi.dev) 驱动。
+Pi for Office 是一款开源、多模型的 Microsoft Excel AI 侧边栏加载项,由 [Pi](https://pi.dev) 驱动。
 
 它是一个运行在 Excel 内部的 AI 智能体:能读取你的工作簿、修改内容、进行联网研究——模型由你选择。既支持 Anthropic、OpenAI、Google Gemini、GitHub Copilot 的 API Key 或 OAuth 登录,也支持任何 **OpenAI 兼容接口**(如 DeepSeek、智谱 GLM、Ollama 本地模型等)。
 
@@ -68,8 +68,8 @@ Pi for Excel 是一款开源、多模型的 Microsoft Excel AI 侧边栏加载�
 
 3. 将 `manifest.prod.xml` 复制到该文件夹
 4. 完全退出 Excel(Cmd + Q)并重新打开
-5. 点击 **插入 → 我的加载项**,应能看到 **Pi for Excel**,点击一次以注册加载项
-6. 在 **开始(Home)** 功能区最右侧找到 **加载项(Add-ins)** 按钮(四个橙色方块图标),点击后选择 **Pi for Excel** 打开侧边栏
+5. 点击 **插入 → 我的加载项**,应能看到 **Pi for Office**,点击一次以注册加载项
+6. 在 **开始(Home)** 功能区最右侧找到 **加载项(Add-ins)** 按钮(四个橙色方块图标),点击后选择 **Pi for Office** 打开侧边栏
 
 > **文件夹不存在?** 先在终端(Terminal)中运行:
 >
@@ -87,7 +87,7 @@ Pi for Excel 是一款开源、多模型的 Microsoft Excel AI 侧边栏加载�
 
 ### 3)首次运行检查
 
-1. 打开侧边栏(**开始**功能区的**加载项**按钮 → **Pi for Excel**)
+1. 打开侧边栏(**开始**功能区的**加载项**按钮 → **Pi for Office**)
 2. 连接一个模型服务(见下一节)
 3. 发送测试消息,例如:
    - `我当前在哪个工作表?`
@@ -130,7 +130,7 @@ Pi for Excel 是一款开源、多模型的 Microsoft Excel AI 侧边栏加载�
 注意:
 
 - 网关若是公网 HTTPS 地址,通常可直接连接,无需代理。
-- localhost / 内网地址需经本地代理转发,启动 `pi-for-excel-proxy` 时可能需要配置目标主机策略环境变量(如 `ALLOWED_TARGET_HOSTS`、`ALLOW_LOOPBACK_TARGETS`、`ALLOW_PRIVATE_TARGETS`),详见[英文安装指南](./docs/install.md#4-connect-a-provider)。
+- localhost / 内网地址需经本地代理转发,启动 `pi-for-office-proxy` 时可能需要配置目标主机策略环境变量(如 `ALLOWED_TARGET_HOSTS`、`ALLOW_LOOPBACK_TARGETS`、`ALLOW_PRIVATE_TARGETS`),详见[英文安装指南](./docs/install.md#4-connect-a-provider)。
 
 ### 方式三:OAuth 账号登录
 
@@ -139,7 +139,7 @@ Pi for Excel 是一款开源、多模型的 Microsoft Excel AI 侧边栏加载�
 1. 在 `/login` 中点击 **Login with …**
 2. 在弹出的浏览器窗口中完成登录
 3. 返回 Excel,按提示完成剩余步骤
-   - OpenAI 与 Google 的 OAuth 流程中,浏览器最后会跳到一个显示**"无法访问此网站"**的页面——这是正常现象!复制浏览器地址栏中的完整 URL,粘贴回 Pi for Excel 的提示框即可
+   - OpenAI 与 Google 的 OAuth 流程中,浏览器最后会跳到一个显示**"无法访问此网站"**的页面——这是正常现象!复制浏览器地址栏中的完整 URL,粘贴回 Pi for Office 的提示框即可
    - 部分 Google Workspace 套餐还会要求填写 Google Cloud 项目 ID
 
 #### OAuth 登录报 CORS / 网络错误?
@@ -147,10 +147,10 @@ Pi for Excel 是一款开源、多模型的 Microsoft Excel AI 侧边栏加载�
 Office 内嵌浏览器会拦截部分 OAuth 接口(典型报错:`Login was blocked by browser CORS`、`Load failed`、`Failed to fetch`)。解决方法是在本机运行一个本地 HTTPS 代理:
 
 ```bash
-npx pi-for-excel-proxy
+npx pi-for-office-proxy
 ```
 
-(若未安装 Node.js:`curl -fsSL https://piforexcel.com/proxy | sh`)
+(若未安装 Node.js:`curl -fsSL https://dieuluucanh.github.io/pi-for-office/proxy.sh | sh`)
 
 然后在 Pi 中打开 `/settings` → **Proxy**,启用代理并填入代理启动时打印的 HTTPS 地址(通常是 `https://localhost:3003`; 如端口被占用,会显示另一个本地端口),重试登录。详细说明与排错见[英文安装指南](./docs/install.md#oauth-logins-and-cors-proxy)。API Key 方式一般不需要代理。
 

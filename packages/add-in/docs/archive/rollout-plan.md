@@ -1,6 +1,6 @@
 # Rollout plan (install → onboarding → hackability)
 
-This doc captures the recommended order of work to make **Pi for Excel** easy to install for non-technical users *and* remain hackable/OSS-friendly.
+This doc captures the recommended order of work to make **Pi for Office** easy to install for non-technical users *and* remain hackable/OSS-friendly.
 
 ## Principles
 
@@ -13,9 +13,10 @@ This doc captures the recommended order of work to make **Pi for Excel** easy to
 
 ### Step 1 — Distribution: hosted build + production manifest (Issue #16)
 
-Goal: a user can install Pi for Excel by downloading a manifest and using Excel UI (no local server).
+Goal: a user can install Pi for Office by downloading a manifest and using Excel UI (no local server).
 
 Deliverables:
+
 - Host `dist/` at a stable HTTPS URL (Vercel recommended).
 - Provide `manifest.prod.xml` that points to that host (`SourceLocation` + icons).
 - Add a non-technical install doc (macOS + Windows) with screenshots.
@@ -24,6 +25,7 @@ Deliverables:
   - **Developer setup**
 
 **Update story (best-effort automatic):**
+
 - If the manifest points to a stable URL (e.g. `https://<host>/src/taskpane.html`), then deploying a new build to the same host updates the add-in **without users reinstalling**.
 - Users may need to close/reopen the taskpane or restart Excel if Office/webview caches aggressively.
 - If we must change the manifest (rare), users reinstall the updated manifest.
@@ -33,6 +35,7 @@ Deliverables:
 Goal: after install, users can connect a provider and get a first response quickly.
 
 Deliverables:
+
 - Better welcome copy + examples.
 - Clear provider recommendations:
   - API key flows that “just work”
@@ -44,6 +47,7 @@ Deliverables:
 Goal: users who are not engineers (but use Claude/LLM workflows) can install extensions *inside* the hosted add-in.
 
 Deliverables:
+
 - `/extensions` manager UI:
   - list installed extensions
   - enable/disable/uninstall
@@ -59,6 +63,7 @@ Deliverables:
 Goal: advanced users can connect local model servers easily.
 
 Deliverables:
+
 - Expose custom providers UI (Providers & Models).
 - Ensure our provider filtering + API key resolution works for custom providers.
 - Make Office webview + localhost HTTP workable (likely via the local HTTPS proxy).
@@ -66,6 +71,7 @@ Deliverables:
 ### Step 5 — Packaged helper app (optional)
 
 Goal: make the local HTTPS proxy (and future local features) non-technical:
+
 - installer for macOS/Windows
 - runs in background
 - provides `https://localhost:<port>`

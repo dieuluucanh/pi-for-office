@@ -17,6 +17,7 @@ import {
   validateOfficeProxyUrl,
 } from "./proxy-validation.js";
 import { rewriteDevProxyUrl } from "./dev-rewrites.js";
+import { isCorsError } from "./cors-error.js";
 
 /** The original, un-patched fetch — use for requests that should bypass the proxy */
 export let originalFetch: typeof window.fetch;
@@ -78,7 +79,8 @@ function looksLikeOAuthOrTokenEndpoint(url: string): boolean {
 
     // Anthropic OAuth token exchange / refresh
     if (
-      (u.hostname === "console.anthropic.com" || u.hostname === "platform.claude.com") &&
+      (u.hostname === "console.anthropic.com" ||
+        u.hostname === "platform.claude.com") &&
       u.pathname.startsWith("/v1/oauth/token")
     ) {
       return true;
@@ -92,14 +94,23 @@ function looksLikeOAuthOrTokenEndpoint(url: string): boolean {
     if (u.pathname.includes("/copilot_internal/")) return true;
 
     // OpenAI auth endpoints (not all are browser-friendly)
-    if (u.hostname === "auth.openai.com" && u.pathname.startsWith("/oauth/")) return true;
+    if (u.hostname === "auth.openai.com" && u.pathname.startsWith("/oauth/"))
+      return true;
 
     // Google OAuth token endpoint
     if (u.hostname === "oauth2.googleapis.com") return true;
 
     // Google Cloud Code Assist onboarding/auth-adjacent endpoints
-    if (u.hostname === "cloudcode-pa.googleapis.com" && u.pathname.startsWith("/v1internal")) return true;
-    if (u.hostname === "daily-cloudcode-pa.sandbox.googleapis.com" && u.pathname.startsWith("/v1internal")) return true;
+    if (
+      u.hostname === "cloudcode-pa.googleapis.com" &&
+      u.pathname.startsWith("/v1internal")
+    )
+      return true;
+    if (
+      u.hostname === "daily-cloudcode-pa.sandbox.googleapis.com" &&
+      u.pathname.startsWith("/v1internal")
+    )
+      return true;
 
     return false;
   } catch {
@@ -107,7 +118,9 @@ function looksLikeOAuthOrTokenEndpoint(url: string): boolean {
   }
 }
 
-function stripAnthropicBrowserHeader(init?: RequestInit): RequestInit | undefined {
+function stripAnthropicBrowserHeader(
+  init?: RequestInit,
+): RequestInit | undefined {
   if (!init?.headers) return init;
   const headers = new Headers(init.headers);
   headers.delete("anthropic-dangerous-direct-browser-access");
@@ -120,12 +133,16 @@ function stripAnthropicBrowserHeader(init?: RequestInit): RequestInit | undefine
 export function installFetchInterceptor(): void {
   originalFetch = window.fetch.bind(window);
 
-  window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const url = typeof input === "string"
-      ? input
-      : input instanceof URL
-        ? input.toString()
-        : input.url;
+  window.fetch = async (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> => {
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
 
     // Relative URLs: never rewrite
     if (!/^https?:\/\//i.test(url)) {
@@ -139,7 +156,11 @@ export function installFetchInterceptor(): void {
 
       const newInit = stripAnthropicBrowserHeader(init);
 
-      if (typeof input !== "string" && !(input instanceof URL) && input instanceof Request) {
+      if (
+        typeof input !== "string" &&
+        !(input instanceof URL) &&
+        input instanceof Request
+      ) {
         const newHeaders = new Headers(input.headers);
         newHeaders.delete("anthropic-dangerous-direct-browser-access");
         input = new Request(rewritten, { ...input, headers: newHeaders });
@@ -159,6 +180,25 @@ export function installFetchInterceptor(): void {
       }
     }
 
-    return originalFetch(input, init);
+    // Try direct fetch first. On CORS failure, retry through the proxy if enabled.
+    // This makes custom OpenAI-compatible gateways work when they send CORS headers,
+    // and transparently falls back to the local proxy when they don't.
+    try {
+      return await originalFetch(input, init);
+    } catch (err) {
+      if (isCorsError(err)) {
+        let retryProxyUrl: string | undefined;
+        try {
+          retryProxyUrl = await getEnabledProxyUrl();
+        } catch {
+          // Proxy unavailable or invalid — fall through with original CORS error.
+        }
+        if (retryProxyUrl && !url.startsWith(retryProxyUrl)) {
+          const proxied = `${retryProxyUrl}/?url=${encodeURIComponent(url)}`;
+          return originalFetch(proxied, stripAnthropicBrowserHeader(init));
+        }
+      }
+      throw err;
+    }
   };
 }
