@@ -36,6 +36,9 @@ import {
   validateOfficeProxyUrl,
 } from "./proxy-validation.js";
 
+/** Stable session ID for custom gateway requests (required by OpenCode Go, harmless for others). */
+const GATEWAY_SESSION_ID = globalThis.crypto.randomUUID();
+
 export type GetProxyUrl = () => Promise<string | undefined>;
 type OfficeStreamFn = (
   model: Model<Api>,
@@ -681,8 +684,17 @@ export function createOfficeStreamFn(
           transport: "sse",
         }
       : effectiveOptions;
+    // Inject x-opencode-session on the proxied model so it reaches the HTTP request.
+    // This is the most reliable injection point — after all model resolution.
+    const finalModel = applyProxy(normalizedModel, validated, proxyTransport);
     return modelsRuntime.streamSimple(
-      applyProxy(normalizedModel, validated, proxyTransport),
+      {
+        ...finalModel,
+        headers: {
+          ...finalModel.headers,
+          "x-opencode-session": GATEWAY_SESSION_ID,
+        },
+      },
       effectiveContext,
       proxiedOptions,
     );
