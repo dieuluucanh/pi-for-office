@@ -4,10 +4,12 @@
 
 import type { Api, Model } from "@earendil-works/pi-ai";
 import type { CustomProvider } from "../storage/local/custom-providers-store.js";
+import type { BrowserProviderApi } from "../models/browser-model-runtime.js";
 
 const OPENAI_GATEWAY_ID_PREFIX = "pi-openai-gateway:";
 export const OPENAI_GATEWAY_PROVIDER_PREFIX = "Gateway · ";
-const OPENAI_GATEWAY_TYPE = "openai-completions";
+export const DEFAULT_GATEWAY_API_TYPE: BrowserProviderApi =
+  "openai-completions";
 
 export const DEFAULT_OPENAI_GATEWAY_CONTEXT_WINDOW = 16_384;
 const DEFAULT_OPENAI_GATEWAY_MAX_TOKENS = 4_096;
@@ -29,6 +31,9 @@ export interface OpenAiGatewayConfig {
   apiKey: string;
   providerName: string;
   contextWindow: number;
+  apiType: BrowserProviderApi;
+  /** Per-model API type map from probing. modelId → correct BrowserProviderApi. */
+  modelApiMap?: Record<string, BrowserProviderApi>;
 }
 
 export interface SaveOpenAiGatewayInput {
@@ -38,6 +43,9 @@ export interface SaveOpenAiGatewayInput {
   modelId: string;
   apiKey?: string;
   contextWindow?: number;
+  apiType?: BrowserProviderApi;
+  /** Per-model API type map from probing. */
+  modelApiMap?: Record<string, BrowserProviderApi>;
 }
 
 export interface CustomProviderRuntimeInfo {
@@ -86,7 +94,9 @@ export function normalizeGatewayModelId(modelId: string): string {
   return normalizeRequiredString(modelId, "Model ID");
 }
 
-export function normalizeGatewayContextWindow(contextWindow: number | null | undefined): number {
+export function normalizeGatewayContextWindow(
+  contextWindow: number | null | undefined,
+): number {
   if (contextWindow == null) {
     return DEFAULT_OPENAI_GATEWAY_CONTEXT_WINDOW;
   }
@@ -103,7 +113,10 @@ export function normalizeGatewayContextWindow(contextWindow: number | null | und
   return normalized;
 }
 
-function deriveDisplayName(rawName: string | undefined, endpointUrl: string): string {
+function deriveDisplayName(
+  rawName: string | undefined,
+  endpointUrl: string,
+): string {
   const explicit = normalizeOptionalString(rawName);
   if (explicit.length > 0) {
     return explicit;
@@ -111,7 +124,8 @@ function deriveDisplayName(rawName: string | undefined, endpointUrl: string): st
 
   try {
     const url = new URL(endpointUrl);
-    const host = url.port.length > 0 ? `${url.hostname}:${url.port}` : url.hostname;
+    const host =
+      url.port.length > 0 ? `${url.hostname}:${url.port}` : url.hostname;
     if (host.trim().length > 0) {
       return host;
     }
@@ -139,7 +153,12 @@ export function isOpenAiGatewayProvider(provider: CustomProvider): boolean {
     return false;
   }
 
-  if (provider.type !== OPENAI_GATEWAY_TYPE) {
+  // Accept all supported gateway API types (backward-compatible with old single-type gateways).
+  if (
+    provider.type !== "openai-completions" &&
+    provider.type !== "openai-responses" &&
+    provider.type !== "anthropic-messages"
+  ) {
     return false;
   }
 
@@ -153,7 +172,9 @@ export function isOpenAiGatewayProvider(provider: CustomProvider): boolean {
   return providerName.length > 0 && modelId.length > 0;
 }
 
-function providerToGatewayConfig(provider: CustomProvider): OpenAiGatewayConfig | null {
+function providerToGatewayConfig(
+  provider: CustomProvider,
+): OpenAiGatewayConfig | null {
   if (!isOpenAiGatewayProvider(provider)) {
     return null;
   }
@@ -174,11 +195,19 @@ function providerToGatewayConfig(provider: CustomProvider): OpenAiGatewayConfig 
     return null;
   }
 
-  const defaultDisplayName = providerName.startsWith(OPENAI_GATEWAY_PROVIDER_PREFIX)
+  const defaultDisplayName = providerName.startsWith(
+    OPENAI_GATEWAY_PROVIDER_PREFIX,
+  )
     ? providerName.slice(OPENAI_GATEWAY_PROVIDER_PREFIX.length)
     : providerName;
 
-  return {
+  // Derive the API type from the stored model's api field, falling back to the provider type.
+  const apiType =
+    (model.api as BrowserProviderApi) ??
+    (provider.type as BrowserProviderApi) ??
+    DEFAULT_GATEWAY_API_TYPE;
+
+  const config: OpenAiGatewayConfig = {
     id: provider.id,
     displayName: normalizeOptionalString(provider.name) || defaultDisplayName,
     endpointUrl,
@@ -186,7 +215,15 @@ function providerToGatewayConfig(provider: CustomProvider): OpenAiGatewayConfig 
     apiKey: normalizeOptionalString(provider.apiKey),
     providerName,
     contextWindow: normalizeGatewayContextWindow(model.contextWindow),
+    apiType,
   };
+  if (provider.modelApiMap) {
+    config.modelApiMap = provider.modelApiMap as Record<
+      string,
+      BrowserProviderApi
+    >;
+  }
+  return config;
 }
 
 function createGatewayModel(args: {
@@ -194,13 +231,17 @@ function createGatewayModel(args: {
   modelId: string;
   providerName: string;
   contextWindow: number;
-}): Model<"openai-completions"> {
-  const maxTokens = Math.min(DEFAULT_OPENAI_GATEWAY_MAX_TOKENS, args.contextWindow);
+  apiType: BrowserProviderApi;
+}): Model<Api> {
+  const maxTokens = Math.min(
+    DEFAULT_OPENAI_GATEWAY_MAX_TOKENS,
+    args.contextWindow,
+  );
 
   return {
     id: args.modelId,
     name: args.modelId,
-    api: "openai-completions",
+    api: args.apiType as Api,
     provider: args.providerName,
     baseUrl: args.endpointUrl,
     reasoning: false,
@@ -288,11 +329,12 @@ export async function saveOpenAiGatewayConfig(
 
   const id = input.id ?? `${OPENAI_GATEWAY_ID_PREFIX}${crypto.randomUUID()}`;
   const apiKey = normalizeOptionalString(input.apiKey);
+  const apiType = input.apiType ?? DEFAULT_GATEWAY_API_TYPE;
 
   const provider: CustomProvider = {
     id,
     name: displayName,
-    type: OPENAI_GATEWAY_TYPE,
+    type: apiType,
     baseUrl: endpointUrl,
     models: [
       createGatewayModel({
@@ -300,16 +342,20 @@ export async function saveOpenAiGatewayConfig(
         modelId,
         providerName,
         contextWindow,
+        apiType,
       }),
     ],
   };
   if (apiKey.length > 0) {
     provider.apiKey = apiKey;
   }
+  if (input.modelApiMap && Object.keys(input.modelApiMap).length > 0) {
+    provider.modelApiMap = input.modelApiMap as Record<string, string>;
+  }
 
   await customProvidersStore.set(provider);
 
-  return {
+  const result: OpenAiGatewayConfig = {
     id,
     displayName,
     endpointUrl,
@@ -317,14 +363,22 @@ export async function saveOpenAiGatewayConfig(
     apiKey,
     providerName,
     contextWindow,
+    apiType,
   };
+  if (input.modelApiMap) {
+    result.modelApiMap = input.modelApiMap;
+  }
+  return result;
 }
 
 function matchesPersistedCustomModel(
   storedModel: StoredModel,
   persistedModel: Pick<Model<Api>, "api" | "id" | "provider" | "baseUrl">,
 ): storedModel is Model<Api> {
-  return storedModel.api === persistedModel.api && storedModel.id === persistedModel.id;
+  return (
+    storedModel.api === persistedModel.api &&
+    storedModel.id === persistedModel.id
+  );
 }
 
 export function resolveCustomProviderModel(

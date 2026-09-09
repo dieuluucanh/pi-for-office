@@ -207,6 +207,8 @@ const DEFAULT_ALLOWED_TARGET_HOSTS = new Set([
   "cloudcode-pa.googleapis.com",
   "daily-cloudcode-pa.sandbox.googleapis.com",
   "api.z.ai",
+  // OpenCode Zen gateway
+  "opencode.ai",
   // Web search providers
   "s.jina.ai",
   "api.firecrawl.dev",

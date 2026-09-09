@@ -80,6 +80,10 @@ function shouldProxyProvider(
     case "zai":
       return true;
 
+    // OpenCode Zen Go does not send CORS headers; always proxy.
+    case "opencode-go":
+      return true;
+
     default:
       return false;
   }

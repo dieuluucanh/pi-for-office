@@ -48,6 +48,8 @@ export type BrowserProviderApi =
 export interface BrowserProviderModelDefinition {
   id: string;
   name?: string;
+  /** Per-model API override. When set, takes precedence over the registration-level api. */
+  api?: BrowserProviderApi | undefined;
   reasoning?: boolean;
   input?: readonly ("text" | "image")[];
   contextWindow?: number;
@@ -184,10 +186,13 @@ function createModel(args: {
     throw new Error(`Model ${id} maxTokens must be a positive integer.`);
   }
 
+  // Per-model api override takes precedence over registration-level default.
+  const api = args.definition.api ?? args.api;
+
   return {
     id,
     name: args.definition.name?.trim() || id,
-    api: args.api,
+    api,
     provider: args.providerId,
     baseUrl: args.baseUrl,
     reasoning: args.definition.reasoning ?? false,
@@ -457,6 +462,15 @@ function createRegisteredProvider(
     }
     return model;
   });
+  // Determine the provider-level API type(s).
+  // When all models share the same api, use a single stream (optimized path).
+  // When models have mixed apis, build a map for pi-ai's multi-API dispatch.
+  const uniqueApis = new Set<BrowserProviderApi>(
+    baselineModels.map((m) => m.api as BrowserProviderApi),
+  );
+  const hasMixedApis = uniqueApis.size > 1;
+  const providerApiValue = hasMixedApis ? undefined : registration.api;
+
   const modelsUrlRaw =
     registration.modelsUrl ?? deriveModelsUrl(baseUrl, registration.api);
   const modelsUrl = modelsUrlRaw
@@ -477,7 +491,7 @@ function createRegisteredProvider(
         allowKeyless: registration.allowKeyless === true,
       }),
     },
-    models: baselineModels,
+    models: baselineModels as readonly Model<BrowserProviderApi>[],
     ...(modelsUrl !== undefined
       ? {
           fetchModels: async ({ credential, signal }) => {
@@ -528,11 +542,15 @@ function createRegisteredProvider(
                     : {}),
                 },
               }),
-            );
+            ) as readonly Model<BrowserProviderApi>[];
           },
         }
       : {}),
-    api: streamsForApi(registration.api),
+    api: hasMixedApis
+      ? (Object.fromEntries(
+          Array.from(uniqueApis).map((a) => [a, streamsForApi(a)]),
+        ) as Partial<Record<BrowserProviderApi, ProviderStreams>>)
+      : streamsForApi(providerApiValue!),
   });
 }
 
@@ -545,11 +563,22 @@ function customProviderRegistrations(
   const storedModels = provider.models ?? [];
   const modelsByProvider = new Map<string, BrowserProviderModelDefinition[]>();
 
+  // Per-model API type map from probing (stored on the CustomProvider)
+  const modelApiMap = provider.modelApiMap as
+    | Record<string, BrowserProviderApi>
+    | undefined;
+
   for (const model of storedModels) {
     const definitions = modelsByProvider.get(model.provider) ?? [];
+
+    // Per-model API override: modelApiMap > stored model.api > undefined (falls back to provider type)
+    const perModelApi =
+      modelApiMap?.[model.id] ?? (model.api as BrowserProviderApi | undefined);
+
     definitions.push({
       id: model.id,
       name: model.name,
+      api: perModelApi,
       reasoning: model.reasoning,
       input: model.input,
       contextWindow: model.contextWindow,

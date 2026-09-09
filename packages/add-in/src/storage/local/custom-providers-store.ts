@@ -10,7 +10,11 @@ import type { Api, Model } from "@earendil-works/pi-ai";
 import { Store } from "./store.js";
 import type { StoreConfig } from "./types.js";
 
-export type AutoDiscoveryProviderType = "ollama" | "llama.cpp" | "vllm" | "lmstudio";
+export type AutoDiscoveryProviderType =
+  | "ollama"
+  | "llama.cpp"
+  | "vllm"
+  | "lmstudio";
 
 export type CustomProviderType =
   | AutoDiscoveryProviderType
@@ -25,6 +29,8 @@ export interface CustomProvider {
   baseUrl: string;
   apiKey?: string;
   models?: Model<Api>[];
+  /** Per-model API type map: modelId → BrowserProviderApi. Used for multi-API gateways. */
+  modelApiMap?: Record<string, string>;
 }
 
 export class CustomProvidersStore extends Store {

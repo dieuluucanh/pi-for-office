@@ -7,7 +7,10 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const localesDir = join(root, "src", "language", "locales");
 
-function parseLocaleJson(raw: DynamicValue, label: string): Record<string, string> {
+function parseLocaleJson(
+  raw: DynamicValue,
+  label: string,
+): Record<string, string> {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     throw new Error(`${label} locale must be an object`);
   }
@@ -23,8 +26,16 @@ function parseLocaleJson(raw: DynamicValue, label: string): Record<string, strin
   return parsed;
 }
 
-const en = parseLocaleJson(JSON.parse(readFileSync(join(localesDir, "en.json"), "utf8")) as DynamicValue, "en");
-const zh = parseLocaleJson(JSON.parse(readFileSync(join(localesDir, "zh-CN.json"), "utf8")) as DynamicValue, "zh-CN");
+const en = parseLocaleJson(
+  JSON.parse(readFileSync(join(localesDir, "en.json"), "utf8")) as DynamicValue,
+  "en",
+);
+const zh = parseLocaleJson(
+  JSON.parse(
+    readFileSync(join(localesDir, "zh-CN.json"), "utf8"),
+  ) as DynamicValue,
+  "zh-CN",
+);
 
 function requireMatchGroup(match: RegExpMatchArray, index: number): string {
   const value = match[index];
@@ -36,7 +47,8 @@ function requireMatchGroup(match: RegExpMatchArray, index: number): string {
 
 function placeholders(value: string): Set<string> {
   const found = new Set<string>();
-  for (const m of value.matchAll(/\{([a-zA-Z0-9_]+)\}/g)) found.add(requireMatchGroup(m, 1));
+  for (const m of value.matchAll(/\{([a-zA-Z0-9_]+)\}/g))
+    found.add(requireMatchGroup(m, 1));
   return found;
 }
 
@@ -55,15 +67,32 @@ function collectSourceFiles(dir: string, out: string[] = []): string[] {
 }
 
 const sourceFiles = collectSourceFiles(join(root, "src"));
-const localizedUiSourceFiles = ["ui", "taskpane", "commands", "compaction", "files"]
-  .flatMap((dir) => collectSourceFiles(join(root, "src", dir)));
+const localizedUiSourceFiles = [
+  "ui",
+  "taskpane",
+  "commands",
+  "compaction",
+  "files",
+].flatMap((dir) => collectSourceFiles(join(root, "src", dir)));
 const corpus = sourceFiles.map((f) => readFileSync(f, "utf8")).join("\n");
 
 void test("en and zh-CN locales have identical key sets", () => {
-  const missingInZh = Object.keys(en).filter((k) => !(k in zh)).sort();
-  const extraInZh = Object.keys(zh).filter((k) => !(k in en)).sort();
-  assert.deepEqual(missingInZh, [], `keys missing in zh-CN.json: ${missingInZh.join(", ")}`);
-  assert.deepEqual(extraInZh, [], `keys in zh-CN.json but not en.json: ${extraInZh.join(", ")}`);
+  const missingInZh = Object.keys(en)
+    .filter((k) => !(k in zh))
+    .sort();
+  const extraInZh = Object.keys(zh)
+    .filter((k) => !(k in en))
+    .sort();
+  assert.deepEqual(
+    missingInZh,
+    [],
+    `keys missing in zh-CN.json: ${missingInZh.join(", ")}`,
+  );
+  assert.deepEqual(
+    extraInZh,
+    [],
+    `keys in zh-CN.json but not en.json: ${extraInZh.join(", ")}`,
+  );
 });
 
 void test("zh-CN placeholders are a subset of en placeholders per key", () => {
@@ -78,7 +107,11 @@ void test("zh-CN placeholders are a subset of en placeholders per key", () => {
       if (!enVars.has(v)) violations.push(`${key}: {${v}}`);
     }
   }
-  assert.deepEqual(violations, [], `zh-CN placeholders missing from en: ${violations.join(", ")}`);
+  assert.deepEqual(
+    violations,
+    [],
+    `zh-CN placeholders missing from en: ${violations.join(", ")}`,
+  );
 });
 
 void test("zh-CN drops English-only plural helper placeholders", () => {
@@ -91,7 +124,11 @@ void test("zh-CN drops English-only plural helper placeholders", () => {
       if (banned.has(v)) violations.push(`${key}: {${v}}`);
     }
   }
-  assert.deepEqual(violations, [], `zh-CN should not include English plural helpers: ${violations.join(", ")}`);
+  assert.deepEqual(
+    violations,
+    [],
+    `zh-CN should not include English plural helpers: ${violations.join(", ")}`,
+  );
 });
 
 void test("zh-CN keeps command syntax placeholders copyable", () => {
@@ -99,7 +136,11 @@ void test("zh-CN keeps command syntax placeholders copyable", () => {
     .filter(([key]) => key.startsWith("experimental."))
     .filter(([, value]) => /<[^>]*[\u4e00-\u9fff][^>]*>/.test(value))
     .map(([key, value]) => `${key}: ${value}`);
-  assert.deepEqual(violations, [], `localized command placeholders in zh-CN: ${violations.join("\n")}`);
+  assert.deepEqual(
+    violations,
+    [],
+    `localized command placeholders in zh-CN: ${violations.join("\n")}`,
+  );
 });
 
 void test("en locale has no empty values", () => {
@@ -117,23 +158,39 @@ void test("every locale key is referenced somewhere in src/", () => {
   // - humanize.unit.*  via nUnit() template keys in src/ui/humanize-params.ts
   const labelKeys = new Set(
     [...corpus.matchAll(/\bl\("([^"]+)"\)/g)].map(
-      (m) => `humanize.label.${requireMatchGroup(m, 1).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")}`,
+      (m) =>
+        `humanize.label.${requireMatchGroup(m, 1)
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "_")
+          .replace(/^_|_$/g, "")}`,
     ),
   );
   const valueKeys = new Set(
-    [...corpus.matchAll(/\bv\("([^"]+)"/g)].map((m) => `humanize.value.${requireMatchGroup(m, 1)}`),
+    [...corpus.matchAll(/\bv\("([^"]+)"/g)].map(
+      (m) => `humanize.value.${requireMatchGroup(m, 1)}`,
+    ),
   );
   const unused = Object.keys(en).filter((k) => {
     if (labelKeys.has(k) || valueKeys.has(k)) return false;
     if (k.startsWith("humanize.unit.")) return false;
     // perm.trust.* is constructed via t("perm.trust." + trust) in permissions.ts
     if (k.startsWith("perm.trust.")) return false;
-    return !corpus.includes(`"${k}"`) && !corpus.includes(`'${k}'`) && !corpus.includes("`" + k + "`");
+    // custom-gateway.apiType.* is constructed via t(`custom-gateway.apiType.${apiType}`) in gateway settings
+    if (k.startsWith("custom-gateway.apiType.")) return false;
+    return (
+      !corpus.includes(`"${k}"`) &&
+      !corpus.includes(`'${k}'`) &&
+      !corpus.includes("`" + k + "`")
+    );
   });
-  assert.deepEqual(unused, [], `locale keys never referenced in src/: ${unused.join(", ")}`);
+  assert.deepEqual(
+    unused,
+    [],
+    `locale keys never referenced in src/: ${unused.join(", ")}`,
+  );
 });
 
-void test("every static t(\"...\") call site references an existing key", () => {
+void test('every static t("...") call site references an existing key', () => {
   const missing: string[] = [];
   for (const f of sourceFiles) {
     const content = readFileSync(f, "utf8");
@@ -145,7 +202,11 @@ void test("every static t(\"...\") call site references an existing key", () => 
       if (!(key in en)) missing.push(`${f.slice(root.length + 1)}: ${key}`);
     }
   }
-  assert.deepEqual(missing, [], `t() call sites with unknown keys: ${missing.join(", ")}`);
+  assert.deepEqual(
+    missing,
+    [],
+    `t() call sites with unknown keys: ${missing.join(", ")}`,
+  );
 });
 
 void test("common UI text sinks use locale keys instead of hardcoded English", () => {
@@ -154,21 +215,31 @@ void test("common UI text sinks use locale keys instead of hardcoded English", (
   // toast templates. It does not try to classify every string literal in src/;
   // agent-facing prompts, model/provider IDs, CSS classes, and command syntax
   // are valid English literals elsewhere.
-  const staticSink = /(?:textContent|innerHTML|placeholder|title|subtitle|message|\w*[Ll]abel|showToast|createButton|createConfigRow|\.text)\s*(?:=|:|\()\s*["`][A-Z]/;
+  const staticSink =
+    /(?:textContent|innerHTML|placeholder|title|subtitle|message|\w*[Ll]abel|showToast|createButton|createConfigRow|\.text)\s*(?:=|:|\()\s*["`][A-Z]/;
   const toastTemplate = /\b(?:showToast|resolved\.showToast)\(\s*`/;
-  const allowed = /aria-|data-|className|\.css|https?:\/\/|icon\(|throw new Error|const message = error instanceof Error|externalLoadError|activationLoadError/;
+  const allowed =
+    /aria-|data-|className|\.css|https?:\/\/|icon\(|throw new Error|const message = error instanceof Error|externalLoadError|activationLoadError/;
   const offenders: string[] = [];
 
   for (const f of localizedUiSourceFiles) {
     const rel = f.slice(root.length + 1);
     for (const [i, line] of readFileSync(f, "utf8").split("\n").entries()) {
-      if ((staticSink.test(line) || toastTemplate.test(line)) && !/\bt\(/.test(line) && !allowed.test(line)) {
+      if (
+        (staticSink.test(line) || toastTemplate.test(line)) &&
+        !/\bt\(/.test(line) &&
+        !allowed.test(line)
+      ) {
         offenders.push(`${rel}:${i + 1}: ${line.trim()}`);
       }
     }
   }
 
-  assert.deepEqual(offenders, [], `hardcoded English in localized UI sinks:\n${offenders.join("\n")}`);
+  assert.deepEqual(
+    offenders,
+    [],
+    `hardcoded English in localized UI sinks:\n${offenders.join("\n")}`,
+  );
 });
 
 void test("no module-scope t() calls (language is set at boot, after import)", () => {
@@ -178,7 +249,11 @@ void test("no module-scope t() calls (language is set at boot, after import)", (
     const content = readFileSync(f, "utf8");
     let depth = 0;
     for (const [i, line] of content.split("\n").entries()) {
-      if (depth === 0 && /\bt\(\s*"/.test(line) && !/^\s*(\*|\/\/)/.test(line)) {
+      if (
+        depth === 0 &&
+        /\bt\(\s*"/.test(line) &&
+        !/^\s*(\*|\/\/)/.test(line)
+      ) {
         offenders.push(`${f.slice(root.length + 1)}:${i + 1}`);
       }
       for (const ch of line) {
@@ -187,5 +262,9 @@ void test("no module-scope t() calls (language is set at boot, after import)", (
       }
     }
   }
-  assert.deepEqual(offenders, [], `module-scope t() calls: ${offenders.join(", ")}`);
+  assert.deepEqual(
+    offenders,
+    [],
+    `module-scope t() calls: ${offenders.join(", ")}`,
+  );
 });
