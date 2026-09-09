@@ -440,14 +440,23 @@ function createRegisteredProvider(
   const id = normalizeNonEmpty(registration.id, "Provider id");
   const name = normalizeNonEmpty(registration.name, "Provider name");
   const baseUrl = normalizeHttpUrl(registration.baseUrl, "Provider baseUrl");
-  const baselineModels = registration.models.map((definition) =>
-    createModel({
+  const baselineModels = registration.models.map((definition) => {
+    const model = createModel({
       providerId: id,
       api: registration.api,
       baseUrl,
       definition,
-    }),
-  );
+    });
+    // Merge provider-level headers onto each model so openai-completions' createClient()
+    // picks them up via model.headers (Provider.headers is NOT auto-propagated to API-key auth).
+    if (registration.headers) {
+      return {
+        ...model,
+        headers: { ...model.headers, ...registration.headers },
+      };
+    }
+    return model;
+  });
   const modelsUrlRaw =
     registration.modelsUrl ?? deriveModelsUrl(baseUrl, registration.api);
   const modelsUrl = modelsUrlRaw
