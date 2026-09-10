@@ -215,7 +215,7 @@ src/
 ├── auth/              # OAuth providers, API proxy, credential restore
 ├── models/            # Model ordering + version scoring
 ├── ui/                # Sidebar component, tool renderers, theme CSS
-│   └── theme/         # Design tokens, component styles (DM Sans + teal-green palette)
+│   └── theme/         # Design tokens, component styles (DM Sans + brand blue/gold palette)
 ├── commands/          # Slash command registry + builtins
 ├── extensions/        # Extension store, sandbox runtime, permissions
 ├── integrations/      # Web Search + MCP Gateway integration catalog
@@ -241,7 +241,7 @@ pkg/tmux-bridge/       # Publishable npm CLI package: `pi-for-office-tmux-bridge
 tests/                 # Unit + security tests (~50 test files)
 docs/                  # Current docs (install/deploy/features/policy) + archive/ for historical plans
 skills/                # Bundled Agent Skill definitions (web-search, mcp-gateway, tmux-bridge, python-bridge)
-public/assets/         # Add-in icons (16/32/80/128px)
+public/assets/         # Add-in icons (16/32/80/128/256/512px + brand SVGs)
 ```
 
 ### Key design patterns

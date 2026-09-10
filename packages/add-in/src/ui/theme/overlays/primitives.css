@@ -79,8 +79,8 @@
 .pi-overlay-inline-control:focus-visible,
 .pi-overlay-btn:focus-visible,
 .pi-overlay-tab:focus-visible {
-  border-color: var(--green-alpha-25);
-  box-shadow: 0 0 0 2px var(--pi-green-lighter);
+  border-color: var(--brand-alpha-25);
+  box-shadow: 0 0 0 2px var(--pi-brand-lighter);
 }
 
 .pi-overlay-inline-control:disabled {
@@ -176,7 +176,10 @@
   cursor: pointer;
   font-family: var(--font-sans);
   font-size: var(--text-sm);
-  transition: background var(--duration-fast), border-color var(--duration-fast), opacity var(--duration-fast);
+  transition:
+    background var(--duration-fast),
+    border-color var(--duration-fast),
+    opacity var(--duration-fast);
 }
 
 .pi-overlay-btn:hover {
@@ -194,17 +197,17 @@
 
 .pi-overlay-btn--primary {
   border: none;
-  background: var(--pi-green);
+  background: var(--pi-brand);
   color: white;
   font-weight: 600;
 }
 
 .pi-overlay-btn--primary:hover {
-  background: var(--pi-green-strong);
+  background: var(--pi-brand-strong);
 }
 
 .pi-overlay-btn--primary:disabled:hover {
-  background: var(--pi-green);
+  background: var(--pi-brand);
 }
 
 .pi-overlay-btn--ghost {
@@ -275,7 +278,10 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast);
+  transition:
+    background var(--duration-fast),
+    border-color var(--duration-fast),
+    color var(--duration-fast);
 }
 
 .pi-overlay-close:hover {
@@ -287,7 +293,7 @@
 .pi-overlay-close:focus,
 .pi-overlay-close:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--green-alpha-12);
+  box-shadow: 0 0 0 2px var(--brand-alpha-12);
 }
 
 .pi-overlay-body {
@@ -372,9 +378,9 @@
 }
 
 .pi-overlay-badge--ok {
-  background: oklch(0.58 0.14 160 / 0.12);
-  color: oklch(0.42 0.1 160);
-  border-color: oklch(0.58 0.14 160 / 0.4);
+  background: var(--success-alpha-12);
+  color: var(--success-strong);
+  border-color: var(--success-alpha-40);
 }
 
 .pi-overlay-badge--warn {
@@ -390,9 +396,9 @@
 }
 
 .pi-overlay-badge--info {
-  background: oklch(0.55 0.12 250 / 0.10);
-  color: oklch(0.45 0.10 250);
-  border-color: oklch(0.55 0.12 250 / 0.30);
+  background: oklch(0.55 0.12 250 / 0.1);
+  color: oklch(0.45 0.1 250);
+  border-color: oklch(0.55 0.12 250 / 0.3);
 }
 
 .pi-overlay-code {
@@ -490,8 +496,8 @@
 
 .pi-conventions-select:focus,
 .pi-conventions-input:focus {
-  border-color: var(--green-alpha-25);
-  box-shadow: 0 0 0 2px var(--pi-green-lighter);
+  border-color: var(--brand-alpha-25);
+  box-shadow: 0 0 0 2px var(--pi-brand-lighter);
 }
 
 .pi-conventions-input--narrow {
@@ -517,14 +523,17 @@
   cursor: pointer;
   background: var(--alpha-4);
   color: var(--muted-foreground);
-  transition: background var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast);
+  transition:
+    background var(--duration-fast),
+    border-color var(--duration-fast),
+    color var(--duration-fast);
   min-width: 44px;
   text-align: center;
 }
 
 .pi-conventions-toggle.is-on {
-  background: var(--green-alpha-12);
-  border-color: var(--green-alpha-30);
+  background: var(--brand-alpha-12);
+  border-color: var(--brand-alpha-30);
   color: var(--foreground);
 }
 
@@ -533,7 +542,7 @@
 }
 
 .pi-conventions-toggle.is-on:hover {
-  background: var(--green-alpha-14);
+  background: var(--brand-alpha-14);
 }
 
 .pi-conventions-format-card {

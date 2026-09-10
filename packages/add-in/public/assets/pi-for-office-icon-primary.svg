@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="pi for office logo">
+  <title>pi for office - primary icon v2</title>
+  <!-- Parchment-white squircle, ancient Roman feel -->
+  <rect x="8" y="8" width="496" height="496" rx="112" fill="#FDFBF3" stroke="#0A3D9C" stroke-width="14"/>
+  <rect x="28" y="28" width="456" height="456" rx="96" fill="none" stroke="#D9A00A" stroke-width="4" opacity="0.7"/>
+  <!-- pi text, ancient serif: p = Office blue, i = antique gold -->
+  <text x="252" y="345" text-anchor="middle"
+        font-family="Cinzel, 'Palatino Linotype', 'Book Antiqua', Garamond, 'Times New Roman', serif"
+        font-size="250" font-weight="400" letter-spacing="-4"><tspan fill="#0B4DA6">p</tspan><tspan fill="#D9A00A">i</tspan></text>
+  <!-- Roman rule with diamond -->
+  <g>
+    <rect x="146" y="382" width="220" height="6" rx="3" fill="#0B4DA6" opacity="0.85"/>
+    <rect x="146" y="382" width="110" height="6" rx="3" fill="#0B4DA6"/>
+    <rect x="256" y="382" width="110" height="6" rx="3" fill="#D9A00A"/>
+    <g transform="translate(256 385) rotate(45)">
+      <rect x="-10" y="-10" width="20" height="20" fill="#FDFBF3" stroke="#D9A00A" stroke-width="5"/>
+    </g>
+  </g>
+</svg>

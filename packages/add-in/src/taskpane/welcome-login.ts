@@ -3,6 +3,7 @@
  */
 
 import { t, initLanguage, getLanguage } from "../language/index.js";
+import { BRAND_ICON_MARK } from "../ui/brand-assets.js";
 
 import type { ProviderKeysStore } from "../storage/local/provider-keys-store.js";
 import { getAppStorage } from "../storage/local/app-storage.js";
@@ -76,8 +77,11 @@ export async function showWelcomeLogin(
     const titleId = `${WELCOME_LOGIN_OVERLAY_ID}-title`;
     const subtitleId = `${WELCOME_LOGIN_OVERLAY_ID}-subtitle`;
 
-    const logo = createElement("div", "pi-welcome-logo");
-    logo.textContent = "π";
+    const logo = createElement("img", "pi-welcome-logo");
+    logo.src = BRAND_ICON_MARK;
+    logo.alt = "Pi for Office";
+    logo.width = 48;
+    logo.height = 48;
 
     const title = createElement("h2", "pi-welcome-title");
     title.id = titleId;

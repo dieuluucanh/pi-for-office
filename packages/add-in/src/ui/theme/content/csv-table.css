@@ -21,16 +21,19 @@
   border-radius: var(--radius-xs);
   padding: 2px 8px;
   cursor: pointer;
-  transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
+  transition:
+    background var(--duration-fast),
+    color var(--duration-fast),
+    border-color var(--duration-fast);
 }
 .pi-csv-table__copy:hover {
-  background: var(--pi-green-lighter);
+  background: var(--pi-brand-lighter);
   color: var(--foreground);
-  border-color: var(--green-alpha-20);
+  border-color: var(--brand-alpha-20);
 }
 .pi-csv-table__copy--done {
-  color: var(--pi-green);
-  border-color: var(--green-alpha-30);
+  color: var(--success);
+  border-color: var(--success-alpha-30);
 }
 
 /* Scrollable wrapper for wide tables */
@@ -122,4 +125,3 @@
 .pi-csv-table__grid tbody tr:nth-child(even):hover td {
   background: oklch(0 0 0 / 0.035);
 }
-

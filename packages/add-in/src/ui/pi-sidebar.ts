@@ -28,6 +28,7 @@ import "./working-indicator.js";
 import { initToolGrouping } from "./tool-grouping.js";
 import type { PiInput } from "./pi-input.js";
 import { isDebugEnabled, formatK } from "../debug/debug.js";
+import { BRAND_ICON_MARK } from "./brand-assets.js";
 import {
   getPayloadStats,
   getLastContext,
@@ -1348,7 +1349,7 @@ export class PiSidebar extends LitElement {
     return html`
       <div class="pi-empty">
         <div class="pi-empty__content">
-          <div class="pi-empty__logo">π</div>
+          <img class="pi-empty__logo" src=${BRAND_ICON_MARK} alt="Pi for Office" width="48" height="48" />
           <p class="pi-empty__tagline">
             ${this.tagline ?? t("sidebar.empty.tagline")}
           </p>

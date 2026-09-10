@@ -6,6 +6,7 @@ import type { Agent, ThinkingLevel } from "@earendil-works/pi-agent-core";
 
 import { t } from "../language/index.js";
 import { showToast } from "../ui/toast.js";
+import { BRAND_ICON_SMALL } from "../ui/brand-assets.js";
 import { escapeAttr, escapeHtml, setSafeInnerHTML } from "../utils/html.js";
 import { formatUsageDebug, isDebugEnabled } from "../debug/debug.js";
 import { estimateContextTokens } from "../utils/context-tokens.js";
@@ -26,7 +27,9 @@ export type ActiveLockStateProvider = () => RuntimeLockState;
 export type ActiveExecutionModeProvider = () => ExecutionMode;
 
 function adjustContextTooltipAlignment(statusBar: HTMLElement): void {
-  const trigger = statusBar.querySelector<HTMLElement>(".pi-status-ctx--trigger");
+  const trigger = statusBar.querySelector<HTMLElement>(
+    ".pi-status-ctx--trigger",
+  );
   const tooltip = trigger?.querySelector<HTMLElement>(".pi-tooltip");
   if (!trigger || !tooltip) return;
 
@@ -37,7 +40,8 @@ function adjustContextTooltipAlignment(statusBar: HTMLElement): void {
   const tooltipWidth = tooltip.offsetWidth;
   if (tooltipWidth <= 0) return;
 
-  const centeredLeft = triggerRect.left + ((triggerRect.width - tooltipWidth) / 2);
+  const centeredLeft =
+    triggerRect.left + (triggerRect.width - tooltipWidth) / 2;
   const centeredRight = centeredLeft + tooltipWidth;
   const edgePadding = 8;
 
@@ -63,7 +67,11 @@ function renderStatusBar(
     const emptyMarkup = `<span class="pi-status-ctx">${escapeHtml(t("status.no_session"))}</span>`;
     const emptySignature = "no-agent";
     if (el.getAttribute("data-status-signature") !== emptySignature) {
-      setSafeInnerHTML(el, emptyMarkup, "status bar empty-state markup with escaped locale text");
+      setSafeInnerHTML(
+        el,
+        emptyMarkup,
+        "status bar empty-state markup with escaped locale text",
+      );
       el.setAttribute("data-status-signature", emptySignature);
     }
     return;
@@ -73,7 +81,7 @@ function renderStatusBar(
 
   // Model alias
   const model = state.model;
-  const modelAlias = model ? (model.name || model.id) : t("status.select_model");
+  const modelAlias = model ? model.name || model.id : t("status.select_model");
   const modelAliasEscaped = escapeHtml(modelAlias);
 
   // Context usage
@@ -86,17 +94,22 @@ function renderStatusBar(
   const { totalTokens, lastUsage } = estimateContextTokens(state);
 
   const contextWindow = state.model?.contextWindow || 200000;
-  const pct = contextWindow > 0 ? Math.round((totalTokens / contextWindow) * 100) : 0;
-  const ctxLabel = contextWindow >= 1_000_000
-    ? `${(contextWindow / 1_000_000).toFixed(0)}M`
-    : `${Math.round(contextWindow / 1000)}k`;
+  const pct =
+    contextWindow > 0 ? Math.round((totalTokens / contextWindow) * 100) : 0;
+  const ctxLabel =
+    contextWindow >= 1_000_000
+      ? `${(contextWindow / 1_000_000).toFixed(0)}M`
+      : `${Math.round(contextWindow / 1000)}k`;
 
   // Thinking level
   const thinkingLevel = getThinkingLevelLabel(state.thinkingLevel);
 
   // Context health: color + tooltip based on usage
   const ctxDescription = getStatusContextTooltipDescription();
-  const ctxTokenDetail = t("status.context.tokens", { used: totalTokens.toLocaleString(), total: contextWindow.toLocaleString() });
+  const ctxTokenDetail = t("status.context.tokens", {
+    used: totalTokens.toLocaleString(),
+    total: contextWindow.toLocaleString(),
+  });
 
   const contextHealth = getStatusContextHealth(pct);
   const ctxColor = contextHealth.colorClass;
@@ -111,9 +124,10 @@ function renderStatusBar(
 
   const debugOn = isDebugEnabled();
 
-  const usageDebug = debugOn && lastUsage
-    ? `<span class="pi-status-ctx__debug">${escapeHtml(formatUsageDebug(lastUsage))}</span>`
-    : "";
+  const usageDebug =
+    debugOn && lastUsage
+      ? `<span class="pi-status-ctx__debug">${escapeHtml(formatUsageDebug(lastUsage))}</span>`
+      : "";
 
   let lockBadge = "";
   if (lockState === "waiting_for_lock") {
@@ -123,25 +137,28 @@ function renderStatusBar(
   }
 
   const modeIsAuto = executionMode === "yolo";
-  const modeBadgeClass = modeIsAuto ? " pi-status-mode--auto" : " pi-status-mode--confirm";
-  const modeLabel = modeIsAuto ? t("status.mode.auto") : t("status.mode.confirm");
+  const modeBadgeClass = modeIsAuto
+    ? " pi-status-mode--auto"
+    : " pi-status-mode--confirm";
+  const modeLabel = modeIsAuto
+    ? t("status.mode.auto")
+    : t("status.mode.confirm");
   const modeTooltip = modeIsAuto
     ? t("status.mode.auto.tooltip")
     : t("status.mode.confirm.tooltip");
   const modeBadge = `<button type="button" class="pi-status-mode pi-status-clickable pi-status-tooltip--right${modeBadgeClass}" data-tooltip="${escapeAttr(modeTooltip)}"><span>${escapeHtml(modeLabel)}</span><span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span></button>`;
 
-  const thinkingTooltip = escapeAttr(
-    t("status.thinking.tooltip"),
-  );
+  const thinkingTooltip = escapeAttr(t("status.thinking.tooltip"));
 
   const ctxPopoverDesc = escapeAttr(ctxDescription);
   const ctxPopoverTokens = escapeAttr(ctxTokenDetail);
-  const ctxPopoverWarnText = ctxWarningText.length > 0 ? escapeAttr(ctxWarningText) : "";
+  const ctxPopoverWarnText =
+    ctxWarningText.length > 0 ? escapeAttr(ctxWarningText) : "";
 
   const nextMarkup = `
     <div class="pi-status-main">
       <button type="button" class="pi-status-model pi-status-clickable pi-status-tooltip--left" data-tooltip="${escapeAttr(t("status.model.tooltip"))}">
-        <span class="pi-status-model__mark">π</span>
+        <img class="pi-status-model__mark" src="${escapeAttr(BRAND_ICON_SMALL)}" alt="" aria-hidden="true" width="14" height="14" />
         <span class="pi-status-model__name">${modelAliasEscaped}</span>
         ${chevronSvg}
       </button>
@@ -173,7 +190,11 @@ function renderStatusBar(
     return;
   }
 
-  setSafeInnerHTML(el, nextMarkup, "status bar markup with escaped model and localized text");
+  setSafeInnerHTML(
+    el,
+    nextMarkup,
+    "status bar markup with escaped model and localized text",
+  );
   el.setAttribute("data-status-signature", renderSignature);
   adjustContextTooltipAlignment(el);
 }
@@ -245,7 +266,9 @@ export function injectStatusBar(opts: {
 
   const isStatusBarFocused = (): boolean => {
     const active = document.activeElement;
-    return active instanceof Element && active.closest("#pi-status-bar") !== null;
+    return (
+      active instanceof Element && active.closest("#pi-status-bar") !== null
+    );
   };
 
   // Avoid replacing status-bar DOM while it's hovered/focused so CSS tooltips
@@ -351,7 +374,10 @@ export function injectStatusBar(opts: {
 }
 
 export function flashThinkingLevel(level: ThinkingLevel, color: string): void {
-  showToast(t("status.thinking.toast", { level: getThinkingLevelLabel(level) }), 1500);
+  showToast(
+    t("status.thinking.toast", { level: getThinkingLevelLabel(level) }),
+    1500,
+  );
 
   const el = document.querySelector<HTMLElement>(".pi-status-thinking");
   if (!el) return;
@@ -378,7 +404,8 @@ export function flashThinkingLevel(level: ThinkingLevel, color: string): void {
 
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      el.style.transition = "color 0.8s ease, background 0.8s ease, box-shadow 0.8s ease";
+      el.style.transition =
+        "color 0.8s ease, background 0.8s ease, box-shadow 0.8s ease";
       el.style.color = "";
       el.style.background = "";
       el.style.boxShadow = "";

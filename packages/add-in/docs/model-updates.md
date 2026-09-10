@@ -152,7 +152,7 @@ We intentionally avoid pinning exact versioned IDs now. Instead we:
   - `parseMajorMinor()` + `modelRecencyScore()` (treats `4-6` / `4.6` as `46`, `5.6` as `56`, keeps embedded date suffixes such as `YYYYMMDD` separate, and ignores later date-like suffixes such as `gpt-4o-2024-11-20` or `gemini-2.5-pro-preview-06-05` when extracting the family version)
   - `compareModels()` (provider + family + recency tie-breaks; deterministic sorting)
 
-  UI: the model picker is opened from the footer status bar (click the π model button).
+  UI: the model picker is opened from the footer status bar (click the brand icon / model button).
 
 - Pick the default model via provider-aware rules:
   - Anthropic is a small special-case: latest Opus by default while Fable is in the registry but unavailable; Sonnet and Fable remain fallbacks if Opus is absent.

@@ -21,19 +21,19 @@
     --card-foreground: #2e2e2e;
     --popover: rgba(255, 255, 255, 0.85);
     --popover-foreground: #2e2e2e;
-    --primary: #187f5e;
+    --primary: #0b4da6;
     --primary-foreground: #fafafa;
     --secondary: #f5f4f0;
     --secondary-foreground: #3f3f3f;
     --muted: #f5f4f0;
     --muted-foreground: #737373;
     --accent: #f8f7f3;
-    --accent-foreground: #315d4e;
+    --accent-foreground: #244a78;
     --destructive: #cf3b2e;
     --destructive-foreground: #fafafa;
     --border: #e8e6df;
     --input: #f1f0ec;
-    --ring: #2c9270;
+    --ring: #2a62b5;
 
     --sidebar: #fbfaf6;
     --sidebar-foreground: #2e2e2e;
@@ -45,37 +45,44 @@
     --alpha-5: rgba(0, 0, 0, 0.05);
     --alpha-6: rgba(0, 0, 0, 0.06);
     --alpha-8: rgba(0, 0, 0, 0.08);
-    --alpha-10: rgba(0, 0, 0, 0.10);
+    --alpha-10: rgba(0, 0, 0, 0.1);
     --alpha-12: rgba(0, 0, 0, 0.12);
     --alpha-14: rgba(0, 0, 0, 0.14);
     --alpha-15: rgba(0, 0, 0, 0.15);
-    --alpha-20: rgba(0, 0, 0, 0.20);
+    --alpha-20: rgba(0, 0, 0, 0.2);
     --alpha-25: rgba(0, 0, 0, 0.25);
 
-    --white-alpha-20: rgba(255, 255, 255, 0.20);
+    --white-alpha-20: rgba(255, 255, 255, 0.2);
     --white-alpha-25: rgba(255, 255, 255, 0.25);
     --white-alpha-35: rgba(255, 255, 255, 0.35);
-    --white-alpha-40: rgba(255, 255, 255, 0.40);
+    --white-alpha-40: rgba(255, 255, 255, 0.4);
     --white-alpha-45: rgba(255, 255, 255, 0.45);
-    --white-alpha-50: rgba(255, 255, 255, 0.50);
+    --white-alpha-50: rgba(255, 255, 255, 0.5);
     --white-alpha-55: rgba(255, 255, 255, 0.55);
-    --white-alpha-60: rgba(255, 255, 255, 0.60);
+    --white-alpha-60: rgba(255, 255, 255, 0.6);
     --white-alpha-65: rgba(255, 255, 255, 0.65);
-    --white-alpha-70: rgba(255, 255, 255, 0.70);
-    --white-alpha-80: rgba(255, 255, 255, 0.80);
-    --white-alpha-90: rgba(255, 255, 255, 0.90);
+    --white-alpha-70: rgba(255, 255, 255, 0.7);
+    --white-alpha-80: rgba(255, 255, 255, 0.8);
+    --white-alpha-90: rgba(255, 255, 255, 0.9);
 
-    --green-alpha-6: rgba(24, 127, 94, 0.06);
-    --green-alpha-12: rgba(24, 127, 94, 0.12);
-    --green-alpha-14: rgba(24, 127, 94, 0.14);
-    --green-alpha-20: rgba(24, 127, 94, 0.20);
-    --green-alpha-25: rgba(24, 127, 94, 0.25);
-    --green-alpha-30: rgba(24, 127, 94, 0.30);
+    --brand-alpha-6: rgba(11, 77, 166, 0.06);
+    --brand-alpha-12: rgba(11, 77, 166, 0.12);
+    --brand-alpha-14: rgba(11, 77, 166, 0.14);
+    --brand-alpha-20: rgba(11, 77, 166, 0.2);
+    --brand-alpha-25: rgba(11, 77, 166, 0.25);
+    --brand-alpha-30: rgba(11, 77, 166, 0.3);
 
-    --pi-green: var(--primary);
-    --pi-green-strong: #10684e;
-    --pi-green-light: rgba(24, 127, 94, 0.08);
-    --pi-green-lighter: rgba(24, 127, 94, 0.04);
+    --pi-brand: var(--primary);
+    --pi-brand-strong: #0a3d9c;
+    --pi-brand-light: rgba(11, 77, 166, 0.08);
+    --pi-brand-lighter: rgba(11, 77, 166, 0.04);
+    --success: #187f5e;
+    --success-strong: #10684e;
+    --success-alpha-6: rgba(24, 127, 94, 0.06);
+    --success-alpha-12: rgba(24, 127, 94, 0.12);
+    --success-alpha-14: rgba(24, 127, 94, 0.14);
+    --success-alpha-30: rgba(24, 127, 94, 0.3);
+    --success-alpha-40: rgba(24, 127, 94, 0.4);
     --pi-yellow: #c7961b;
     --pi-amber: var(--pi-yellow);
     --amber-alpha-8: rgba(199, 150, 27, 0.08);
@@ -84,24 +91,31 @@
     --pi-surface-translucent: rgba(251, 250, 246, 0.85);
     --pi-divider: 1px solid var(--alpha-6);
     --pi-inner-bg: #fcfbf8;
-    --pi-grid-line: rgba(24, 127, 94, 0.04);
+    --pi-grid-line: rgba(11, 77, 166, 0.04);
     --pi-surface-inset-shadow: inset 4px 0 12px -3px var(--alpha-5);
 
     --pill-border: var(--pill-border-width) solid var(--alpha-8);
     --pill-bg: rgba(255, 255, 255, 0.85);
-    --pill-shadow: 0 1px 4px var(--alpha-4), inset 0 1px 0 0 var(--white-alpha-50);
+    --pill-shadow:
+      0 1px 4px var(--alpha-4), inset 0 1px 0 0 var(--white-alpha-50);
     --pill-hover-border: var(--alpha-12);
-    --pill-green-border: var(--pill-border-width) solid rgba(24, 127, 94, 0.10);
-    --pill-green-bg: rgba(24, 127, 94, 0.04);
-    --pill-green-hover-border: rgba(24, 127, 94, 0.18);
-    --pill-red-border: var(--pill-border-width) solid rgba(207, 59, 46, 0.10);
+    --pill-brand-border: var(--pill-border-width) solid rgba(11, 77, 166, 0.1);
+    --pill-brand-bg: rgba(11, 77, 166, 0.04);
+    --pill-brand-hover-border: rgba(11, 77, 166, 0.18);
+    --pill-success-border: var(--pill-border-width) solid rgba(24, 127, 94, 0.1);
+    --pill-success-bg: rgba(24, 127, 94, 0.04);
+    --pill-success-hover-border: rgba(24, 127, 94, 0.18);
+    --pill-red-border: var(--pill-border-width) solid rgba(207, 59, 46, 0.1);
     --pill-red-bg: rgba(207, 59, 46, 0.04);
     --pill-red-hover-border: rgba(207, 59, 46, 0.18);
 
     --glass-bg: rgba(255, 255, 255, 0.55);
     --glass-bg-solid: rgba(255, 255, 255, 0.78);
-    --glass-highlight: inset 0 1px 0 0 var(--white-alpha-70), inset 1px 0 0 0 var(--white-alpha-40);
-    --glass-inner-shadow: inset 0 -1px 0 0 var(--alpha-4), inset -1px 0 0 0 var(--alpha-2);
+    --glass-highlight:
+      inset 0 1px 0 0 var(--white-alpha-70),
+      inset 1px 0 0 0 var(--white-alpha-40);
+    --glass-inner-shadow:
+      inset 0 -1px 0 0 var(--alpha-4), inset -1px 0 0 0 var(--alpha-2);
     --glass-shadow: 0 2px 8px var(--alpha-6), 0 0.5px 0 var(--alpha-4);
     --glass-shadow-lg: 0 12px 40px var(--alpha-10), 0 2px 6px var(--alpha-6);
     --glass-border: 1px solid var(--white-alpha-50);
@@ -114,8 +128,8 @@
     --card-foreground: #f0f1f4;
     --popover: rgba(48, 51, 60, 0.92);
     --popover-foreground: #f0f1f4;
-    --primary: #64c79f;
-    --primary-foreground: #17271f;
+    --primary: #7aa7f0;
+    --primary-foreground: #141f33;
     --secondary: #3f424a;
     --secondary-foreground: #e8e9ec;
     --muted: #3c3f47;
@@ -126,7 +140,7 @@
     --destructive-foreground: #fafafa;
     --border: #4f535c;
     --input: #424650;
-    --ring: #6ac99f;
+    --ring: #8db4f7;
     --sidebar: #30333b;
     --sidebar-foreground: #f0f1f4;
     --sidebar-border: #4a4e58;
@@ -137,33 +151,40 @@
     --alpha-5: rgba(255, 255, 255, 0.05);
     --alpha-6: rgba(255, 255, 255, 0.06);
     --alpha-8: rgba(255, 255, 255, 0.08);
-    --alpha-10: rgba(255, 255, 255, 0.10);
+    --alpha-10: rgba(255, 255, 255, 0.1);
     --alpha-12: rgba(255, 255, 255, 0.12);
     --alpha-14: rgba(255, 255, 255, 0.14);
     --alpha-15: rgba(255, 255, 255, 0.15);
-    --alpha-20: rgba(255, 255, 255, 0.20);
+    --alpha-20: rgba(255, 255, 255, 0.2);
     --alpha-25: rgba(255, 255, 255, 0.25);
 
-    --pi-green-strong: #53b58e;
-    --pi-green-light: rgba(100, 199, 159, 0.18);
-    --pi-green-lighter: rgba(100, 199, 159, 0.10);
+    --pi-brand-strong: #5b8fe0;
+    --pi-brand-light: rgba(122, 167, 240, 0.18);
+    --pi-brand-lighter: rgba(122, 167, 240, 0.1);
+    --success: #64c79f;
+    --success-strong: #53b58e;
     --pi-yellow: #e2bd4a;
     --pi-amber: var(--pi-yellow);
     --amber-alpha-8: rgba(226, 189, 74, 0.14);
     --amber-alpha-16: rgba(226, 189, 74, 0.24);
     --pi-surface-translucent: rgba(48, 51, 59, 0.88);
     --pi-inner-bg: #393d45;
-    --pi-grid-line: rgba(128, 207, 171, 0.08);
+    --pi-grid-line: rgba(160, 190, 250, 0.08);
     --pi-surface-inset-shadow: inset 4px 0 14px -3px rgba(0, 0, 0, 0.45);
 
     --pill-bg: rgba(60, 64, 73, 0.88);
-    --pill-shadow: 0 1px 6px rgba(0, 0, 0, 0.35), inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
-    --glass-bg: rgba(57, 60, 69, 0.70);
+    --pill-shadow:
+      0 1px 6px rgba(0, 0, 0, 0.35), inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+    --glass-bg: rgba(57, 60, 69, 0.7);
     --glass-bg-solid: rgba(48, 51, 60, 0.86);
-    --glass-highlight: inset 0 1px 0 0 rgba(255, 255, 255, 0.15), inset 1px 0 0 0 rgba(255, 255, 255, 0.05);
-    --glass-inner-shadow: inset 0 -1px 0 0 rgba(0, 0, 0, 0.35), inset -1px 0 0 0 rgba(0, 0, 0, 0.25);
+    --glass-highlight:
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.15),
+      inset 1px 0 0 0 rgba(255, 255, 255, 0.05);
+    --glass-inner-shadow:
+      inset 0 -1px 0 0 rgba(0, 0, 0, 0.35), inset -1px 0 0 0 rgba(0, 0, 0, 0.25);
     --glass-shadow: 0 3px 10px rgba(0, 0, 0, 0.35), 0 1px 0 rgba(0, 0, 0, 0.2);
-    --glass-shadow-lg: 0 16px 44px rgba(0, 0, 0, 0.45), 0 4px 10px rgba(0, 0, 0, 0.3);
+    --glass-shadow-lg:
+      0 16px 44px rgba(0, 0, 0, 0.45), 0 4px 10px rgba(0, 0, 0, 0.3);
     --glass-border: 1px solid rgba(255, 255, 255, 0.14);
   }
 
@@ -192,13 +213,13 @@
   .pi-session-tab-add,
   .pi-session-tab-menu__item:hover,
   .pi-status-lock--waiting {
-    background: var(--green-alpha-12);
+    background: var(--brand-alpha-12);
   }
 
   .pi-session-tab.is-active .pi-session-tab__close,
   .pi-session-tab-add,
   .pi-session-tab-menu__item {
-    color: #315d4e;
+    color: #244a78;
   }
 
   .pi-session-tab__close:hover {
@@ -208,17 +229,21 @@
   }
 
   .pi-input-card:focus-within {
-    border-color: var(--green-alpha-25);
-    box-shadow: 0 1px 4px var(--alpha-5), 0 0 0 2px var(--pi-green-light);
+    border-color: var(--brand-alpha-25);
+    box-shadow:
+      0 1px 4px var(--alpha-5),
+      0 0 0 2px var(--pi-brand-light);
   }
 
   .pi-input-card.is-drag-over {
-    border-color: var(--green-alpha-30);
-    box-shadow: 0 0 0 2px var(--green-alpha-20), var(--pill-shadow);
+    border-color: var(--brand-alpha-30);
+    box-shadow:
+      0 0 0 2px var(--brand-alpha-20),
+      var(--pill-shadow);
   }
 
   .pi-input-drop-hint {
-    background: rgba(239, 250, 245, 0.88);
+    background: rgba(238, 244, 255, 0.88);
   }
 
   .pi-input-textarea::placeholder {
@@ -241,7 +266,7 @@
 
   .pi-status-mode--auto:hover {
     border-color: rgba(39, 171, 92, 0.48);
-    background: rgba(39, 171, 92, 0.20);
+    background: rgba(39, 171, 92, 0.2);
   }
 
   .pi-status-mode--confirm {
@@ -252,7 +277,7 @@
 
   .pi-status-mode--confirm:hover {
     border-color: rgba(194, 118, 31, 0.48);
-    background: rgba(194, 118, 31, 0.20);
+    background: rgba(194, 118, 31, 0.2);
   }
 
   .pi-overlay-text-warning {
@@ -266,7 +291,7 @@
   }
 
   .pi-overlay-btn--danger:hover {
-    border-color: rgba(207, 59, 46, 0.30);
+    border-color: rgba(207, 59, 46, 0.3);
     background: rgba(207, 59, 46, 0.12);
   }
 

@@ -4,7 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Pi for Office — Login</title>
-  <link rel="icon" href="/assets/icon-32.png" type="image/png" />
+  <link rel="icon" type="image/svg+xml" href="assets/pi-for-office-icon-primary.svg" />
+  <link rel="icon" href="assets/icon-32.png" type="image/png" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -27,10 +28,10 @@
       text-align: center;
     }
     .logo {
-      font-size: 48px;
-      font-weight: 700;
-      color: #4a9;
-      margin-bottom: 16px;
+      display: block;
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 16px;
     }
     h1 {
       font-size: 22px;
@@ -75,16 +76,16 @@
       padding: 12px 28px;
       border: none;
       border-radius: 10px;
-      background: #4a9;
+      background: #0b4da6;
       color: #111;
       font-size: 15px;
       font-weight: 600;
       cursor: pointer;
       transition: background 0.15s, transform 0.1s;
     }
-    .copy-btn:hover { background: #5cb; }
+    .copy-btn:hover { background: #1a5fbe; }
     .copy-btn:active { transform: scale(0.97); }
-    .copy-btn.copied { background: #5a5; }
+    .copy-btn.copied { background: #187f5e; }
     .copy-btn svg { width: 18px; height: 18px; }
     .steps {
       margin-top: 28px;
@@ -108,7 +109,7 @@
 </head>
 <body>
   <div class="card" id="card">
-    <div class="logo">π</div>
+    <img class="logo" src="assets/icon-80.png" width="48" height="48" alt="Pi for Office" />
     <h1 id="title">Login successful!</h1>
     <p class="subtitle" id="subtitle">Copy the URL below and paste it back in Pi for Office.</p>
     <div class="url-box" id="url-box">

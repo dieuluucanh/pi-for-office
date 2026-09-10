@@ -443,8 +443,8 @@ const activityStyles = document.createElement("style");
 activityStyles.textContent = `
   /* Proposal: pi-activity — condensed tool-run block (mockup only) */
   .pi-activity {
-    border: var(--pill-green-border);
-    background: var(--pill-green-bg);
+    border: var(--pill-brand-border);
+    background: var(--pill-brand-bg);
     border-radius: var(--pill-radius);
     box-shadow: var(--pill-shadow);
     overflow: hidden;
@@ -496,7 +496,7 @@ activityStyles.textContent = `
     color: var(--destructive);
   }
   .pi-activity__steps {
-    border-top: 1px solid var(--green-alpha-12);
+    border-top: 1px solid var(--brand-alpha-12);
     padding: 4px 0 6px;
   }
   .pi-activity__step {
@@ -518,7 +518,7 @@ activityStyles.textContent = `
     flex-shrink: 0;
     width: 12px;
     font-size: var(--text-xs);
-    color: var(--pi-green);
+    color: var(--pi-brand);
     opacity: 0.8;
   }
   .pi-activity__step-status--error { color: var(--destructive); }

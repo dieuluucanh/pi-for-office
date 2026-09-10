@@ -44,7 +44,7 @@
 }
 
 .pi-status-clickable:focus-visible {
-  outline: 2px solid var(--green-alpha-25);
+  outline: 2px solid var(--brand-alpha-25);
   outline-offset: 1px;
 }
 
@@ -80,22 +80,24 @@
   font-size: var(--text-sm);
   color: var(--foreground);
   opacity: 0.78;
-  transition: background var(--duration-fast), color var(--duration-fast), opacity var(--duration-fast), border-color var(--duration-fast);
+  transition:
+    background var(--duration-fast),
+    color var(--duration-fast),
+    opacity var(--duration-fast),
+    border-color var(--duration-fast);
   min-width: 0;
   overflow: visible;
 }
 .pi-status-model:hover {
-  background: var(--pi-green-lighter);
-  border-color: var(--green-alpha-20);
+  background: var(--pi-brand-lighter);
+  border-color: var(--brand-alpha-20);
   color: var(--foreground);
   opacity: 1;
 }
 .pi-status-model__mark {
-  font-family: var(--font-sans);
-  font-size: var(--text-base);
-  font-weight: 700;
-  color: var(--primary);
-  line-height: 1;
+  display: block;
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
 }
 .pi-status-model__name {
@@ -134,12 +136,14 @@
   background: var(--alpha-3);
   padding: 2px 5px;
   margin: -2px 0;
-  transition: background var(--duration-fast) ease, border-color var(--duration-fast) ease;
+  transition:
+    background var(--duration-fast) ease,
+    border-color var(--duration-fast) ease;
 }
 
 .pi-status-ctx--trigger:hover {
-  background: var(--pi-green-lighter);
-  border-color: var(--green-alpha-20);
+  background: var(--pi-brand-lighter);
+  border-color: var(--brand-alpha-20);
 }
 
 .pi-status-ctx--yellow {
@@ -187,7 +191,7 @@
 
 .pi-status-lock--active {
   color: var(--primary);
-  background: var(--green-alpha-12);
+  background: var(--brand-alpha-12);
 }
 
 .pi-status-mode {
@@ -202,7 +206,10 @@
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
-  transition: background var(--duration-fast), border-color var(--duration-fast), color var(--duration-fast);
+  transition:
+    background var(--duration-fast),
+    border-color var(--duration-fast),
+    color var(--duration-fast);
 }
 
 .pi-status-mode--auto {
@@ -230,8 +237,8 @@
 /* Context debug pill — collapsible block matching thinking-block style. */
 .pi-context-pill {
   border-radius: var(--pill-radius);
-  border: var(--pill-green-border);
-  background: var(--pill-green-bg);
+  border: var(--pill-brand-border);
+  background: var(--pill-brand-bg);
   overflow: hidden;
   font-size: var(--text-base);
   font-family: var(--font-sans);
@@ -256,7 +263,7 @@
 }
 .pi-context-pill__header:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--pi-green-lighter);
+  box-shadow: 0 0 0 2px var(--pi-brand-lighter);
 }
 .pi-context-pill__chevron {
   transition: transform var(--duration-fast);
@@ -307,7 +314,9 @@
   background: transparent;
   color: var(--muted-foreground);
   cursor: pointer;
-  transition: background var(--duration-fast), color var(--duration-fast);
+  transition:
+    background var(--duration-fast),
+    color var(--duration-fast);
 }
 .pi-context-pill__copy:hover {
   background: var(--accent, #3a3a3a);
@@ -322,19 +331,25 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  transition: background var(--duration-fast), color var(--duration-fast), box-shadow var(--duration-fast), border-color var(--duration-fast);
+  transition:
+    background var(--duration-fast),
+    color var(--duration-fast),
+    box-shadow var(--duration-fast),
+    border-color var(--duration-fast);
   white-space: nowrap;
   flex-shrink: 0;
 }
-.pi-status-thinking svg { flex-shrink: 0; }
+.pi-status-thinking svg {
+  flex-shrink: 0;
+}
 
 .pi-status-thinking svg,
 .pi-status-thinking svg * {
   pointer-events: none;
 }
 .pi-status-thinking:hover {
-  background: var(--pi-green-lighter);
-  border-color: var(--green-alpha-20);
+  background: var(--pi-brand-lighter);
+  border-color: var(--brand-alpha-20);
   color: var(--foreground);
 }
 
@@ -360,12 +375,14 @@
   white-space: normal;
   width: max-content;
   max-width: min(200px, calc(100vw - 24px));
-  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
   border: 1px solid var(--border);
   pointer-events: none;
   visibility: hidden;
   opacity: 0;
-  transition: opacity var(--duration-fast) ease, visibility 0s linear var(--duration-fast);
+  transition:
+    opacity var(--duration-fast) ease,
+    visibility 0s linear var(--duration-fast);
   z-index: 200;
 }
 .pi-status-bar [data-tooltip]:hover::after {
@@ -413,19 +430,28 @@
   white-space: normal;
   width: max-content;
   max-width: min(220px, calc(100vw - 24px));
-  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
   border: 1px solid var(--border);
   pointer-events: none;
   visibility: hidden;
   opacity: 0;
-  transition: opacity var(--duration-fast) ease, visibility 0s linear var(--duration-fast);
+  transition:
+    opacity var(--duration-fast) ease,
+    visibility 0s linear var(--duration-fast);
   z-index: 200;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
-.pi-tooltip--left  { left: 0; transform: none; }
-.pi-tooltip--right { left: auto; right: 0; transform: none; }
+.pi-tooltip--left {
+  left: 0;
+  transform: none;
+}
+.pi-tooltip--right {
+  left: auto;
+  right: 0;
+  transform: none;
+}
 .has-tooltip:hover > .pi-tooltip {
   visibility: visible;
   opacity: 1;
@@ -535,7 +561,9 @@
   border-radius: var(--radius-sm);
   color: var(--foreground);
   cursor: pointer;
-  transition: background var(--duration-fast) ease, border-color var(--duration-fast) ease;
+  transition:
+    background var(--duration-fast) ease,
+    border-color var(--duration-fast) ease;
 }
 
 .pi-status-popover__item {
@@ -551,13 +579,13 @@
 
 .pi-status-popover__item:hover,
 .pi-status-popover__command:hover {
-  background: var(--pi-green-light);
-  border-color: var(--green-alpha-20);
+  background: var(--pi-brand-light);
+  border-color: var(--brand-alpha-20);
 }
 
 .pi-status-popover__item.is-active {
-  border-color: oklch(0.45 0.12 160 / 0.36);
-  background: var(--green-alpha-12);
+  border-color: oklch(0.44 0.16 258 / 0.36);
+  background: var(--brand-alpha-12);
 }
 
 .pi-status-popover__item-body {
@@ -625,5 +653,3 @@
     transform: none;
   }
 }
-
-
