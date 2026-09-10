@@ -26,7 +26,10 @@ interface ParamItem {
 /* ── Helpers ────────────────────────────────────────────────── */
 
 function labelKey(label: string): string {
-  return `humanize.label.${label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")}`;
+  return `humanize.label.${label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "")}`;
 }
 
 function l(label: string): string {
@@ -44,9 +47,7 @@ function safe(params: DynamicValue): DynamicObject {
   if (typeof params === "string") {
     try {
       const p: DynamicValue = JSON.parse(params);
-      return typeof p === "object" && p !== null
-        ? (p as DynamicObject)
-        : {};
+      return typeof p === "object" && p !== null ? (p as DynamicObject) : {};
     } catch {
       return {};
     }
@@ -124,15 +125,11 @@ function formatRangeForDisplay(range: string, maxShow = 3): RangeDisplayResult {
   const parsed = parts.map(splitRangeRef);
 
   // Find common sheet (only if ALL parts with a sheet agree)
-  const sheetsFound = [
-    ...new Set(parsed.map((p) => p.sheet).filter(Boolean)),
-  ];
+  const sheetsFound = [...new Set(parsed.map((p) => p.sheet).filter(Boolean))];
   const commonSheet = sheetsFound.length === 1 ? (sheetsFound[0] ?? "") : "";
 
   // Build display addresses — strip the common sheet prefix
-  const addresses = commonSheet
-    ? parsed.map((p) => p.address)
-    : parts; // keep originals if sheets differ
+  const addresses = commonSheet ? parsed.map((p) => p.address) : parts; // keep originals if sheets differ
 
   // Truncate
   if (addresses.length <= maxShow) {
@@ -150,7 +147,8 @@ function formatRangeForDisplay(range: string, maxShow = 3): RangeDisplayResult {
 /** Format a cell value for preview. */
 function fmtCell(v: DynamicValue): string {
   if (v === null || v === undefined || v === "") return "";
-  if (typeof v === "string") return v.length > 18 ? v.substring(0, 18) + "…" : v;
+  if (typeof v === "string")
+    return v.length > 18 ? v.substring(0, 18) + "…" : v;
   if (typeof v === "number" || typeof v === "boolean") return String(v);
   return JSON.stringify(v);
 }
@@ -163,7 +161,9 @@ function renderDataPreview(values: DynamicValue[][]): TemplateResult {
   const MAX_ROWS = 3;
   const MAX_COLS = 6;
   const totalRows = values.length;
-  const totalCols = Math.max(...values.map((r) => (Array.isArray(r) ? r.length : 0)));
+  const totalCols = Math.max(
+    ...values.map((r) => (Array.isArray(r) ? r.length : 0)),
+  );
   const showRows = Math.min(totalRows, MAX_ROWS);
   const showCols = Math.min(totalCols, MAX_COLS);
   const moreRows = totalRows - showRows;
@@ -174,15 +174,16 @@ function renderDataPreview(values: DynamicValue[][]): TemplateResult {
       ${values.slice(0, showRows).map(
         (row) => html`
           <tr>
-            ${(Array.isArray(row) ? row : [row]).slice(0, showCols).map(
-              (cell) => html`<td>${fmtCell(cell)}</td>`,
-            )}
+            ${(Array.isArray(row) ? row : [row])
+              .slice(0, showCols)
+              .map((cell) => html`<td>${fmtCell(cell)}</td>`)}
             ${moreCols > 0 ? html`<td class="pi-data-preview__fade">…</td>` : nothing}
           </tr>
         `,
       )}
-      ${moreRows > 0
-        ? html`<tr>
+      ${
+        moreRows > 0
+          ? html`<tr>
             <td
               colspan=${showCols + (moreCols > 0 ? 1 : 0)}
               class="pi-data-preview__fade"
@@ -190,7 +191,8 @@ function renderDataPreview(values: DynamicValue[][]): TemplateResult {
               …${t(moreRows === 1 ? "humanize.more_rows_one" : "humanize.more_rows_other", { n: moreRows })}
             </td>
           </tr>`
-        : nothing}
+          : nothing
+      }
     </table>
   `;
 }
@@ -282,7 +284,10 @@ function humanizeFormatCells(p: DynamicObject): ParamItem[] {
   // Dimensions
   const cw = num(p.column_width);
   if (cw !== undefined) {
-    items.push({ label: l("Width"), value: t("humanize.unit.chars", { n: cw }) });
+    items.push({
+      label: l("Width"),
+      value: t("humanize.unit.chars", { n: cw }),
+    });
   }
   const rh = num(p.row_height);
   if (rh !== undefined) {
@@ -294,10 +299,14 @@ function humanizeFormatCells(p: DynamicObject): ParamItem[] {
 
   // Borders
   const edgeLabels: string[] = [];
-  if (p.border_top) edgeLabels.push(t("humanize.edge.top", { style: str(p.border_top) }));
-  if (p.border_bottom) edgeLabels.push(t("humanize.edge.bottom", { style: str(p.border_bottom) }));
-  if (p.border_left) edgeLabels.push(t("humanize.edge.left", { style: str(p.border_left) }));
-  if (p.border_right) edgeLabels.push(t("humanize.edge.right", { style: str(p.border_right) }));
+  if (p.border_top)
+    edgeLabels.push(t("humanize.edge.top", { style: str(p.border_top) }));
+  if (p.border_bottom)
+    edgeLabels.push(t("humanize.edge.bottom", { style: str(p.border_bottom) }));
+  if (p.border_left)
+    edgeLabels.push(t("humanize.edge.left", { style: str(p.border_left) }));
+  if (p.border_right)
+    edgeLabels.push(t("humanize.edge.right", { style: str(p.border_right) }));
   if (edgeLabels.length > 0) {
     items.push({ label: l("Borders"), value: edgeLabels.join(", ") });
   } else if (p.borders) {
@@ -322,7 +331,9 @@ function humanizeWriteCells(p: DynamicObject): ParamItem[] {
   if (Array.isArray(rawValues) && rawValues.length > 0) {
     const values = rawValues as DynamicValue[][];
     const rows = values.length;
-    const cols = Math.max(...values.map((r) => (Array.isArray(r) ? r.length : 0)));
+    const cols = Math.max(
+      ...values.map((r) => (Array.isArray(r) ? r.length : 0)),
+    );
     items.push({
       label: l("Size"),
       value: nUnit(rows, "row") + " × " + nUnit(cols, "column"),
@@ -394,7 +405,10 @@ function humanizeSearchWorkbook(p: DynamicObject): ParamItem[] {
   }
   const maxRes = num(p.max_results);
   if (maxRes !== undefined && maxRes !== 20) {
-    items.push({ label: l("Limit"), value: t("humanize.unit.results", { n: maxRes }) });
+    items.push({
+      label: l("Limit"),
+      value: t("humanize.unit.results", { n: maxRes }),
+    });
   }
 
   return items;
@@ -410,51 +424,74 @@ function humanizeModifyStructure(p: DynamicObject): ParamItem[] {
     case "insert_rows":
       items.push({
         label: l("Action"),
-        value: pos !== undefined
-          ? t("humanize.action.insert_at_row", { what: nUnit(count, "row"), pos })
-          : t("humanize.action.insert", { what: nUnit(count, "row") }),
+        value:
+          pos !== undefined
+            ? t("humanize.action.insert_at_row", {
+                what: nUnit(count, "row"),
+                pos,
+              })
+            : t("humanize.action.insert", { what: nUnit(count, "row") }),
       });
       break;
     case "delete_rows":
       items.push({
         label: l("Action"),
-        value: pos !== undefined
-          ? t("humanize.action.delete_from_row", { what: nUnit(count, "row"), pos })
-          : t("humanize.action.delete", { what: nUnit(count, "row") }),
+        value:
+          pos !== undefined
+            ? t("humanize.action.delete_from_row", {
+                what: nUnit(count, "row"),
+                pos,
+              })
+            : t("humanize.action.delete", { what: nUnit(count, "row") }),
       });
       break;
     case "insert_columns":
       items.push({
         label: l("Action"),
-        value: pos !== undefined
-          ? t("humanize.action.insert_at_column", { what: nUnit(count, "column"), pos })
-          : t("humanize.action.insert", { what: nUnit(count, "column") }),
+        value:
+          pos !== undefined
+            ? t("humanize.action.insert_at_column", {
+                what: nUnit(count, "column"),
+                pos,
+              })
+            : t("humanize.action.insert", { what: nUnit(count, "column") }),
       });
       break;
     case "delete_columns":
       items.push({
         label: l("Action"),
-        value: pos !== undefined
-          ? t("humanize.action.delete_from_column", { what: nUnit(count, "column"), pos })
-          : t("humanize.action.delete", { what: nUnit(count, "column") }),
+        value:
+          pos !== undefined
+            ? t("humanize.action.delete_from_column", {
+                what: nUnit(count, "column"),
+                pos,
+              })
+            : t("humanize.action.delete", { what: nUnit(count, "column") }),
       });
       break;
     case "add_sheet": {
       const name = p.new_name ? str(p.new_name) : p.name ? str(p.name) : "";
       items.push({
         label: l("Action"),
-        value: name ? t("humanize.action.add_sheet_named", { name }) : t("humanize.action.add_sheet"),
+        value: name
+          ? t("humanize.action.add_sheet_named", { name })
+          : t("humanize.action.add_sheet"),
       });
       break;
     }
     case "delete_sheet":
-      items.push({ label: l("Action"), value: t("humanize.action.delete_sheet") });
+      items.push({
+        label: l("Action"),
+        value: t("humanize.action.delete_sheet"),
+      });
       break;
     case "rename_sheet": {
       const newName = p.new_name ? str(p.new_name) : "";
       items.push({
         label: l("Action"),
-        value: newName ? t("humanize.action.rename_sheet_to", { name: newName }) : t("humanize.action.rename_sheet"),
+        value: newName
+          ? t("humanize.action.rename_sheet_to", { name: newName })
+          : t("humanize.action.rename_sheet"),
       });
       break;
     }
@@ -462,15 +499,23 @@ function humanizeModifyStructure(p: DynamicObject): ParamItem[] {
       const targetName = p.new_name ? str(p.new_name) : "";
       items.push({
         label: l("Action"),
-        value: targetName ? t("humanize.action.duplicate_sheet_as", { name: targetName }) : t("humanize.action.duplicate_sheet"),
+        value: targetName
+          ? t("humanize.action.duplicate_sheet_as", { name: targetName })
+          : t("humanize.action.duplicate_sheet"),
       });
       break;
     }
     case "hide_sheet":
-      items.push({ label: l("Action"), value: t("humanize.action.hide_sheet") });
+      items.push({
+        label: l("Action"),
+        value: t("humanize.action.hide_sheet"),
+      });
       break;
     case "unhide_sheet":
-      items.push({ label: l("Action"), value: t("humanize.action.show_sheet") });
+      items.push({
+        label: l("Action"),
+        value: t("humanize.action.show_sheet"),
+      });
       break;
     default:
       items.push({ label: l("Action"), value: action.replace(/_/g, " ") });
@@ -585,11 +630,17 @@ function humanizeCharts(p: DynamicObject): ParamItem[] {
   }
 
   if (p.source_range) {
-    items.push({ label: l("Source"), value: cellRefs(str(p.source_range), Infinity) });
+    items.push({
+      label: l("Source"),
+      value: cellRefs(str(p.source_range), Infinity),
+    });
   }
 
   if (p.chart_type) {
-    items.push({ label: l("Type"), value: str(p.chart_type).replace(/_/gu, " ") });
+    items.push({
+      label: l("Type"),
+      value: str(p.chart_type).replace(/_/gu, " "),
+    });
   }
 
   if (p.series_by) {
@@ -605,15 +656,24 @@ function humanizeCharts(p: DynamicObject): ParamItem[] {
   }
 
   if (p.x_axis_title !== undefined) {
-    items.push({ label: l("X axis"), value: str(p.x_axis_title) || v("hidden") });
+    items.push({
+      label: l("X axis"),
+      value: str(p.x_axis_title) || v("hidden"),
+    });
   }
 
   if (p.y_axis_title !== undefined) {
-    items.push({ label: l("Y axis"), value: str(p.y_axis_title) || v("hidden") });
+    items.push({
+      label: l("Y axis"),
+      value: str(p.y_axis_title) || v("hidden"),
+    });
   }
 
   if (p.position) {
-    items.push({ label: l("Position"), value: cellRefs(str(p.position), Infinity) });
+    items.push({
+      label: l("Position"),
+      value: cellRefs(str(p.position), Infinity),
+    });
   }
 
   const width = num(p.width);
@@ -651,34 +711,53 @@ function humanizeViewSettings(p: DynamicObject): ParamItem[] {
 
   switch (action) {
     case "get":
-      items.push({ label: l("Action"), value: t("humanize.action.get_settings") });
+      items.push({
+        label: l("Action"),
+        value: t("humanize.action.get_settings"),
+      });
       break;
     case "show_gridlines":
-      items.push({ label: l("Action"), value: t("humanize.action.show_gridlines") });
+      items.push({
+        label: l("Action"),
+        value: t("humanize.action.show_gridlines"),
+      });
       break;
     case "hide_gridlines":
-      items.push({ label: l("Action"), value: t("humanize.action.hide_gridlines") });
+      items.push({
+        label: l("Action"),
+        value: t("humanize.action.hide_gridlines"),
+      });
       break;
     case "show_headings":
-      items.push({ label: l("Action"), value: t("humanize.action.show_headings") });
+      items.push({
+        label: l("Action"),
+        value: t("humanize.action.show_headings"),
+      });
       break;
     case "hide_headings":
-      items.push({ label: l("Action"), value: t("humanize.action.hide_headings") });
+      items.push({
+        label: l("Action"),
+        value: t("humanize.action.hide_headings"),
+      });
       break;
     case "freeze_rows":
       items.push({
         label: l("Action"),
-        value: count !== undefined
-          ? t("humanize.action.freeze_top", { what: nUnit(count, "row") })
-          : t("humanize.action.freeze_rows"),
+        value:
+          count !== undefined
+            ? t("humanize.action.freeze_top", { what: nUnit(count, "row") })
+            : t("humanize.action.freeze_rows"),
       });
       break;
     case "freeze_columns":
       items.push({
         label: l("Action"),
-        value: count !== undefined
-          ? t("humanize.action.freeze_first", { what: nUnit(count, "column") })
-          : t("humanize.action.freeze_columns"),
+        value:
+          count !== undefined
+            ? t("humanize.action.freeze_first", {
+                what: nUnit(count, "column"),
+              })
+            : t("humanize.action.freeze_columns"),
       });
       break;
     case "freeze_at":
@@ -701,26 +780,39 @@ function humanizeViewSettings(p: DynamicObject): ParamItem[] {
       });
       break;
     case "hide_sheet":
-      items.push({ label: l("Action"), value: t("humanize.action.hide_sheet") });
+      items.push({
+        label: l("Action"),
+        value: t("humanize.action.hide_sheet"),
+      });
       break;
     case "show_sheet":
-      items.push({ label: l("Action"), value: t("humanize.action.show_sheet") });
+      items.push({
+        label: l("Action"),
+        value: t("humanize.action.show_sheet"),
+      });
       break;
     case "very_hide_sheet":
-      items.push({ label: l("Action"), value: t("humanize.action.very_hide_sheet") });
+      items.push({
+        label: l("Action"),
+        value: t("humanize.action.very_hide_sheet"),
+      });
       break;
     case "set_standard_width": {
       const width = num(p.width);
       items.push({
         label: l("Action"),
-        value: width !== undefined
-          ? t("humanize.action.set_standard_width_to", { width })
-          : t("humanize.action.set_standard_width"),
+        value:
+          width !== undefined
+            ? t("humanize.action.set_standard_width_to", { width })
+            : t("humanize.action.set_standard_width"),
       });
       break;
     }
     case "activate":
-      items.push({ label: l("Action"), value: t("humanize.action.activate_sheet") });
+      items.push({
+        label: l("Action"),
+        value: t("humanize.action.activate_sheet"),
+      });
       break;
     default:
       items.push({ label: l("Action"), value: action.replace(/_/g, " ") });
@@ -779,7 +871,10 @@ function humanizeConventions(p: DynamicObject): ParamItem[] {
   if (presetFormats && typeof presetFormats === "object") {
     const count = Object.keys(presetFormats).length;
     if (count > 0) {
-      items.push({ label: l("Built-in presets"), value: v("n_updated", { n: count }) });
+      items.push({
+        label: l("Built-in presets"),
+        value: v("n_updated", { n: count }),
+      });
     }
   }
 
@@ -787,7 +882,10 @@ function humanizeConventions(p: DynamicObject): ParamItem[] {
   if (customPresets && typeof customPresets === "object") {
     const count = Object.keys(customPresets).length;
     if (count > 0) {
-      items.push({ label: l("Custom presets"), value: v("n_upserted", { n: count }) });
+      items.push({
+        label: l("Custom presets"),
+        value: v("n_upserted", { n: count }),
+      });
     }
   }
 
@@ -845,7 +943,10 @@ function humanizeSkills(p: DynamicObject): ParamItem[] {
 
   if (typeof p.markdown === "string") {
     const markdown = p.markdown;
-    items.push({ label: l("SKILL.md"), value: t("humanize.unit.chars", { n: markdown.length }) });
+    items.push({
+      label: l("SKILL.md"),
+      value: t("humanize.unit.chars", { n: markdown.length }),
+    });
   }
 
   return items;
@@ -864,7 +965,9 @@ function humanizeWebSearch(p: DynamicObject): ParamItem[] {
 
   if (p.site) {
     if (Array.isArray(p.site)) {
-      const sites = p.site.map((site) => str(site)).filter((site) => site.length > 0);
+      const sites = p.site
+        .map((site) => str(site))
+        .filter((site) => site.length > 0);
       items.push({ label: l("Sites"), value: sites.join(", ") });
     } else {
       items.push({ label: l("Site"), value: str(p.site) });
@@ -873,7 +976,10 @@ function humanizeWebSearch(p: DynamicObject): ParamItem[] {
 
   const maxResults = num(p.max_results);
   if (maxResults !== undefined) {
-    items.push({ label: l("Limit"), value: t("humanize.unit.results", { n: maxResults }) });
+    items.push({
+      label: l("Limit"),
+      value: t("humanize.unit.results", { n: maxResults }),
+    });
   }
 
   return items;
@@ -918,7 +1024,8 @@ function humanizeMcp(p: DynamicObject): ParamItem[] {
 
   if (p.args) {
     const argsText = str(p.args);
-    const compact = argsText.length > 120 ? `${argsText.slice(0, 117)}…` : argsText;
+    const compact =
+      argsText.length > 120 ? `${argsText.slice(0, 117)}…` : argsText;
     items.push({ label: l("Args"), value: compact });
   }
 
@@ -956,7 +1063,8 @@ function humanizeFiles(p: DynamicObject): ParamItem[] {
 
   if (p.content !== undefined) {
     const content = str(p.content);
-    const compact = content.length > 120 ? `${content.slice(0, 117)}…` : content;
+    const compact =
+      content.length > 120 ? `${content.slice(0, 117)}…` : content;
     items.push({ label: l("Content"), value: compact });
   }
 
@@ -967,16 +1075,25 @@ function humanizePythonTransformRange(p: DynamicObject): ParamItem[] {
   const items: ParamItem[] = [];
 
   if (p.range) {
-    items.push({ label: l("Input range"), value: cellRefs(str(p.range), Infinity) });
+    items.push({
+      label: l("Input range"),
+      value: cellRefs(str(p.range), Infinity),
+    });
   }
 
   if (p.output_start_cell) {
-    items.push({ label: l("Output start"), value: cellRefs(str(p.output_start_cell), Infinity) });
+    items.push({
+      label: l("Output start"),
+      value: cellRefs(str(p.output_start_cell), Infinity),
+    });
   }
 
   const allowOverwrite = p.allow_overwrite;
   if (typeof allowOverwrite === "boolean") {
-    items.push({ label: l("Allow overwrite"), value: allowOverwrite ? v("yes_cap") : v("no_cap") });
+    items.push({
+      label: l("Allow overwrite"),
+      value: allowOverwrite ? v("yes_cap") : v("no_cap"),
+    });
   }
 
   const timeoutMs = num(p.timeout_ms);
@@ -988,8 +1105,12 @@ function humanizePythonTransformRange(p: DynamicObject): ParamItem[] {
     const source = str(p.code);
     const lines = source.split(/\r?\n/u).length;
     const oneLine = source.replace(/\s+/gu, " ").trim();
-    const compact = oneLine.length > 140 ? `${oneLine.slice(0, 137)}…` : oneLine;
-    items.push({ label: l("Python"), value: compact.length > 0 ? compact : v("empty") });
+    const compact =
+      oneLine.length > 140 ? `${oneLine.slice(0, 137)}…` : oneLine;
+    items.push({
+      label: l("Python"),
+      value: compact.length > 0 ? compact : v("empty"),
+    });
     if (lines > 1) {
       items.push({ label: l("Code lines"), value: String(lines) });
     }
@@ -1009,7 +1130,8 @@ function humanizeDirectJs(p: DynamicObject, codeLabel: string): ParamItem[] {
     const source = str(p.code);
     const lines = source.split(/\r?\n/u).length;
     const oneLine = source.replace(/\s+/gu, " ").trim();
-    const compact = oneLine.length > 140 ? `${oneLine.slice(0, 137)}…` : oneLine;
+    const compact =
+      oneLine.length > 140 ? `${oneLine.slice(0, 137)}…` : oneLine;
     const label = codeLabel === "WPS JSAPI" ? l("WPS JSAPI") : l("Office.js");
     items.push({ label, value: compact.length > 0 ? compact : v("empty") });
     if (lines > 1) {
@@ -1032,9 +1154,7 @@ function humanizeExecuteWpsJs(p: DynamicObject): ParamItem[] {
 
 /** Join an array of mixed text/TemplateResult with comma separators. */
 function joinParts(parts: Array<TemplateResult | string>): TemplateResult {
-  return html`${parts.map(
-    (part, i) => html`${i > 0 ? ", " : ""}${part}`,
-  )}`;
+  return html`${parts.map((part, i) => html`${i > 0 ? ", " : ""}${part}`)}`;
 }
 
 /** Convert a cell_value operator to plain English. */
@@ -1076,6 +1196,71 @@ const CORE_HUMANIZERS = {
   skills: humanizeSkills,
 } satisfies Record<CoreToolName, HumanizerFn>;
 
+/**
+ * Generic humanizer for the local Word/PowerPoint document tools — renders
+ * the common scalar params (text/find/replace/slideIndex/location/scope).
+ * These tools have `humanizer: false` in TOOL_UI_METADATA, so this satisfies
+ * the registry type while the UI falls back to generic rendering.
+ */
+function humanizeHostDocumentTool(p: DynamicObject): ParamItem[] {
+  const items: ParamItem[] = [];
+
+  for (const key of [
+    "slideIndex",
+    "scope",
+    "location",
+    "find",
+    "replace",
+    "text",
+    "maxChars",
+  ] as const) {
+    const value = p[key];
+    if (value === undefined || value === null || value === "") continue;
+    items.push({
+      label: l(key.charAt(0).toUpperCase() + key.slice(1)),
+      value: str(value),
+    });
+  }
+
+  return items;
+}
+
+/**
+ * Generic humanizer for the local Word/PowerPoint document formatting tools —
+ * renders formatting props (bold/italic/underline/font props/alignment) plus
+ * the common scalar params. These tools have `humanizer: false` in
+ * TOOL_UI_METADATA, so this satisfies the registry type while the UI falls
+ * back to generic rendering.
+ */
+function humanizeHostFormatTool(p: DynamicObject): ParamItem[] {
+  const items: ParamItem[] = [];
+
+  for (const key of [
+    "slideIndex",
+    "text",
+    "matchCase",
+    "bold",
+    "italic",
+    "underline",
+    "size",
+    "fontSize",
+    "name",
+    "fontName",
+    "color",
+    "fontColor",
+    "alignment",
+  ] as const) {
+    const value = p[key];
+    if (value === undefined || value === null || value === "") continue;
+    items.push({
+      label: l(key.charAt(0).toUpperCase() + key.slice(1)),
+      value: str(value),
+    });
+  }
+
+  return items;
+}
+
 const EXTRA_HUMANIZERS = {
   web_search: humanizeWebSearch,
   fetch_page: humanizeFetchPage,
@@ -1084,6 +1269,16 @@ const EXTRA_HUMANIZERS = {
   python_transform_range: humanizePythonTransformRange,
   execute_office_js: humanizeExecuteOfficeJs,
   execute_wps_js: humanizeExecuteWpsJs,
+  word_get_overview: humanizeHostDocumentTool,
+  word_read_document: humanizeHostDocumentTool,
+  word_insert_text: humanizeHostDocumentTool,
+  word_replace_text: humanizeHostDocumentTool,
+  word_format_range: humanizeHostFormatTool,
+  powerpoint_get_overview: humanizeHostDocumentTool,
+  powerpoint_read_slide: humanizeHostDocumentTool,
+  powerpoint_add_slide: humanizeHostDocumentTool,
+  powerpoint_add_text_box: humanizeHostDocumentTool,
+  powerpoint_format_slide: humanizeHostFormatTool,
 } satisfies Record<AuxiliaryUiToolName, HumanizerFn>;
 
 const HUMANIZERS: Record<string, HumanizerFn> = {

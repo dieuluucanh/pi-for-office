@@ -80,7 +80,8 @@ function shouldProxyProvider(
     case "zai":
       return true;
 
-    // OpenCode Zen Go does not send CORS headers; always proxy.
+    // OpenCode Zen and Go do not send CORS headers; always proxy.
+    case "opencode":
     case "opencode-go":
       return true;
 
@@ -638,6 +639,20 @@ export function createOfficeStreamFn(
       if (needsCodexBridge) {
         throw new Error(
           "GPT-5.6 Luna currently requires the latest Pi for Office proxy for ChatGPT WebSocket transport. " +
+            "Enable Proxy in Settings and run: npx -y pi-for-office-proxy@latest",
+        );
+      }
+      // OpenCode gateway responses omit CORS headers on actual requests
+      // (preflight passes but the browser blocks the response), so direct
+      // browser-only calls always fail with an opaque connection error.
+      // Fail fast with an actionable message instead.
+      const opencodeProvider = normalizedModel.provider.toLowerCase();
+      if (
+        opencodeProvider === "opencode" ||
+        opencodeProvider === "opencode-go"
+      ) {
+        throw new Error(
+          "OpenCode Zen/Go models require the Pi for Office proxy: the OpenCode gateway does not send CORS headers, so browsers cannot call it directly. " +
             "Enable Proxy in Settings and run: npx -y pi-for-office-proxy@latest",
         );
       }

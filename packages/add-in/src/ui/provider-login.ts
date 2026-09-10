@@ -302,9 +302,14 @@ export const ALL_PROVIDERS: ProviderDef[] = [
   { id: "groq", label: /* brand */ "Groq" },
   { id: "xai", label: /* brand */ "xAI / Grok" },
   {
+    id: "opencode",
+    label: /* brand */ "OpenCode Zen",
+    desc: "provider.desc.opencode_zen",
+  },
+  {
     id: "opencode-go",
-    label: /* brand */ "OpenCode Zen Go",
-    desc: "provider.desc.opencode",
+    label: /* brand */ "OpenCode Go",
+    desc: "provider.desc.opencode_go",
   },
 ];
 

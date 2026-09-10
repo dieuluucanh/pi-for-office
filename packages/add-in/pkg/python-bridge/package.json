@@ -1,6 +1,6 @@
 {
   "name": "pi-for-office-python-bridge",
-  "version": "0.1.1-pre",
+  "version": "0.1.2",
   "description": "One-command local HTTPS Python / LibreOffice bridge helper for Pi for Office.",
   "type": "module",
   "bin": {

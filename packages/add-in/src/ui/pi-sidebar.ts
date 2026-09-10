@@ -145,6 +145,8 @@ const INNER_SCROLLABLE_SELECTOR =
 export class PiSidebar extends LitElement {
   @property({ attribute: false }) agent?: Agent;
   @property({ attribute: false }) emptyHints: EmptyHint[] = [];
+  /** Empty-state tagline; falls back to the Excel locale key when unset. */
+  @property({ attribute: false }) tagline?: string;
   @property({ attribute: false }) onSend?: (text: string) => void;
   @property({ attribute: false }) onAbort?: () => void;
   @property({ attribute: false }) sessionTabs: SessionTabView[] = [];
@@ -1348,7 +1350,7 @@ export class PiSidebar extends LitElement {
         <div class="pi-empty__content">
           <div class="pi-empty__logo">π</div>
           <p class="pi-empty__tagline">
-            ${t("sidebar.empty.tagline")}
+            ${this.tagline ?? t("sidebar.empty.tagline")}
           </p>
           <div class="pi-empty__hints">
             ${this.emptyHints.map(

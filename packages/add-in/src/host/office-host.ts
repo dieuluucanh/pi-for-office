@@ -1,4 +1,6 @@
-function isHostOfficeHostPayloadShape(value: DynamicValue): value is DynamicObject {
+function isHostOfficeHostPayloadShape(
+  value: DynamicValue,
+): value is DynamicObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -6,6 +8,11 @@ function isHostOfficeHostPayloadShape(value: DynamicValue): value is DynamicObje
 
 import { settingsBackedSessionStorage } from "./session-storage.js";
 import { resolveOfficeThemeDark } from "./office-theme.js";
+import {
+  detectOfficeAppFromGlobals,
+  officeAppLabel,
+  type OfficeApp,
+} from "./app.js";
 import {
   getWorkbookContextFromDocumentUrl,
   type WorkbookContext,
@@ -19,7 +26,7 @@ import type {
 
 function getOfficeDocumentUrl(): string | null {
   try {
-    const office = Reflect.get(globalThis, "Office");
+    const office = (globalThis as { Office?: DynamicValue }).Office;
     if (!isHostOfficeHostPayloadShape(office)) return null;
 
     const ctx = office.context;
@@ -52,7 +59,9 @@ interface OfficeReadyInfoLike {
   platform?: DynamicValue;
 }
 
-function fromOfficeReadyInfo(info: OfficeReadyInfoLike): SpreadsheetHostReadyInfo {
+function fromOfficeReadyInfo(
+  info: OfficeReadyInfoLike,
+): SpreadsheetHostReadyInfo {
   return {
     kind: "office",
     nativeHost: nativeValueToString(info.host),
@@ -63,8 +72,17 @@ function fromOfficeReadyInfo(info: OfficeReadyInfoLike): SpreadsheetHostReadyInf
 
 export class OfficeHost implements SpreadsheetHost {
   readonly kind = "office";
-  readonly displayName = "Microsoft Excel";
-  readonly sessionStorage: SpreadsheetHostSessionStorage = settingsBackedSessionStorage;
+  /** "Microsoft Excel" / "Microsoft Word" / "Microsoft PowerPoint", per detected host. */
+  readonly displayName: string;
+  readonly sessionStorage: SpreadsheetHostSessionStorage =
+    settingsBackedSessionStorage;
+
+  constructor(app: OfficeApp | null = detectOfficeAppFromGlobals()) {
+    this.displayName =
+      app === "word" || app === "powerpoint"
+        ? `Microsoft ${officeAppLabel(app)}`
+        : "Microsoft Excel";
+  }
 
   whenReady(): Promise<SpreadsheetHostReadyInfo> {
     if (typeof Office === "undefined") {
@@ -78,7 +96,11 @@ export class OfficeHost implements SpreadsheetHost {
         });
 
         void readyPromise.catch((error: DynamicValue) => {
-          reject(error instanceof Error ? error : new Error("Office.onReady failed."));
+          reject(
+            error instanceof Error
+              ? error
+              : new Error("Office.onReady failed."),
+          );
         });
       } catch (error) {
         reject(toError(error));

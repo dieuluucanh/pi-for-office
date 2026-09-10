@@ -9,6 +9,7 @@ import type {
 
 import {
   BrowserModelRuntime,
+  inferOpenCodeContextWindow,
   type BrowserProviderRegistration,
 } from "../src/models/browser-model-runtime.ts";
 import type { CustomProvider } from "../src/storage/local/custom-providers-store.ts";
@@ -77,18 +78,20 @@ function gatewayProvider(): CustomProvider {
     type: "openai-completions",
     baseUrl: "https://gateway.example.com/v1",
     apiKey: "gateway-secret",
-    models: [{
-      id: "configured-model",
-      name: "Configured model",
-      api: "openai-completions",
-      provider: "Gateway · Acme",
-      baseUrl: "https://gateway.example.com/v1",
-      reasoning: false,
-      input: ["text"],
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      contextWindow: 65_536,
-      maxTokens: 8_192,
-    }],
+    models: [
+      {
+        id: "configured-model",
+        name: "Configured model",
+        api: "openai-completions",
+        provider: "Gateway · Acme",
+        baseUrl: "https://gateway.example.com/v1",
+        reasoning: false,
+        input: ["text"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 65_536,
+        maxTokens: 8_192,
+      },
+    ],
   };
 }
 
@@ -97,7 +100,10 @@ void test("browser runtime exposes built-in models through IndexedDB-backed cred
   await providerKeys.set("openai", "test-key");
   const runtime = createRuntime({ providerKeys });
 
-  assert.equal(runtime.models.getModel("openai", "gpt-5.6-sol")?.provider, "openai");
+  assert.equal(
+    runtime.models.getModel("openai", "gpt-5.6-sol")?.provider,
+    "openai",
+  );
   const available = await runtime.models.getAvailable("openai");
   assert.ok(available.some((model) => model.id === "gpt-5.6-sol"));
 
@@ -110,18 +116,24 @@ void test("custom gateway discovery merges remote model ids and persists the cat
   let requestedUrl = "";
   let authorization = "";
   const fetchFn: typeof globalThis.fetch = (input, init) => {
-    requestedUrl = typeof input === "string"
-      ? input
-      : input instanceof URL
-        ? input.toString()
-        : input.url;
+    requestedUrl =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
     authorization = new Headers(init?.headers).get("authorization") ?? "";
-    return Promise.resolve(new Response(JSON.stringify({
-      data: [{ id: "remote-b" }, { id: "remote-a" }, { id: "remote-a" }],
-    }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    }));
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          data: [{ id: "remote-b" }, { id: "remote-a" }, { id: "remote-a" }],
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
   };
 
   const runtime = createRuntime({ catalogs, fetchFn });
@@ -147,10 +159,12 @@ void test("a fresh runtime restores discovered models without network access", a
   let networkCalls = 0;
   const fetchFn: typeof globalThis.fetch = () => {
     networkCalls += 1;
-    return Promise.resolve(new Response(JSON.stringify({ data: [{ id: "cached-model" }] }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    }));
+    return Promise.resolve(
+      new Response(JSON.stringify({ data: [{ id: "cached-model" }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
   };
 
   const first = createRuntime({ catalogs, fetchFn });
@@ -170,12 +184,18 @@ void test("cached discovery is rebound to the current provider transport", async
   const catalogs = new MemoryCatalogs();
   const first = createRuntime({
     catalogs,
-    fetchFn: () => Promise.resolve(new Response(JSON.stringify({
-      data: [{ id: "cached-model" }],
-    }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    })),
+    fetchFn: () =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: [{ id: "cached-model" }],
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+      ),
   });
   await first.syncCustomProviders([gatewayProvider()]);
   await first.refresh({ allowNetwork: true });
@@ -214,7 +234,10 @@ void test("cached discovery is rebound to the current provider transport", async
   assert.equal(restored?.api, "openai-responses");
   assert.equal(restored?.baseUrl, "https://new-gateway.example.com/v2");
   assert.equal(restored?.headers, undefined);
-  assert.equal((await second.models.getAuth(providerId))?.auth.apiKey, "new-gateway-secret");
+  assert.equal(
+    (await second.models.getAuth(providerId))?.auth.apiKey,
+    "new-gateway-secret",
+  );
 });
 
 void test("failed remote discovery retains the last cached overlay and baseline", async () => {
@@ -224,10 +247,12 @@ void test("failed remote discovery retains the last cached overlay and baseline"
     if (shouldFail) {
       return Promise.resolve(new Response("unavailable", { status: 503 }));
     }
-    return Promise.resolve(new Response(JSON.stringify({ data: [{ id: "last-known-model" }] }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    }));
+    return Promise.resolve(
+      new Response(JSON.stringify({ data: [{ id: "last-known-model" }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
   };
 
   const runtime = createRuntime({ catalogs, fetchFn });
@@ -248,28 +273,44 @@ void test("oversized or malformed discovery catalogues retain the last safe cach
   let mode: "safe" | "too-many" | "long-id" | "too-large" = "safe";
   const fetchFn: typeof globalThis.fetch = () => {
     if (mode === "too-many") {
-      return Promise.resolve(new Response(JSON.stringify({
-        data: Array.from({ length: 2_001 }, (_, index) => ({ id: `model-${index}` })),
-      }), { status: 200, headers: { "Content-Type": "application/json" } }));
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: Array.from({ length: 2_001 }, (_, index) => ({
+              id: `model-${index}`,
+            })),
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
     }
     if (mode === "long-id") {
-      return Promise.resolve(new Response(JSON.stringify({
-        data: [{ id: "x".repeat(257) }],
-      }), { status: 200, headers: { "Content-Type": "application/json" } }));
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: [{ id: "x".repeat(257) }],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
     }
     if (mode === "too-large") {
-      return Promise.resolve(new Response("{}", {
-        status: 200,
-        headers: {
-          "Content-Type": "application/json",
-          "Content-Length": String(2 * 1024 * 1024 + 1),
-        },
-      }));
+      return Promise.resolve(
+        new Response("{}", {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "Content-Length": String(2 * 1024 * 1024 + 1),
+          },
+        }),
+      );
     }
-    return Promise.resolve(new Response(JSON.stringify({ data: [{ id: "last-safe-model" }] }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    }));
+    return Promise.resolve(
+      new Response(JSON.stringify({ data: [{ id: "last-safe-model" }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
   };
 
   const runtime = createRuntime({ catalogs, fetchFn });
@@ -295,7 +336,9 @@ void test("extension providers are owner-scoped and can resolve host-owned crede
     name: "Example provider",
     api: "openai-responses",
     baseUrl: "https://models.example.com/v1",
-    models: [{ id: "example-model", contextWindow: 128_000, maxTokens: 16_000 }],
+    models: [
+      { id: "example-model", contextWindow: 128_000, maxTokens: 16_000 },
+    ],
     modelsUrl: "https://models.example.com/v1/models",
     resolveApiKey: () => Promise.resolve("host-owned-secret"),
   };
@@ -304,8 +347,15 @@ void test("extension providers are owner-scoped and can resolve host-owned crede
   assert.equal(runtime.isExtensionProvider(registration.id), true);
   assert.equal(runtime.shouldProxyProvider(registration.id), true);
   assert.equal(runtime.shouldProxyProvider("openai"), false);
-  assert.equal((await runtime.models.getAuth(registration.id))?.auth.apiKey, "host-owned-secret");
-  assert.ok((await runtime.models.getAvailable(registration.id)).some((model) => model.id === "example-model"));
+  assert.equal(
+    (await runtime.models.getAuth(registration.id))?.auth.apiKey,
+    "host-owned-secret",
+  );
+  assert.ok(
+    (await runtime.models.getAvailable(registration.id)).some(
+      (model) => model.id === "example-model",
+    ),
+  );
 
   await assert.rejects(
     runtime.unregisterExtensionProvider("ext.someone-else", registration.id),
@@ -331,7 +381,8 @@ void test("unregister aborts in-flight discovery before it can resurrect a catal
 
     return new Promise<Response>((resolve, reject) => {
       resolveDelayed = resolve;
-      const abort = (): void => reject(new DOMException("aborted", "AbortError"));
+      const abort = (): void =>
+        reject(new DOMException("aborted", "AbortError"));
       if (init?.signal?.aborted) {
         abort();
         return;
@@ -354,10 +405,12 @@ void test("unregister aborts in-flight discovery before it can resurrect a catal
   const refresh = runtime.refresh({ allowNetwork: true });
   await started;
   await runtime.unregisterExtensionProvider("ext.race", registration.id);
-  resolveDelayed(new Response(JSON.stringify({ data: [{ id: "must-not-resurrect" }] }), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  }));
+  resolveDelayed(
+    new Response(JSON.stringify({ data: [{ id: "must-not-resurrect" }] }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
   await refresh;
 
   assert.equal(catalogs.entries.has(registration.id), false);
@@ -375,12 +428,102 @@ void test("credential adapter does not reinterpret OAuth records as browser API 
   const credentials = new ProviderCredentialsStore(new MemoryProviderKeys());
 
   await assert.rejects(
-    credentials.modify("openai", () => Promise.resolve({
-      type: "oauth",
-      access: "access",
-      refresh: "refresh",
-      expires: Date.now() + 60_000,
-    } satisfies Credential)),
+    credentials.modify("openai", () =>
+      Promise.resolve({
+        type: "oauth",
+        access: "access",
+        refresh: "refresh",
+        expires: Date.now() + 60_000,
+      } satisfies Credential),
+    ),
     /taskpane OAuth store/,
   );
+});
+
+void test("inferOpenCodeContextWindow maps known families to catalog-tier values", () => {
+  // ~1M families
+  assert.equal(inferOpenCodeContextWindow("claude-opus-4-6"), 1_000_000);
+  assert.equal(inferOpenCodeContextWindow("claude-opus-5"), 1_000_000);
+  assert.equal(inferOpenCodeContextWindow("claude-fable-5"), 1_000_000);
+  assert.equal(inferOpenCodeContextWindow("claude-sonnet-5"), 1_000_000);
+  assert.equal(inferOpenCodeContextWindow("gemini-3.7-flash"), 1_048_576);
+  assert.equal(inferOpenCodeContextWindow("gpt-5.5"), 1_050_000);
+  assert.equal(inferOpenCodeContextWindow("gpt-5.6-terra"), 1_050_000);
+  assert.equal(inferOpenCodeContextWindow("gpt-5.4-pro"), 1_050_000);
+  assert.equal(inferOpenCodeContextWindow("deepseek-v4-flash"), 1_000_000);
+  assert.equal(inferOpenCodeContextWindow("deepseek-v4-pro"), 1_000_000);
+  assert.equal(inferOpenCodeContextWindow("glm-5.2"), 1_000_000);
+  assert.equal(inferOpenCodeContextWindow("kimi-k3"), 1_000_000);
+  assert.equal(inferOpenCodeContextWindow("nemotron-3-ultra-free"), 1_000_000);
+  assert.equal(inferOpenCodeContextWindow("mimo-v2.5"), 1_000_000);
+  assert.equal(inferOpenCodeContextWindow("qwen3.7-plus"), 1_000_000);
+  assert.equal(inferOpenCodeContextWindow("minimax-m3"), 512_000);
+
+  // Mid tiers
+  assert.equal(inferOpenCodeContextWindow("grok-4.5"), 500_000);
+  assert.equal(inferOpenCodeContextWindow("gpt-5.4"), 272_000);
+  assert.equal(inferOpenCodeContextWindow("gpt-5.9-codex"), 400_000);
+  assert.equal(inferOpenCodeContextWindow("gpt-5"), 400_000);
+
+  // 200k-262k families
+  assert.equal(inferOpenCodeContextWindow("claude-haiku-6"), 262_144);
+  assert.equal(inferOpenCodeContextWindow("qwen3.8-plus"), 262_144);
+  assert.equal(inferOpenCodeContextWindow("kimi-k4"), 262_144);
+  assert.equal(inferOpenCodeContextWindow("glm-5.3"), 262_144);
+  assert.equal(inferOpenCodeContextWindow("minimax-m4"), 262_144);
+  assert.equal(inferOpenCodeContextWindow("longcat-3.0"), 262_144);
+  assert.equal(inferOpenCodeContextWindow("omen-alpha"), 262_144);
+
+  // Free variants cap to the low tier
+  assert.equal(inferOpenCodeContextWindow("deepseek-v4-flash-free"), 200_000);
+  assert.equal(inferOpenCodeContextWindow("mimo-v2.5-free"), 200_000);
+  assert.equal(inferOpenCodeContextWindow("claude-sonnet-6-free"), 200_000);
+
+  // Case-insensitive matching
+  assert.equal(inferOpenCodeContextWindow("Claude-Opus-4-6"), 1_000_000);
+});
+
+void test("inferOpenCodeContextWindow falls back to 128k for unknown families", () => {
+  assert.equal(inferOpenCodeContextWindow("brand-new-model"), 128_000);
+  assert.equal(inferOpenCodeContextWindow("acme-ultra-9"), 128_000);
+});
+
+void test("OpenCode discovery keeps static catalog values and infers context for new ids", async () => {
+  const providerKeys = new MemoryProviderKeys();
+  await providerKeys.set("opencode", "oc-secret");
+  const catalogs = new MemoryCatalogs();
+  const fetchFn: typeof globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        data: [
+          { id: "claude-opus-4-6" },
+          { id: "brand-new-model" },
+          { id: "deepseek-v4-flash-free" },
+        ],
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      },
+    )) as typeof globalThis.fetch;
+
+  const runtime = createRuntime({ providerKeys, catalogs, fetchFn });
+  await runtime.models.refresh({ allowNetwork: true });
+
+  const byId = new Map(
+    runtime.models.getModels("opencode").map((model) => [model.id, model]),
+  );
+
+  // Static catalog stays authoritative for known ids.
+  assert.equal(byId.get("claude-opus-4-6")?.contextWindow, 1_000_000);
+  // Newly listed ids get inferred windows instead of a stale 32k default.
+  assert.equal(byId.get("brand-new-model")?.contextWindow, 128_000);
+  assert.equal(byId.get("deepseek-v4-flash-free")?.contextWindow, 200_000);
+  // Persisted catalog reflects the inferred values for next-launch restore.
+  const stored = catalogs.entries.get("opencode");
+  const storedById = new Map(
+    (stored?.models ?? []).map((model) => [model.id, model]),
+  );
+  assert.equal(storedById.get("brand-new-model")?.contextWindow, 128_000);
+  assert.equal(storedById.has("claude-opus-4-6"), false);
 });

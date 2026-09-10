@@ -12,6 +12,7 @@ import {
   type MutableModels,
   type Provider,
   type ProviderStreams,
+  type RefreshModelsContext,
 } from "@earendil-works/pi-ai";
 import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
 
@@ -23,7 +24,7 @@ import {
   type ProviderKeysStoreLike,
 } from "../storage/local/provider-credentials-store.js";
 
-const DEFAULT_DISCOVERED_CONTEXT_WINDOW = 32_768;
+const DEFAULT_DISCOVERED_CONTEXT_WINDOW = 256_000;
 const DEFAULT_DISCOVERED_MAX_TOKENS = 4_096;
 const MODEL_DISCOVERY_TIMEOUT_MS = 8_000;
 const MAX_MODEL_DISCOVERY_RESPONSE_BYTES = 2 * 1024 * 1024;
@@ -436,6 +437,246 @@ async function fetchWithDiscoveryTimeout(
   }
 }
 
+/** Live-catalog config for the OpenCode Zen/Go gateways. */
+interface OpenCodeDiscoveryConfig {
+  /** Live model catalog endpoint (OpenAI-style `{ data: [{ id }] }`). */
+  modelsUrl: string;
+  /** API root without `/v1` — baseUrl for anthropic-messages models. */
+  rootWithoutV1: string;
+  /** API root with `/v1` — baseUrl for the other streaming APIs. */
+  rootWithV1: string;
+}
+
+function opencodeDiscoveryConfig(
+  providerId: string,
+): OpenCodeDiscoveryConfig | undefined {
+  if (providerId === "opencode") {
+    return {
+      modelsUrl: "https://opencode.ai/zen/v1/models",
+      rootWithoutV1: "https://opencode.ai/zen",
+      rootWithV1: "https://opencode.ai/zen/v1",
+    };
+  }
+  if (providerId === "opencode-go") {
+    return {
+      modelsUrl: "https://opencode.ai/zen/go/v1/models",
+      rootWithoutV1: "https://opencode.ai/zen/go",
+      rootWithV1: "https://opencode.ai/zen/go/v1",
+    };
+  }
+  return undefined;
+}
+
+/**
+ * The `/models` endpoint returns bare IDs without API metadata, so infer the
+ * streaming API from the documented per-family endpoint table:
+ * "gpt-", "grok-", "muse-" prefixes → Responses, "claude-", "qwen" prefixes →
+ * Messages, "gemini-" (Zen) → Generative AI, everything else → Completions.
+ */
+function inferOpenCodeModelApi(modelId: string, providerId: string): Api {
+  const id = modelId.toLowerCase();
+  if (
+    id.startsWith("gpt-") ||
+    id.startsWith("grok-") ||
+    id.startsWith("muse-")
+  ) {
+    return "openai-responses";
+  }
+  if (id.startsWith("claude-") || id.startsWith("qwen")) {
+    return "anthropic-messages";
+  }
+  if (id.startsWith("gemini-") && providerId === "opencode") {
+    return "google-generative-ai";
+  }
+  return "openai-completions";
+}
+
+/**
+ * Prefix tables mirroring the static pi-ai OpenCode catalogs, most-specific
+ * first. `freeContextWindow` overrides the value for `-free` id variants.
+ */
+const OPENCODE_CONTEXT_WINDOW_RULES: readonly {
+  readonly prefixes: readonly string[];
+  readonly contextWindow: number;
+  readonly freeContextWindow?: number;
+}[] = [
+  // ~1M-token families.
+  { prefixes: ["gemini-"], contextWindow: 1_048_576 },
+  { prefixes: ["gpt-5.5", "gpt-5.6", "gpt-5.4-pro"], contextWindow: 1_050_000 },
+  { prefixes: ["gpt-5.4"], contextWindow: 272_000 },
+  { prefixes: ["gpt-5"], contextWindow: 400_000 },
+  { prefixes: ["grok-"], contextWindow: 500_000 },
+  {
+    prefixes: [
+      "claude-opus-4-6",
+      "claude-opus-4-7",
+      "claude-opus-4-8",
+      "claude-opus-5",
+      "claude-sonnet-4-6",
+      "claude-sonnet-5",
+      "claude-fable-",
+    ],
+    contextWindow: 1_000_000,
+  },
+  { prefixes: ["deepseek-v4-pro"], contextWindow: 1_000_000 },
+  {
+    prefixes: ["deepseek-v4-flash"],
+    contextWindow: 1_000_000,
+    freeContextWindow: 200_000,
+  },
+  { prefixes: ["glm-5.2"], contextWindow: 1_000_000 },
+  { prefixes: ["kimi-k3"], contextWindow: 1_000_000 },
+  { prefixes: ["nemotron-3-ultra"], contextWindow: 1_000_000 },
+  { prefixes: ["mimo-"], contextWindow: 1_000_000, freeContextWindow: 200_000 },
+  { prefixes: ["qwen3.7"], contextWindow: 1_000_000 },
+  { prefixes: ["minimax-m3"], contextWindow: 512_000 },
+  // 200k-262k families (free variants sit at the low end).
+  {
+    prefixes: [
+      "claude-",
+      "qwen",
+      "kimi-",
+      "glm-",
+      "minimax-",
+      "deepseek-",
+      "big-pickle",
+      "laguna-",
+      "ling-",
+      "north-mini",
+      "hy",
+      "muse-",
+      "longcat",
+      "omen-",
+    ],
+    contextWindow: 262_144,
+    freeContextWindow: 200_000,
+  },
+];
+
+/**
+ * The `/models` endpoint returns bare IDs without context metadata, so infer a
+ * conservative context window from the model-family prefix, using the static
+ * pi-ai catalogs as the source of truth. Unknown families fall back to
+ * DEFAULT_DISCOVERED_CONTEXT_WINDOW.
+ */
+export function inferOpenCodeContextWindow(modelId: string): number {
+  const id = modelId.toLowerCase();
+  const isFree = id.endsWith("-free");
+  for (const rule of OPENCODE_CONTEXT_WINDOW_RULES) {
+    if (rule.prefixes.some((prefix) => id.startsWith(prefix))) {
+      return isFree
+        ? (rule.freeContextWindow ?? rule.contextWindow)
+        : rule.contextWindow;
+    }
+  }
+  return DEFAULT_DISCOVERED_CONTEXT_WINDOW;
+}
+
+function buildDiscoveredOpenCodeModel(
+  providerId: string,
+  modelId: string,
+  config: OpenCodeDiscoveryConfig,
+): Model<Api> {
+  const api = inferOpenCodeModelApi(modelId, providerId);
+  const contextWindow = inferOpenCodeContextWindow(modelId);
+  return {
+    id: modelId,
+    name: modelId,
+    api,
+    provider: providerId,
+    baseUrl:
+      api === "anthropic-messages" ? config.rootWithoutV1 : config.rootWithV1,
+    reasoning: true,
+    input: ["text"],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow,
+    maxTokens: Math.min(DEFAULT_DISCOVERED_MAX_TOKENS, contextWindow),
+  };
+}
+
+/**
+ * Wrap a builtin OpenCode provider with live catalog discovery.
+ *
+ * Mirrors pi-ai's `createProvider` fetchModels wiring (restore stored catalog →
+ * fetch when network is allowed → persist), while keeping the static catalog
+ * authoritative for known IDs so verified per-model metadata (api, cost,
+ * contextWindow, compat) is preserved. Only newly listed IDs are added.
+ */
+function wrapWithOpenCodeDiscovery(
+  provider: Provider,
+  config: OpenCodeDiscoveryConfig,
+  getProxyUrl: () => Promise<string | undefined>,
+  fetchFn: typeof globalThis.fetch,
+): Provider {
+  let dynamicModels: readonly Model<Api>[] = [];
+  let inflightRefresh: Promise<void> | undefined;
+
+  const mergeModels = (): readonly Model<Api>[] => {
+    const staticModels = provider.getModels();
+    const staticIds = new Set(staticModels.map((model) => model.id));
+    const extras = dynamicModels.filter((model) => !staticIds.has(model.id));
+    return [...staticModels, ...extras];
+  };
+
+  return {
+    ...provider,
+    getModels: mergeModels,
+    refreshModels: (context: RefreshModelsContext): Promise<void> => {
+      inflightRefresh ??= (async () => {
+        try {
+          const stored = await context.store.read();
+          if (stored) {
+            dynamicModels = stored.models.filter(
+              (model) => model.provider === provider.id,
+            );
+          }
+          if (!context.allowNetwork || context.signal?.aborted) return;
+
+          // OpenCode gateway responses omit CORS headers, so route discovery
+          // through the office proxy when one is configured.
+          const requestUrl = await resolveDiscoveryRequestUrl(
+            config.modelsUrl,
+            getProxyUrl,
+          );
+          const headers: Record<string, string> = {
+            Accept: "application/json",
+          };
+          if (
+            context.credential?.type === "api_key" &&
+            context.credential.key
+          ) {
+            headers.Authorization = `Bearer ${context.credential.key}`;
+          }
+          const response = await fetchWithDiscoveryTimeout(
+            fetchFn,
+            requestUrl,
+            headers,
+            context.signal,
+          );
+          if (context.signal?.aborted) return;
+          if (!response.ok) {
+            throw new Error(
+              `Model discovery failed with HTTP ${response.status}.`,
+            );
+          }
+          const ids = parseModelIds(await readLimitedDiscoveryJson(response));
+          const staticIds = new Set(provider.getModels().map((m) => m.id));
+          dynamicModels = ids
+            .filter((id) => !staticIds.has(id))
+            .map((id) => buildDiscoveredOpenCodeModel(provider.id, id, config));
+          await context.store.write({
+            models: dynamicModels,
+            checkedAt: Date.now(),
+          });
+        } finally {
+          inflightRefresh = undefined;
+        }
+      })();
+      return inflightRefresh;
+    },
+  };
+}
+
 function createRegisteredProvider(
   registration: BrowserProviderRegistration,
   getProxyUrl: () => Promise<string | undefined>,
@@ -638,9 +879,22 @@ export class BrowserModelRuntime {
     });
 
     for (const provider of builtinProviders()) {
-      const browserProvider = provider.auth.apiKey
+      let browserProvider = provider.auth.apiKey
         ? provider
         : createBrowserAdapterProvider(provider);
+
+      // OpenCode catalogs move fast (new/free models rotate weekly); augment
+      // the static pi-ai catalog with live discovery from the /models endpoint.
+      const discovery = opencodeDiscoveryConfig(browserProvider.id);
+      if (discovery) {
+        browserProvider = wrapWithOpenCodeDiscovery(
+          browserProvider,
+          discovery,
+          this.getProxyUrl,
+          this.fetchFn,
+        );
+      }
+
       this.models.setProvider(browserProvider);
       this.builtinProviderIds.add(browserProvider.id);
     }

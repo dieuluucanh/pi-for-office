@@ -120,14 +120,16 @@ import {
 import { requestConfirmationDialog } from "../ui/confirm-dialog.js";
 import { TOOL_APPROVAL_OVERLAY_ID } from "../ui/overlay-ids.js";
 import { showActionToast, showToast } from "../ui/toast.js";
-import { PiSidebar } from "../ui/pi-sidebar.js";
+import { PiSidebar, type EmptyHint } from "../ui/pi-sidebar.js";
 import { createProxyBanner } from "../ui/proxy-banner.js";
 import { setActiveProviders } from "../models/active-providers.js";
 import { BrowserModelRuntime } from "../models/browser-model-runtime.js";
 import { promptForProviderConnection } from "../ui/api-key-dialog.js";
 import { openModelSelectorDialog } from "../ui/model-selector-dialog.js";
 import {
+  detectOfficeAppFromGlobals,
   getCurrentSpreadsheetHost,
+  type OfficeApp,
   type SpreadsheetHostKind,
 } from "../host/index.js";
 import { createWorkbookCoordinator } from "../workbook/coordinator.js";
@@ -206,6 +208,7 @@ import {
 } from "./runtime-utils.js";
 import { doesOverlayClaimEscape } from "../utils/escape-guard.js";
 import { PaneBridgeClient } from "../bridge/pane-client.js";
+import { ALL_BRIDGE_OPS } from "../bridge/registry.js";
 import type { OfficeHostApp } from "@dieulc/pi-office-protocol";
 
 function showErrorBanner(errorRoot: HTMLElement, message: string): void {
@@ -245,6 +248,78 @@ async function ensureDefaultProxyUrl(
   }
 }
 
+type DetectedOfficeApp = OfficeApp | null;
+
+/**
+ * Onboarding suggestion chips for the empty state, per host app. The Excel
+ * branch is the original set — same keys, same order — so Excel behavior and
+ * i18n are unchanged.
+ */
+function buildEmptyHintsForHost(app: DetectedOfficeApp): EmptyHint[] {
+  switch (app) {
+    case "word":
+      return [
+        {
+          label: t("hint.word.explain.label"),
+          prompt: t("hint.word.explain.prompt"),
+        },
+        {
+          label: t("hint.word.quality.label"),
+          prompt: t("hint.word.quality.prompt"),
+        },
+        {
+          label: t("hint.word.polish.label"),
+          prompt: t("hint.word.polish.prompt"),
+        },
+        {
+          label: t("hint.word.format.label"),
+          prompt: t("hint.word.format.prompt"),
+        },
+      ];
+    case "powerpoint":
+      return [
+        {
+          label: t("hint.powerpoint.explain.label"),
+          prompt: t("hint.powerpoint.explain.prompt"),
+        },
+        {
+          label: t("hint.powerpoint.quality.label"),
+          prompt: t("hint.powerpoint.quality.prompt"),
+        },
+        {
+          label: t("hint.powerpoint.notes.label"),
+          prompt: t("hint.powerpoint.notes.prompt"),
+        },
+        {
+          label: t("hint.powerpoint.polish.label"),
+          prompt: t("hint.powerpoint.polish.prompt"),
+        },
+      ];
+    default:
+      return [
+        { label: t("hint.explain.label"), prompt: t("hint.explain.prompt") },
+        { label: t("hint.quality.label"), prompt: t("hint.quality.prompt") },
+        {
+          label: t("hint.financial.label"),
+          prompt: t("hint.financial.prompt"),
+        },
+        { label: t("hint.format.label"), prompt: t("hint.format.prompt") },
+      ];
+  }
+}
+
+/** Empty-state tagline per host app (Excel is the fallback). */
+function buildTaglineForHost(app: DetectedOfficeApp): string {
+  switch (app) {
+    case "word":
+      return t("sidebar.empty.tagline.word");
+    case "powerpoint":
+      return t("sidebar.empty.tagline.powerpoint");
+    default:
+      return t("sidebar.empty.tagline");
+  }
+}
+
 export async function initTaskpane(opts: {
   appEl: HTMLElement;
   errorRoot: HTMLElement;
@@ -253,6 +328,11 @@ export async function initTaskpane(opts: {
 
   const changeTracker = new ChangeTracker();
   const spreadsheetHost = getCurrentSpreadsheetHost();
+
+  // Which Office application hosts the taskpane (Excel / Word / PowerPoint).
+  // Computed once at init scope so the system prompt, tool set, onboarding
+  // suggestions, and the Pi bridge all agree on the host identity.
+  const detectedApp = detectOfficeAppFromGlobals();
 
   // 1. Storage
   const { providerKeys, sessions, settings, customProviders, modelCatalogs } =
@@ -463,24 +543,10 @@ export async function initTaskpane(opts: {
 
   // 5. Create and mount PiSidebar
   const sidebar = new PiSidebar();
-  sidebar.emptyHints = [
-    {
-      label: t("hint.explain.label"),
-      prompt: t("hint.explain.prompt"),
-    },
-    {
-      label: t("hint.quality.label"),
-      prompt: t("hint.quality.prompt"),
-    },
-    {
-      label: t("hint.financial.label"),
-      prompt: t("hint.financial.prompt"),
-    },
-    {
-      label: t("hint.format.label"),
-      prompt: t("hint.format.prompt"),
-    },
-  ];
+  // Onboarding suggestions adapt to the host app. The Excel branch is the
+  // original set — same keys, same order — so Excel behavior is unchanged.
+  sidebar.emptyHints = buildEmptyHintsForHost(detectedApp);
+  sidebar.tagline = buildTaglineForHost(detectedApp);
 
   appEl.replaceChildren();
   appEl.appendChild(sidebar);
@@ -622,6 +688,7 @@ export async function initTaskpane(opts: {
         args.activeIntegrationIds,
       );
       return buildSystemPrompt({
+        hostApp: detectedApp,
         userInstructions: userRules,
         workbookInstructions: workbookRules,
         activeIntegrations,
@@ -634,6 +701,7 @@ export async function initTaskpane(opts: {
     } catch {
       setRulesActive(false);
       return buildSystemPrompt({
+        hostApp: detectedApp,
         activeConnections,
         localServices: localServicesSnapshot,
         availableSkills,
@@ -991,10 +1059,17 @@ export async function initTaskpane(opts: {
       const bridgeEnabled = await settings.get<boolean>("pi-bridge.enabled");
       if (!bridgeEnabled) return;
 
+      // Route bridge tool calls to the right pane. Falls back to
+      // "excel" for unknown hosts (e.g. WPS or Power BI).
+      const bridgeHost: OfficeHostApp =
+        detectedApp === "word" || detectedApp === "powerpoint"
+          ? detectedApp
+          : "excel";
+
       const bridgeClient = new PaneBridgeClient(
         {
-          host: "excel" as OfficeHostApp,
-          registry: new Map(),
+          host: bridgeHost,
+          registry: ALL_BRIDGE_OPS,
         },
         {
           onStatusChange: (connected) => {
@@ -1093,6 +1168,7 @@ export async function initTaskpane(opts: {
 
       const coreTools = createAllTools({
         hostKind: spreadsheetHost.kind,
+        hostApp: detectedApp,
         getExtensionManager: () => extensionManager,
         getSessionId: () => runtimeAgent?.sessionId ?? runtimeSessionId,
         skillReadCache: runtimeSkillReadCache,
