@@ -48,6 +48,15 @@ import {
 } from "../../tools/experimental-tool-gates.js";
 import { probeMcpServer } from "./extensions-hub-mcp-probe.js";
 import { showToast } from "../../ui/toast.js";
+import { BRIDGE_DEFAULT_PORT } from "@dieulc/pi-office-protocol";
+import {
+  disablePiBridge,
+  enablePiBridge,
+  getPiBridgeEnabled,
+  getPiBridgeState,
+  subscribePiBridgeState,
+  type PiBridgeState,
+} from "../../bridge/pi-bridge-manager.js";
 import {
   createToggleRow,
   createSectionHeader,
@@ -211,6 +220,7 @@ export async function renderConnectionsTab(args: {
     mcpServers,
     pythonUrlRaw,
     tmuxUrlRaw,
+    piBridgeEnabled,
   ] = await Promise.all([
     getExternalToolsEnabled(settings),
     sessionId
@@ -225,6 +235,7 @@ export async function renderConnectionsTab(args: {
     loadMcpServers(settings),
     settings.get(PYTHON_BRIDGE_URL_SETTING_KEY),
     settings.get(TMUX_BRIDGE_URL_SETTING_KEY),
+    getPiBridgeEnabled(),
   ]);
 
   const pythonUrl = typeof pythonUrlRaw === "string" ? pythonUrlRaw.trim() : "";
@@ -662,6 +673,22 @@ export async function renderConnectionsTab(args: {
     badges: [{ text: t("ext-hub-connections.piBridgeOff"), tone: "muted" }],
   });
 
+  // Enable/disable toggle — writes pi-bridge.enabled and starts/stops the
+  // bridge client live (no taskpane reload needed).
+  const piBridgeToggle = createToggleRow({
+    label: t("ext-hub-connections.piBridgeEnable"),
+    sublabel: t("ext-hub-connections.piBridgeEnableHint"),
+    checked: piBridgeEnabled,
+    onChange: (checked) => {
+      void runMutation(
+        () => (checked ? enablePiBridge() : disablePiBridge()),
+        "toggle",
+        t("ext-hub-connections.piBridgeToggleMsg"),
+      );
+    },
+  });
+  piBridgeItem.body.append(piBridgeToggle.root);
+
   // Setup command
   const piBridgeSetupLabel = document.createElement("p");
   piBridgeSetupLabel.className = "pi-hub-bridge-setup__label";
@@ -694,30 +721,58 @@ export async function renderConnectionsTab(args: {
   piBridgeSetupCmd.append(piBridgeCmdRow, piBridgeHint);
   piBridgeItem.body.append(piBridgeSetupLabel, piBridgeSetupCmd);
 
-  // Status display
+  // Status display (driven by the manager's real connection state)
   const piBridgeStatus = document.createElement("p");
   piBridgeStatus.className = "pi-hub-bridge-setup__hint";
-  piBridgeStatus.textContent = t("ext-hub-connections.piBridgeNotRunning");
 
-  // Probe button
+  const piBridgeStatusText = (state: PiBridgeState): string => {
+    switch (state.status) {
+      case "connected":
+        return t("ext-hub-connections.piBridgeConnected");
+      case "connecting":
+        return t("ext-hub-connections.piBridgeConnecting");
+      case "error":
+        return t("ext-hub-connections.piBridgeError", {
+          message: state.error ?? "unknown",
+        });
+      default:
+        return t("ext-hub-connections.piBridgeNotRunning");
+    }
+  };
+
+  const renderPiBridgeState = (state: PiBridgeState): void => {
+    piBridgeStatus.textContent = piBridgeStatusText(state);
+  };
+  renderPiBridgeState(getPiBridgeState());
+  const unsubscribePiBridge = subscribePiBridgeState((state) => {
+    if (!piBridgeStatus.isConnected) {
+      // Card was detached by a re-render — stop updating stale DOM.
+      unsubscribePiBridge();
+      return;
+    }
+    renderPiBridgeState(state);
+  });
+
+  // Probe button — bounded diagnostic that reads the bridge HTTP /health
+  // endpoint (now served by the bridge server itself).
   const probeBtn = createButton(t("bridge-setup.testConnection"), {
     compact: true,
     onClick: () => {
       piBridgeStatus.textContent = t("ext-hub-connections.piBridgeConnecting");
-      const probeUrl = "ws://127.0.0.1:38617";
-      void fetch(
-        probeUrl.replace("ws://", "http://").replace(/\/$/, "") + "/health",
-      )
-        .then((res) => {
-          if (res.ok) {
-            piBridgeStatus.textContent = t(
-              "ext-hub-connections.piBridgeConnected",
-            );
-          } else {
+      const probeUrl = `http://127.0.0.1:${BRIDGE_DEFAULT_PORT}/health`;
+      void fetch(probeUrl, { signal: AbortSignal.timeout(1500) })
+        .then(async (res) => {
+          if (!res.ok) {
             piBridgeStatus.textContent = t(
               "ext-hub-connections.piBridgeNotRunning",
             );
+            return;
           }
+          const body = (await res.json()) as { panes?: unknown[] } | null;
+          const count = Array.isArray(body?.panes) ? body.panes.length : 0;
+          piBridgeStatus.textContent = t("ext-hub-connections.piBridgePanes", {
+            count,
+          });
         })
         .catch(() => {
           piBridgeStatus.textContent = t(

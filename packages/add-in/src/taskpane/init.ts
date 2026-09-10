@@ -207,9 +207,7 @@ import {
   normalizeRuntimeTools,
 } from "./runtime-utils.js";
 import { doesOverlayClaimEscape } from "../utils/escape-guard.js";
-import { PaneBridgeClient } from "../bridge/pane-client.js";
-import { ALL_BRIDGE_OPS } from "../bridge/registry.js";
-import type { OfficeHostApp } from "@dieulc/pi-office-protocol";
+import { initPiBridgeFromSettings } from "../bridge/pi-bridge-manager.js";
 
 function showErrorBanner(errorRoot: HTMLElement, message: string): void {
   render(renderError(message), errorRoot);
@@ -1053,56 +1051,10 @@ export async function initTaskpane(opts: {
     },
   );
 
-  // ── Local Pi bridge (opt-in via pi-bridge.enabled) ──────────────
-  void (async () => {
-    try {
-      const bridgeEnabled = await settings.get<boolean>("pi-bridge.enabled");
-      if (!bridgeEnabled) return;
-
-      // Route bridge tool calls to the right pane. Falls back to
-      // "excel" for unknown hosts (e.g. WPS or Power BI).
-      const bridgeHost: OfficeHostApp =
-        detectedApp === "word" || detectedApp === "powerpoint"
-          ? detectedApp
-          : "excel";
-
-      const bridgeClient = new PaneBridgeClient(
-        {
-          host: bridgeHost,
-          registry: ALL_BRIDGE_OPS,
-        },
-        {
-          onStatusChange: (connected) => {
-            console.log(
-              connected
-                ? "[pi-bridge] Connected to local Pi process"
-                : "[pi-bridge] Disconnected from local Pi process",
-            );
-            document.dispatchEvent(
-              new CustomEvent("pi:pi-bridge-state-changed", {
-                detail: { connected },
-              }),
-            );
-          },
-          onServerError: (error) => {
-            console.warn(
-              "[pi-bridge] Server error:",
-              error.code,
-              error.message,
-            );
-          },
-        },
-      );
-
-      await bridgeClient.connect();
-      console.log("[pi-bridge] Bridge handshake complete");
-    } catch (error) {
-      console.warn(
-        "[pi-bridge] Could not connect (is the Pi process running?):",
-        error instanceof Error ? error.message : error,
-      );
-    }
-  })();
+  // ── Local Pi bridge (opt-in via the Settings → Connections toggle) ──
+  // The manager owns the client lifecycle + `pi-bridge.enabled`; it detects
+  // the host app itself, so nothing else needs to know about the bridge.
+  void initPiBridgeFromSettings();
 
   const normalizeApprovalMessage = (title: string, message: string): string => {
     const lines = message.split("\n");

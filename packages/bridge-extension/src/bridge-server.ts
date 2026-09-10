@@ -8,7 +8,11 @@
  */
 
 import { WebSocketServer, WebSocket } from "ws";
-import type { Server as HttpServer } from "node:http";
+import type {
+  IncomingMessage,
+  Server as HttpServer,
+  ServerResponse,
+} from "node:http";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 
@@ -49,6 +53,16 @@ const HEARTBEAT_INTERVAL_MS = 30_000;
 const MAX_TEXT_CHARS = 50_000;
 const MAX_DETAILS_BYTES = 1_000_000;
 
+/** Extra browser origins for the /health CORS gate, from env (comma-separated). */
+function parseExtraOrigins(): string[] {
+  const raw = process.env.PI_OFFICE_BRIDGE_ALLOWED_ORIGINS;
+  if (!raw) return [];
+  return raw
+    .split(/[,\s]+/u)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
 interface PendingCall {
   resolve(result: CallOfficeToolResult): void;
   reject(error: Error): void;
@@ -60,6 +74,7 @@ export class OfficeBridgeServer {
   private readonly handlers: BridgeServerHandlers;
   private readonly serverName: string;
   private readonly piVersion: string | null;
+  private readonly startedAt = Date.now();
 
   private httpServer: HttpServer | null = null;
   private wss: WebSocketServer | null = null;
@@ -86,7 +101,9 @@ export class OfficeBridgeServer {
 
   get actualPort(): number | null {
     const addr = this.httpServer?.address();
-    return typeof addr === "object" && addr !== null ? (addr as AddressInfo).port : null;
+    return typeof addr === "object" && addr !== null
+      ? (addr as AddressInfo).port
+      : null;
   }
 
   /** Pane list copy (ordered by most recent connection first). */
@@ -98,8 +115,13 @@ export class OfficeBridgeServer {
   start(): Promise<void> {
     if (this.wss) return Promise.resolve();
 
-    const httpServer = createServer();
-    const wss = new WebSocketServer({ server: httpServer, maxPayload: 16 * 1024 * 1024 });
+    const httpServer = createServer((req, res) =>
+      this.handleHttpRequest(req, res),
+    );
+    const wss = new WebSocketServer({
+      server: httpServer,
+      maxPayload: 16 * 1024 * 1024,
+    });
 
     this.httpServer = httpServer;
     this.wss = wss;
@@ -195,7 +217,11 @@ export class OfficeBridgeServer {
     return new Promise<CallOfficeToolResult>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error(`office-bridge: ${op} timed out after ${timeoutMs / 1000}s`));
+        reject(
+          new Error(
+            `office-bridge: ${op} timed out after ${timeoutMs / 1000}s`,
+          ),
+        );
       }, timeoutMs);
 
       this.pending.set(id, { resolve, reject, timer });
@@ -217,7 +243,11 @@ export class OfficeBridgeServer {
       if (!this.sendToPane(pane, message)) {
         clearTimeout(timer);
         this.pending.delete(id);
-        reject(new Error("office-bridge: pane disconnected before the tool call was sent"));
+        reject(
+          new Error(
+            "office-bridge: pane disconnected before the tool call was sent",
+          ),
+        );
       }
     });
   }
@@ -229,10 +259,125 @@ export class OfficeBridgeServer {
     }
   }
 
+  /* ── HTTP (health/diagnostics, loopback-only) ─────────────────────── */
+
+  /**
+   * Browser origins allowed to read this loopback HTTP surface. The add-in
+   * task pane runs at these origins (dev Vite server + hosted GitHub Pages).
+   * Extend with the PI_OFFICE_BRIDGE_ALLOWED_ORIGINS env var
+   * (comma-separated) when the add-in is hosted elsewhere.
+   */
+  private static readonly ALLOWED_ORIGINS: ReadonlySet<string> = new Set([
+    "https://localhost:3141",
+    "https://pi-excel.localhost",
+    "https://dieuluucanh.github.io",
+    ...parseExtraOrigins(),
+  ]);
+
+  private static resolveAllowOrigin(req: IncomingMessage): string | null {
+    const origin = req.headers.origin;
+    if (typeof origin !== "string" || origin.trim().length === 0) {
+      // Non-browser client (curl / tests / server tooling) — no CORS gate.
+      return "*";
+    }
+    if (OfficeBridgeServer.ALLOWED_ORIGINS.has(origin)) return origin;
+    return null; // Unknown browser origin → omit header; browser blocks.
+  }
+
+  /**
+   * Minimal loopback HTTP surface used by the add-in's "Test connection"
+   * probe and by curl. WebSocket upgrades are handled by `ws` at the server
+   * level; ordinary requests (GET /health, OPTIONS preflight) land here.
+   * The endpoint is unauthenticated but exposes only bridge metadata.
+   */
+  private handleHttpRequest(req: IncomingMessage, res: ServerResponse): void {
+    const urlRaw = req.url ?? "/";
+    let url: URL;
+    try {
+      url = new URL(urlRaw, "http://127.0.0.1");
+    } catch {
+      this.writeHttp(res, 400, { ok: false, error: "bad_request" }, req);
+      return;
+    }
+    const allowOrigin = OfficeBridgeServer.resolveAllowOrigin(req);
+
+    if (req.method === "OPTIONS") {
+      this.writeHttp(res, 204, null, req, allowOrigin);
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/health") {
+      const panes = this.attachedPanes().map((p) => ({
+        host: p.host,
+        paneId: p.paneId,
+        clientName: p.clientName,
+        connectedAt: p.connectedAt,
+        lastSeen: p.lastSeen,
+        model: p.model,
+        provider: p.provider,
+      }));
+
+      this.writeHttp(
+        res,
+        200,
+        {
+          ok: true,
+          service: this.serverName,
+          protocolVersion: BRIDGE_PROTOCOL_VERSION,
+          piVersion: this.piVersion,
+          port: this.actualPort,
+          uptimeMs: Date.now() - this.startedAt,
+          panes,
+        },
+        req,
+        allowOrigin,
+      );
+      return;
+    }
+
+    this.writeHttp(
+      res,
+      404,
+      { ok: false, error: "not_found" },
+      req,
+      allowOrigin,
+    );
+  }
+
+  private writeHttp(
+    res: ServerResponse,
+    status: number,
+    body: unknown,
+    _req?: IncomingMessage,
+    allowOrigin: string | null = "*",
+  ): void {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+      // Loopback-only server. The Private-Network header keeps the probe
+      // working from the hosted GitHub Pages origin (public → localhost).
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "*",
+      "Access-Control-Allow-Private-Network": "true",
+    };
+    if (allowOrigin !== null) {
+      headers["Access-Control-Allow-Origin"] = allowOrigin;
+      headers["Vary"] = "Origin";
+    }
+    res.writeHead(status, headers);
+    if (status === 204 || body === null) {
+      res.end();
+      return;
+    }
+    res.end(JSON.stringify(body));
+  }
+
   /* ── Internals ─────────────────────────────────────────────────────── */
 
   private findPane(host: OfficeHostApp): AttachedPane | null {
-    const sorted = [...this.panes].sort((a, b) => b.connectedAt - a.connectedAt);
+    const sorted = [...this.panes].sort(
+      (a, b) => b.connectedAt - a.connectedAt,
+    );
     return sorted.find((p) => p.host === host) ?? null;
   }
 
@@ -333,7 +478,9 @@ export class OfficeBridgeServer {
     // Only the pane that received the call may answer it.
     const pane = this.panes.find((p) => p.ws === ws);
     if (!pane) {
-      call.reject(new Error("office-bridge: pane disconnected before answering"));
+      call.reject(
+        new Error("office-bridge: pane disconnected before answering"),
+      );
       return;
     }
 
@@ -341,19 +488,25 @@ export class OfficeBridgeServer {
     this.pending.delete(msg.id);
 
     if (!msg.ok) {
-      call.reject(new Error(`office-bridge: ${msg.error ?? "office tool failed"}`));
+      call.reject(
+        new Error(`office-bridge: ${msg.error ?? "office tool failed"}`),
+      );
       return;
     }
 
-    const text = msg.text.length > MAX_TEXT_CHARS
-      ? `${msg.text.slice(0, MAX_TEXT_CHARS)}\n…[truncated: ${msg.text.length - MAX_TEXT_CHARS} chars]`
-      : msg.text;
+    const text =
+      msg.text.length > MAX_TEXT_CHARS
+        ? `${msg.text.slice(0, MAX_TEXT_CHARS)}\n…[truncated: ${msg.text.length - MAX_TEXT_CHARS} chars]`
+        : msg.text;
 
     let details: unknown = msg.details;
     if (details !== undefined) {
       const bytes = Buffer.byteLength(JSON.stringify(details));
       if (bytes > MAX_DETAILS_BYTES) {
-        details = { truncated: true, note: `details exceeded ${MAX_DETAILS_BYTES} bytes` };
+        details = {
+          truncated: true,
+          note: `details exceeded ${MAX_DETAILS_BYTES} bytes`,
+        };
       }
     }
 
@@ -368,7 +521,11 @@ export class OfficeBridgeServer {
     // reject them — tracked separately so we sweep all on disconnect).
     for (const [id, call] of this.pending) {
       clearTimeout(call.timer);
-      call.reject(new Error("office-bridge: pane disconnected while the tool was running"));
+      call.reject(
+        new Error(
+          "office-bridge: pane disconnected while the tool was running",
+        ),
+      );
       this.pending.delete(id);
     }
   }
@@ -387,7 +544,10 @@ export class OfficeBridgeServer {
     }, HEARTBEAT_INTERVAL_MS);
   }
 
-  private sendToPane(pane: WebSocket | AttachedPane, message: ServerMessage): boolean {
+  private sendToPane(
+    pane: WebSocket | AttachedPane,
+    message: ServerMessage,
+  ): boolean {
     const ws = pane instanceof WebSocket ? pane : pane.ws;
     if (ws.readyState !== WebSocket.OPEN) return false;
     try {

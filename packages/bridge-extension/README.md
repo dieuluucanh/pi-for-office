@@ -46,6 +46,24 @@ npm install
 pi -e ./src/index.ts
 ```
 
+## Enable in the add-in
+
+1. Install/run the bridge so a Pi process with this extension is listening
+   (see above). Keep that Pi process running in the background.
+2. Open pi-for-office in Excel / Word / PowerPoint.
+3. Go to **Settings → Connections → Local Pi agent (advanced)** and flip the
+   **Enable local Pi agent** toggle on. The card shows the live connection
+   state (Connecting… → Connected); no taskpane reload is needed.
+4. Verify with the card's **Test connection** button, or from a terminal:
+
+```bash
+curl http://127.0.0.1:38617/health
+# → { "ok": true, "service": "pi-office-bridge", "panes": [ … ] }
+```
+
+`/health` lists the attached pane(s) and their host app (excel / word /
+powerpoint), so it doubles as a quick host-detection check.
+
 ## Commands
 
 | Command | Description |
@@ -58,6 +76,11 @@ pi -e ./src/index.ts
 - **Port** — flag `--office-bridge-port <port>` or env `PI_OFFICE_BRIDGE_PORT`
   (default `38617`). The add-in connects to the same default; change both if you
   override it.
+- **Allowed origins** — env `PI_OFFICE_BRIDGE_ALLOWED_ORIGINS` (comma-separated)
+  extends the browser origins allowed to read `GET /health`. Defaults cover the
+  dev Vite server (`https://localhost:3141`) and the hosted GitHub Pages add-in
+  (`https://dieuluucanh.github.io`). The pane's WebSocket connection is
+  loopback-only and is not restricted by this list.
 
 ## Office tools
 

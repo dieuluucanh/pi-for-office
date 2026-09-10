@@ -65,6 +65,15 @@ npm run build               # build every package
 
 See each package's README for app-specific instructions.
 
+## Docs for development & releases
+
+- [docs/local-development.md](docs/local-development.md) — run & test everything
+  locally (add-in, Pi bridge extension, Python/tmux bridges, proxy), including
+  how to enable the **Local Pi agent** in Settings → Connections.
+- [docs/releasing.md](docs/releasing.md) — one tracked flow for publishing the
+  npm packages (`npm run release:status` / `release:check` / `release:publish`)
+  and deploying the add-in to GitHub Pages.
+
 ## License
 
 MIT. `packages/add-in` retains upstream attribution to
