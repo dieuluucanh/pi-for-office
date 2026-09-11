@@ -20,6 +20,7 @@ import {
   BRIDGE_PROTOCOL_VERSION,
   nextCallId,
   parseClientMessage,
+  type BridgeCapability,
   type ClientMessage,
   type OfficeHostApp,
   type ServerMessage,
@@ -40,6 +41,11 @@ export interface AttachedPane {
 export interface BridgeServerHandlers {
   /** A user typed a prompt in the add-in sidebar. */
   onUserMessage(text: string, pane: AttachedPane): void;
+  /**
+   * A pane attached or detached. Lets the host (Pi) refresh its status line
+   * immediately instead of waiting for the next session event.
+   */
+  onPanesChanged?(panes: readonly AttachedPane[]): void;
 }
 
 export interface CallOfficeToolResult {
@@ -70,9 +76,13 @@ interface PendingCall {
 }
 
 export class OfficeBridgeServer {
+  /** Capabilities advertised in `welcome` and `GET /health`. */
+  static readonly CAPABILITIES: readonly BridgeCapability[] = ["http-health"];
+
   private readonly port: number;
   private readonly handlers: BridgeServerHandlers;
   private readonly serverName: string;
+  private readonly serverVersion: string;
   private readonly piVersion: string | null;
   private readonly startedAt = Date.now();
 
@@ -86,11 +96,13 @@ export class OfficeBridgeServer {
   constructor(options: {
     port: number;
     serverName?: string;
+    serverVersion?: string;
     piVersion?: string | null;
     handlers: BridgeServerHandlers;
   }) {
     this.port = options.port;
     this.serverName = options.serverName ?? "pi-office-bridge";
+    this.serverVersion = options.serverVersion ?? "unknown";
     this.piVersion = options.piVersion ?? null;
     this.handlers = options.handlers;
   }
@@ -175,6 +187,7 @@ export class OfficeBridgeServer {
       pane.ws.close(1001, "bridge shutting down");
     }
     this.panes.length = 0;
+    this.notifyPanesChanged();
 
     return new Promise((resolve) => {
       wss.close(() => resolve());
@@ -323,6 +336,8 @@ export class OfficeBridgeServer {
         {
           ok: true,
           service: this.serverName,
+          serverVersion: this.serverVersion,
+          capabilities: OfficeBridgeServer.CAPABILITIES,
           protocolVersion: BRIDGE_PROTOCOL_VERSION,
           piVersion: this.piVersion,
           port: this.actualPort,
@@ -431,7 +446,10 @@ export class OfficeBridgeServer {
             protocolVersion: BRIDGE_PROTOCOL_VERSION,
             piVersion: this.piVersion,
             serverName: this.serverName,
+            serverVersion: this.serverVersion,
+            capabilities: [...OfficeBridgeServer.CAPABILITIES],
           });
+          this.notifyPanesChanged();
           break;
         }
         case "ping": {
@@ -513,6 +531,17 @@ export class OfficeBridgeServer {
     call.resolve({ text, details });
   }
 
+  /** Notify the host that the attached-pane set changed. Never throws. */
+  private notifyPanesChanged(): void {
+    try {
+      this.handlers.onPanesChanged?.(this.attachedPanes());
+    } catch (error) {
+      console.error(
+        `[office-bridge] onPanesChanged handler failed: ${String(error)}`,
+      );
+    }
+  }
+
   private detachPane(pane: AttachedPane): void {
     const idx = this.panes.findIndex((p) => p === pane);
     if (idx >= 0) this.panes.splice(idx, 1);
@@ -528,6 +557,8 @@ export class OfficeBridgeServer {
       );
       this.pending.delete(id);
     }
+
+    this.notifyPanesChanged();
   }
 
   private startHeartbeat(): void {

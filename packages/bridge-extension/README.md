@@ -37,6 +37,17 @@ Two flows:
 pi install npm:@dieulc/pi-office-bridge
 ```
 
+**Update to the latest** (the add-in's `/health` probe and version display
+require ≥ 0.2.0):
+
+```bash
+pi install npm:@dieulc/pi-office-bridge@latest
+```
+
+Then restart Pi. Note that `pi install` pins the version it fetched into
+`~/.pi/agent/npm/package.json`, so Pi will **not** auto-upgrade — re-run the
+command above to get the newest bridge.
+
 Or from the monorepo (development):
 
 ```bash
@@ -58,11 +69,29 @@ pi -e ./src/index.ts
 
 ```bash
 curl http://127.0.0.1:38617/health
-# → { "ok": true, "service": "pi-office-bridge", "panes": [ … ] }
+# → { "ok": true, "service": "pi-office-bridge", "serverVersion": "0.2.0",
+#     "capabilities": ["http-health"], "panes": [ … ] }
 ```
 
 `/health` lists the attached pane(s) and their host app (excel / word /
-powerpoint), so it doubles as a quick host-detection check.
+powerpoint), so it doubles as a quick host-detection check. The add-in's
+probe classifies the response (current / older bridge / timeout / browser
+blocked) instead of reporting a bare failure — see
+[`docs/local-development.md`](../../docs/local-development.md).
+
+## Version & capabilities
+
+Every `welcome` frame (and `GET /health`) advertises additive server
+metadata:
+
+- `serverVersion` — this package's version (e.g. `"0.2.0"`).
+- `capabilities` — `["http-health"]` means the HTTP `/health` surface is
+  served.
+
+Clients (the add-in card) treat an absent `capabilities` as “legacy bridge
+(< 0.2.0)” and tell the user to update instead of claiming the bridge is
+down. The connection state is surfaced live to the Pi TUI as soon as a pane
+attaches or detaches (`onPanesChanged`).
 
 ## Commands
 
@@ -75,7 +104,9 @@ powerpoint), so it doubles as a quick host-detection check.
 
 - **Port** — flag `--office-bridge-port <port>` or env `PI_OFFICE_BRIDGE_PORT`
   (default `38617`). The add-in connects to the same default; change both if you
-  override it.
+  override it (the add-in's bridge card has a **Bridge URL** row that both the
+  WebSocket client and the probe use). If the port is already taken by another
+  Pi process, the extension reports `EADDRINUSE` with the override hint.
 - **Allowed origins** — env `PI_OFFICE_BRIDGE_ALLOWED_ORIGINS` (comma-separated)
   extends the browser origins allowed to read `GET /health`. Defaults cover the
   dev Vite server (`https://localhost:3141`) and the hosted GitHub Pages add-in

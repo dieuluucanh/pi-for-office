@@ -48,15 +48,27 @@ import {
 } from "../../tools/experimental-tool-gates.js";
 import { probeMcpServer } from "./extensions-hub-mcp-probe.js";
 import { showToast } from "../../ui/toast.js";
-import { BRIDGE_DEFAULT_PORT } from "@dieulc/pi-office-protocol";
 import {
   disablePiBridge,
   enablePiBridge,
+  DEFAULT_PI_BRIDGE_URL,
   getPiBridgeEnabled,
   getPiBridgeState,
+  PI_BRIDGE_URL_SETTING_KEY,
   subscribePiBridgeState,
+  validatePiBridgeUrl,
   type PiBridgeState,
 } from "../../bridge/pi-bridge-manager.js";
+import {
+  healthUrlFromWsUrl,
+  probeBridgeHealth,
+} from "../../bridge/pi-bridge-probe.js";
+import {
+  resolvePiBridgeCardModel,
+  type PiBridgeModelOptions,
+  type PiBridgeProbeResult,
+  type PiBridgeServerInfo,
+} from "../../ui/pi-bridge-card-model.js";
 import {
   createToggleRow,
   createSectionHeader,
@@ -221,6 +233,7 @@ export async function renderConnectionsTab(args: {
     pythonUrlRaw,
     tmuxUrlRaw,
     piBridgeEnabled,
+    piBridgeUrlRaw,
   ] = await Promise.all([
     getExternalToolsEnabled(settings),
     sessionId
@@ -236,6 +249,7 @@ export async function renderConnectionsTab(args: {
     settings.get(PYTHON_BRIDGE_URL_SETTING_KEY),
     settings.get(TMUX_BRIDGE_URL_SETTING_KEY),
     getPiBridgeEnabled(),
+    settings.get(PI_BRIDGE_URL_SETTING_KEY),
   ]);
 
   const pythonUrl = typeof pythonUrlRaw === "string" ? pythonUrlRaw.trim() : "";
@@ -244,6 +258,10 @@ export async function renderConnectionsTab(args: {
     pythonUrl.length > 0 ? pythonUrl : DEFAULT_PYTHON_BRIDGE_URL;
   const effectiveTmuxUrl =
     tmuxUrl.length > 0 ? tmuxUrl : DEFAULT_TMUX_BRIDGE_URL;
+  const piBridgeUrl =
+    typeof piBridgeUrlRaw === "string" ? piBridgeUrlRaw.trim() : "";
+  const effectivePiBridgeUrl =
+    piBridgeUrl.length > 0 ? piBridgeUrl : DEFAULT_PI_BRIDGE_URL;
   const selectedProvider = webSearchConfig.provider;
   const providerInfo = WEB_SEARCH_PROVIDER_INFO[selectedProvider];
   const apiKey = getApiKeyForProvider(webSearchConfig);
@@ -670,8 +688,12 @@ export async function renderConnectionsTab(args: {
     description: t("ext-hub-connections.piBridgeDesc"),
     expandable: true,
     expanded: true,
-    badges: [{ text: t("ext-hub-connections.piBridgeOff"), tone: "muted" }],
   });
+
+  // Last classified /health probe verdict — fed into the pure card model
+  // (never written to the DOM directly). Server metadata + retry progress
+  // come from the manager state (see modelOptionsFrom below).
+  let lastProbe: PiBridgeProbeResult = { kind: "idle" };
 
   // Enable/disable toggle — writes pi-bridge.enabled and starts/stops the
   // bridge client live (no taskpane reload needed).
@@ -680,6 +702,7 @@ export async function renderConnectionsTab(args: {
     sublabel: t("ext-hub-connections.piBridgeEnableHint"),
     checked: piBridgeEnabled,
     onChange: (checked) => {
+      lastProbe = { kind: "idle" }; // fresh verdict after toggling
       void runMutation(
         () => (checked ? enablePiBridge() : disablePiBridge()),
         "toggle",
@@ -688,6 +711,76 @@ export async function renderConnectionsTab(args: {
     },
   });
   piBridgeItem.body.append(piBridgeToggle.root);
+
+  // Bridge URL — the ws:// endpoint used by BOTH the manager client (applied
+  // on the next toggle/restart) and the /health probe. Loopback-only, so the
+  // bridge surface stays local; see the port hint for --office-bridge-port /
+  // PI_OFFICE_BRIDGE_PORT.
+  let currentBridgeUrl: string = effectivePiBridgeUrl;
+  const piBridgeUrlInput = createConfigInput({
+    value: currentBridgeUrl,
+    placeholder: DEFAULT_PI_BRIDGE_URL,
+    type: "url",
+  });
+  piBridgeItem.body.appendChild(
+    createConfigRow(t("ext-hub-connections.bridgeUrl"), piBridgeUrlInput),
+  );
+  const piBridgeUrlHint = document.createElement("p");
+  piBridgeUrlHint.className = "pi-hub-bridge-setup__hint";
+  piBridgeUrlHint.textContent = t("ext-hub-connections.piBridgeUrlHint");
+  piBridgeItem.body.appendChild(piBridgeUrlHint);
+
+  const savePiBridgeUrl = (clear: boolean): void => {
+    const candidate = clear ? "" : piBridgeUrlInput.value.trim();
+    let normalized = "";
+    if (candidate.length > 0) {
+      try {
+        normalized = validatePiBridgeUrl(candidate);
+      } catch (err) {
+        showToast(
+          t("ext-hub-connections.toast.invalidUrl", {
+            error: err instanceof Error ? err.message : String(err),
+          }),
+        );
+        return;
+      }
+    }
+    const useDefault =
+      normalized.length === 0 || normalized === DEFAULT_PI_BRIDGE_URL;
+    const resolved = useDefault ? DEFAULT_PI_BRIDGE_URL : normalized;
+    void runMutation(
+      async () => {
+        if (useDefault) {
+          if (typeof settings.delete === "function") {
+            await settings.delete(PI_BRIDGE_URL_SETTING_KEY);
+          } else {
+            await settings.set(PI_BRIDGE_URL_SETTING_KEY, "");
+          }
+        } else {
+          await settings.set(PI_BRIDGE_URL_SETTING_KEY, resolved);
+        }
+      },
+      "config",
+      useDefault ? "pi-bridge URL set to default" : "pi-bridge URL saved",
+    ).then(() => {
+      currentBridgeUrl = resolved;
+      piBridgeUrlInput.value = resolved;
+    });
+  };
+  const piBridgeUrlSaveBtn = createButton(t("ext-hub-connections.saveButton"), {
+    compact: true,
+    onClick: () => savePiBridgeUrl(false),
+  });
+  const piBridgeUrlClearBtn = createButton(
+    t("ext-hub-connections.clearButton"),
+    {
+      compact: true,
+      onClick: () => savePiBridgeUrl(true),
+    },
+  );
+  piBridgeItem.body.appendChild(
+    createActionsRow(piBridgeUrlSaveBtn, piBridgeUrlClearBtn),
+  );
 
   // Setup command
   const piBridgeSetupLabel = document.createElement("p");
@@ -721,27 +814,57 @@ export async function renderConnectionsTab(args: {
   piBridgeSetupCmd.append(piBridgeCmdRow, piBridgeHint);
   piBridgeItem.body.append(piBridgeSetupLabel, piBridgeSetupCmd);
 
-  // Status display (driven by the manager's real connection state)
+  // Status display — badge + paragraph are both rendered from the pure card
+  // model (single source of truth): on every manager state change and after
+  // each probe. Nothing else writes to these two elements.
   const piBridgeStatus = document.createElement("p");
   piBridgeStatus.className = "pi-hub-bridge-setup__hint";
 
-  const piBridgeStatusText = (state: PiBridgeState): string => {
-    switch (state.status) {
-      case "connected":
-        return t("ext-hub-connections.piBridgeConnected");
-      case "connecting":
-        return t("ext-hub-connections.piBridgeConnecting");
-      case "error":
-        return t("ext-hub-connections.piBridgeError", {
-          message: state.error ?? "unknown",
-        });
-      default:
-        return t("ext-hub-connections.piBridgeNotRunning");
+  // Secondary line for probe verdicts (e.g. "/health OK — v0.2.0, 1 pane").
+  const piBridgeStatusDetail = document.createElement("p");
+  piBridgeStatusDetail.className = "pi-hub-bridge-setup__hint";
+
+  /**
+   * Model options from manager state: server metadata captured from `welcome`
+   * plus the reconnect attempt counter. The model is the only reader.
+   */
+  const modelOptionsFrom = (state: PiBridgeState): PiBridgeModelOptions => {
+    const opts: PiBridgeModelOptions = {};
+    if (state.server !== undefined) {
+      const server: PiBridgeServerInfo = {};
+      if (state.server.serverVersion !== undefined) {
+        server.serverVersion = state.server.serverVersion;
+      }
+      if (state.server.capabilities !== undefined) {
+        server.hasHttpHealth =
+          state.server.capabilities.includes("http-health");
+      }
+      opts.server = server;
     }
+    if (state.attempt > 0) {
+      opts.retry = { attempt: state.attempt };
+      if (state.nextRetryMs !== undefined) {
+        opts.retry.nextRetryMs = state.nextRetryMs;
+      }
+    }
+    return opts;
   };
 
   const renderPiBridgeState = (state: PiBridgeState): void => {
-    piBridgeStatus.textContent = piBridgeStatusText(state);
+    const model = resolvePiBridgeCardModel(
+      state,
+      lastProbe,
+      modelOptionsFrom(state),
+    );
+    piBridgeItem.setBadges([model.badge]);
+    piBridgeStatus.textContent = model.statusText;
+    if (model.detail !== undefined) {
+      piBridgeStatusDetail.textContent = model.detail;
+      piBridgeStatusDetail.style.display = "";
+    } else {
+      piBridgeStatusDetail.textContent = "";
+      piBridgeStatusDetail.style.display = "none";
+    }
   };
   renderPiBridgeState(getPiBridgeState());
   const unsubscribePiBridge = subscribePiBridgeState((state) => {
@@ -753,36 +876,30 @@ export async function renderConnectionsTab(args: {
     renderPiBridgeState(state);
   });
 
-  // Probe button — bounded diagnostic that reads the bridge HTTP /health
-  // endpoint (now served by the bridge server itself).
+  // Probe button — runs the classified /health probe; the verdict is fed back
+  // through the card model, which keeps the badge (WS state) authoritative.
   const probeBtn = createButton(t("bridge-setup.testConnection"), {
     compact: true,
     onClick: () => {
-      piBridgeStatus.textContent = t("ext-hub-connections.piBridgeConnecting");
-      const probeUrl = `http://127.0.0.1:${BRIDGE_DEFAULT_PORT}/health`;
-      void fetch(probeUrl, { signal: AbortSignal.timeout(1500) })
-        .then(async (res) => {
-          if (!res.ok) {
-            piBridgeStatus.textContent = t(
-              "ext-hub-connections.piBridgeNotRunning",
-            );
-            return;
-          }
-          const body = (await res.json()) as { panes?: unknown[] } | null;
-          const count = Array.isArray(body?.panes) ? body.panes.length : 0;
-          piBridgeStatus.textContent = t("ext-hub-connections.piBridgePanes", {
-            count,
-          });
+      piBridgeStatus.textContent = t("ext-hub-connections.piBridgeChecking");
+      const probeUrl = healthUrlFromWsUrl(currentBridgeUrl);
+      void probeBridgeHealth(probeUrl)
+        .then((result) => {
+          if (!piBridgeStatus.isConnected) return; // card detached
+          lastProbe = result;
+          renderPiBridgeState(getPiBridgeState());
         })
         .catch(() => {
-          piBridgeStatus.textContent = t(
-            "ext-hub-connections.piBridgeProbeFailed",
-          );
+          // Defensive: the probe never rejects; if it ever does, classify it
+          // as blocked so the user still gets a hint — never a bare "failed".
+          if (!piBridgeStatus.isConnected) return;
+          lastProbe = { kind: "blocked" };
+          renderPiBridgeState(getPiBridgeState());
         });
     },
   });
 
-  piBridgeItem.body.append(piBridgeStatus, probeBtn);
+  piBridgeItem.body.append(piBridgeStatus, piBridgeStatusDetail, probeBtn);
   piBridgeCard.appendChild(piBridgeItem.root);
   container.appendChild(piBridgeCard);
 }

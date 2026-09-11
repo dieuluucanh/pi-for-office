@@ -1,6 +1,6 @@
 {
   "name": "@dieulc/pi-office-bridge",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Native Pi extension — WebSocket bridge + Office tool proxy so Pi can drive Excel, Word, and PowerPoint through the pi-for-office add-in.",
   "type": "module",
   "license": "MIT",

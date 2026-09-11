@@ -97,6 +97,13 @@ extension instead: `pi install npm:@dieulc/pi-office-bridge`.)
 The toggle persists `pi-bridge.enabled` in add-in settings, so the bridge
 reconnects automatically on the next taskpane load.
 
+The connection **self-heals**: if the Pi socket drops, the card shows
+**Reconnecting (attempt N)…** with exponential backoff (1 s → 2 s → … →
+30 s cap, reset after 30 s of stability) and reconnects automatically when Pi
+returns — immediately on network regain / tab focus. A ping/pong watchdog
+force-disconnects half-open sockets (e.g. after hibernation), so the badge
+never stays **Connected** on a dead socket.
+
 > Before this feature, `pi-bridge.enabled` was never written by the UI — the
 > bridge could never actually start. The toggle (and the `/health` endpoint)
 > are the fix; keep them in mind when touching bridge setup.
@@ -104,17 +111,41 @@ reconnects automatically on the next taskpane load.
 ### 2c. Verify
 
 ```bash
-# The bridge server now answers HTTP /health on its port:
+# The bridge server answers HTTP /health on its port (bridge ≥ 0.2.0):
 curl http://127.0.0.1:38617/health
-# → { "ok": true, "service": "pi-office-bridge", "panes": [ … ] }
+# → { "ok": true, "service": "pi-office-bridge", "serverVersion": "0.2.0",
+#     "capabilities": ["http-health"], "panes": [ … ] }
 ```
 
 `panes` lists attached panes with their host (`excel` / `word` /
-`powerpoint`), so you can confirm host detection right away.
+`powerpoint`), so you can confirm host detection right away. `serverVersion`
+and `capabilities` tell clients the bridge is current.
+
+The card's **Test connection** button runs this probe and classifies the
+result: OK, “older bridge — /health unavailable”, timeout, or
+“browser blocked local network access” — never a bare failure. If it reports
+an older bridge, update it and restart Pi:
+
+```bash
+pi install npm:@dieulc/pi-office-bridge@latest
+```
+
+> **Local Network Access caveat:** on **Office on the web** with Chrome 142+
+the browser may block cross-origin fetch to loopback. Desktop Office
+(WebView2) is unaffected. The probe reports this as “browser blocked local
+network access” — the live WebSocket status is still authoritative.
 
 In the add-in, ask the agent to use an `office_*` tool (e.g. “read the current
 sheet” in Excel, “summarize this document” in Word). The result should return
 real document content — not “Unknown op”.
+
+### 2e. Custom URL / port
+
+The bridge card has a **Bridge URL** row (default `ws://127.0.0.1:38617`). To
+run the bridge on another port, start Pi with
+`--office-bridge-port <port>` or `PI_OFFICE_BRIDGE_PORT=<port>` and set the
+card URL to match — **both** the WebSocket client and the `/health` probe use
+it. The URL must stay loopback (`127.0.0.1` / `localhost`) for security.
 
 ### 2d. Run the extension tests
 
@@ -201,7 +232,11 @@ Then sideload the add-in and enable the Local Pi agent toggle.
 
 | Symptom | Likely cause | Fix |
 | --------- | -------------- | ----- |
-| “Could not reach the bridge.” in the Test connection probe | Bridge extension not running, or wrong port | Start `pi -e ./src/index.ts`; check `curl http://127.0.0.1:38617/health` |
+| “Test connection” says the bridge is an older version (/health unavailable) | Installed bridge < 0.2.0 (no HTTP surface) | `pi install npm:@dieulc/pi-office-bridge@latest`, restart Pi, probe again |
+| Probe times out (“No answer from /health within 3s”) | Bridge not running, or Pi restarting | Start `pi -e ./src/index.ts` (repo) or keep Pi running; `curl http://127.0.0.1:38617/health` |
+| Probe says “The browser blocked local network access” | Office on the web + Chrome 142+ Local Network Access | Use desktop Office (WebView2), or allow localhost access in the browser |
+| Badge stuck on “Reconnecting (attempt N)…” | Pi process died / socket dropped | Start Pi again — the card reconnects automatically (backoff + watchdog) |
+| Bridge on a different port than the card expects | Pi started with `--office-bridge-port` / `PI_OFFICE_BRIDGE_PORT` | Match the card's Bridge URL row to the port (both sides) |
 | Toggle stays “Error” with connection refused | Pi process not running the extension, or port conflict | Check the port (`EADDRINUSE`); override with `PI_OFFICE_BRIDGE_PORT` on both sides |
 | “Unknown op …” | Client registry empty (older add-in build) | Rebuild the add-in; this was fixed by wiring `ALL_BRIDGE_OPS` |
 | Word/PowerPoint registered as Excel | Host detection disabled | Rebuild the add-in; host detection runs from the bridge manager |

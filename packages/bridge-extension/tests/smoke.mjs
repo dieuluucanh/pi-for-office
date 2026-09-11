@@ -44,13 +44,19 @@ function httpOptions(port, path, headers = {}) {
 
 async function main() {
   const userMessages = [];
+  /** Pane-count snapshots seen by the onPanesChanged hook. */
+  const paneEvents = [];
   const server = new OfficeBridgeServer({
     port: 0, // ephemeral
     serverName: "pi-office-bridge-test",
+    serverVersion: "0.2.0-test",
     piVersion: "0.85.1-test",
     handlers: {
       onUserMessage: (text, pane) => {
         userMessages.push({ text, host: pane.host });
+      },
+      onPanesChanged: (panes) => {
+        paneEvents.push(panes.length);
       },
     },
   });
@@ -67,8 +73,20 @@ async function main() {
     throw new Error("expected zero panes before any hello");
   }
   if (healthBody.protocolVersion !== 1) throw new Error("bad protocolVersion");
+  if (healthBody.serverVersion !== "0.2.0-test")
+    throw new Error(
+      `health missing serverVersion: ${JSON.stringify(healthBody.serverVersion)}`,
+    );
+  if (
+    !Array.isArray(healthBody.capabilities) ||
+    !healthBody.capabilities.includes("http-health")
+  ) {
+    throw new Error(
+      `health missing capabilities: ${JSON.stringify(healthBody.capabilities)}`,
+    );
+  }
   console.log(
-    `[ok] GET /health → 200 (panes=${healthBody.panes.length}, svc=${healthBody.service})`,
+    `[ok] GET /health → 200 (panes=${healthBody.panes.length}, svc=${healthBody.service}, v=${healthBody.serverVersion})`,
   );
 
   // CORS gate: known origin reflected, unknown origin denied
@@ -122,6 +140,29 @@ async function main() {
     }),
   );
   await sleep(100);
+
+  // --- welcome carries additive version/capabilities metadata ---
+  const welcome = incoming.find((m) => m.type === "welcome");
+  if (!welcome) throw new Error("no welcome frame");
+  if (welcome.serverVersion !== "0.2.0-test") {
+    throw new Error(`welcome serverVersion=${String(welcome.serverVersion)}`);
+  }
+  if (
+    !Array.isArray(welcome.capabilities) ||
+    !welcome.capabilities.includes("http-health")
+  ) {
+    throw new Error(
+      `welcome capabilities=${JSON.stringify(welcome.capabilities)}`,
+    );
+  }
+  if (paneEvents.length !== 1 || paneEvents[0] !== 1) {
+    throw new Error(
+      `onPanesChanged attach event wrong: ${JSON.stringify(paneEvents)}`,
+    );
+  }
+  console.log(
+    "[ok] welcome advertises serverVersion + capabilities; onPanesChanged(1) on attach",
+  );
 
   // --- tool proxy: call from server side, answer from pane ---
   const toolPromise = server.callOfficeTool("excel", "read_range", {
@@ -233,7 +274,13 @@ async function main() {
   const remaining = server.attachedPanes();
   if (remaining.length !== 0)
     throw new Error("pane not cleaned up on disconnect");
-  console.log("[ok] pane removed on disconnect");
+  const lastEvent = paneEvents[paneEvents.length - 1];
+  if (lastEvent !== 0) {
+    throw new Error(
+      `onPanesChanged detach event wrong: last=${String(lastEvent)} all=${JSON.stringify(paneEvents)}`,
+    );
+  }
+  console.log("[ok] pane removed on disconnect; onPanesChanged(0) on detach");
 
   await server.stop();
   console.log("[ok] server stopped cleanly");

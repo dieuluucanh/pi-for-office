@@ -20,11 +20,30 @@ import {
   type ClientMessage,
   type OfficeHostApp,
   type ServerMessage,
+  type WelcomeMessage,
 } from "@dieulc/pi-office-protocol";
 import type { OfficeOpExecutor } from "./ops.js";
 
 const WELCOME_TIMEOUT_MS = 5_000;
 const PING_INTERVAL_MS = 25_000;
+
+/** Why a connect attempt failed — the UI turns this into an actionable line. */
+export type BridgeConnectFailureReason =
+  | "refused" // nothing listening (Pi not running, wrong port/URL)
+  | "timeout" // no welcome within the handshake budget
+  | "protocol-mismatch" // hello/welcome protocol versions differ
+  | "closed"; // server closed before the handshake finished
+
+/** Typed connect failure so callers can distinguish cause, not just message. */
+export class BridgeConnectError extends Error {
+  readonly reason: BridgeConnectFailureReason;
+
+  constructor(reason: BridgeConnectFailureReason, message: string) {
+    super(message);
+    this.name = "BridgeConnectError";
+    this.reason = reason;
+  }
+}
 
 export interface PaneBridgeClientOptions {
   host: OfficeHostApp;
@@ -39,9 +58,15 @@ export interface PaneBridgeClientCallbacks {
   /** The Pi agent finished answering a prompt this pane sent. */
   onAssistantFinal?(text: string, messageId?: string): void;
   /** Non-office tool activity from the Pi agent (bash, read, …). */
-  onActivity?(activity: { tool: string; status: string; summary?: string }): void;
+  onActivity?(activity: {
+    tool: string;
+    status: string;
+    summary?: string;
+  }): void;
   onServerError?(error: { code: string; message: string }): void;
   onStatusChange?(connected: boolean): void;
+  /** Server metadata from the welcome frame (version/capabilities). */
+  onWelcome?(welcome: WelcomeMessage): void;
 }
 
 function defaultPaneId(): string {
@@ -68,8 +93,13 @@ export class PaneBridgeClient {
   private connectReject: ((error: Error) => void) | null = null;
   private welcomeTimer: ReturnType<typeof setTimeout> | null = null;
   private connectionGen = 0;
+  /** Last pong timestamp — the watchdog uses this to spot half-open sockets. */
+  private lastPongAt = 0;
 
-  constructor(options: PaneBridgeClientOptions, callbacks: PaneBridgeClientCallbacks = {}) {
+  constructor(
+    options: PaneBridgeClientOptions,
+    callbacks: PaneBridgeClientCallbacks = {},
+  ) {
     this.host = options.host;
     this.clientName = options.clientName ?? "pi-for-office";
     this.paneId = options.paneId ?? defaultPaneId();
@@ -99,18 +129,33 @@ export class PaneBridgeClient {
 
       this.welcomeTimer = setTimeout(() => {
         if (gen === this.connectionGen) {
-          this.failConnect(new Error(`bridge: no welcome from ${this.url} within ${WELCOME_TIMEOUT_MS / 1000}s`));
+          this.failConnect(
+            new BridgeConnectError(
+              "timeout",
+              `bridge: no welcome from ${this.url} within ${WELCOME_TIMEOUT_MS / 1000}s`,
+            ),
+          );
         }
       }, WELCOME_TIMEOUT_MS);
 
       ws.addEventListener("error", () => {
         if (gen === this.connectionGen) {
-          this.failConnect(new Error(`bridge: connection to ${this.url} failed`));
+          this.failConnect(
+            new BridgeConnectError(
+              "refused",
+              `bridge: connection to ${this.url} failed (is the Pi process running?)`,
+            ),
+          );
         }
       });
       ws.addEventListener("close", () => {
         if (gen === this.connectionGen) {
-          this.failConnect(new Error("bridge: server closed before welcome"));
+          this.failConnect(
+            new BridgeConnectError(
+              "closed",
+              "bridge: server closed before welcome",
+            ),
+          );
         }
       });
       ws.addEventListener("open", () => {
@@ -156,7 +201,9 @@ export class PaneBridgeClient {
 
   /** Report the model/provider the pane's local agent is using (informational). */
   reportStatus(model?: string, provider?: string): boolean {
-    const payload: { type: "status"; model?: string; provider?: string } = { type: "status" };
+    const payload: { type: "status"; model?: string; provider?: string } = {
+      type: "status",
+    };
     if (model !== undefined) payload.model = model;
     if (provider !== undefined) payload.provider = provider;
     return this.send(payload);
@@ -174,6 +221,7 @@ export class PaneBridgeClient {
 
     if (msg.type === "welcome") {
       this.connected = true;
+      this.lastPongAt = Date.now();
       if (this.welcomeTimer !== null) {
         clearTimeout(this.welcomeTimer);
         this.welcomeTimer = null;
@@ -181,6 +229,7 @@ export class PaneBridgeClient {
       const resolve = this.connectResolve;
       this.connectResolve = null;
       this.connectReject = null;
+      this.callbacks.onWelcome?.(msg);
       this.callbacks.onStatusChange?.(true);
       this.startHeartbeat();
       resolve?.();
@@ -189,7 +238,9 @@ export class PaneBridgeClient {
 
     if (msg.type === "error") {
       if (msg.code === "protocol_mismatch") {
-        this.failConnect(new Error(msg.message));
+        this.failConnect(
+          new BridgeConnectError("protocol-mismatch", msg.message),
+        );
         return;
       }
       this.callbacks.onServerError?.({ code: msg.code, message: msg.message });
@@ -214,11 +265,17 @@ export class PaneBridgeClient {
         });
         break;
       case "pong":
+        // Liveness proof: a half-open socket that eats pings is dead weight.
+        this.lastPongAt = Date.now();
         break;
     }
   }
 
-  private handleToolCall(id: string, tool: string, args: Record<string, unknown>): void {
+  private handleToolCall(
+    id: string,
+    tool: string,
+    args: Record<string, DynamicValue>,
+  ): void {
     const executor = this.registry.get(tool);
     if (!executor) {
       this.send({
@@ -266,12 +323,45 @@ export class PaneBridgeClient {
   }
 
   private startHeartbeat(): void {
+    this.lastPongAt = Date.now();
     this.pingTimer = setInterval(() => {
-      this.send({ type: "ping", ts: Date.now() });
+      if (!this.send({ type: "ping", ts: Date.now() })) {
+        // Socket is gone but the close event may never come — call it dead.
+        this.killConnection("ping send failed");
+        return;
+      }
+      if (Date.now() - this.lastPongAt > PING_INTERVAL_MS * 2) {
+        // No pong for two full intervals → half-open socket (e.g. laptop
+        // hibernated). Kill it so the manager reconnects instead of showing
+        // a stale "Connected".
+        this.killConnection(
+          `no pong for ${Math.round((Date.now() - this.lastPongAt) / 1000)}s`,
+        );
+      }
     }, PING_INTERVAL_MS);
   }
 
-  private send(message: object): boolean {
+  /** Force-close a stale socket and report the disconnect to the manager. */
+  private killConnection(_why: string): void {
+    if (this.pingTimer !== null) {
+      clearInterval(this.pingTimer);
+      this.pingTimer = null;
+    }
+    const ws = this.ws;
+    this.ws = null;
+    if (ws) {
+      try {
+        ws.close(1001, "pane: stale connection");
+      } catch {
+        // Closing an already-dead socket can throw in some runtimes.
+      }
+      // Node's `ws` has terminate(); browsers don't — best effort.
+      (ws as WebSocket & { terminate?: () => void }).terminate?.();
+    }
+    this.setConnected(false);
+  }
+
+  private send(message: ClientMessage): boolean {
     const ws = this.ws;
     if (!ws || ws.readyState !== WebSocket.OPEN) return false;
     try {

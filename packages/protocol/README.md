@@ -14,5 +14,18 @@ same format at runtime.
 - **Client → Server:** `hello`, `ping`, `tool_result`, `user_message`, `status`
 - **Server → Client:** `welcome`, `pong`, `tool_call`, `agent_message` (delta/final), `tool_activity`, `error`
 
-See `src/protocol.ts` for the typed shapes. Bump `BRIDGE_PROTOCOL_VERSION` on
-breaking changes.
+## Version & capabilities
+
+`BRIDGE_PROTOCOL_VERSION` is bumped only on **breaking** message-shape changes.
+Additive fields keep both halves compatible:
+
+- `welcome.serverVersion?: string` — the bridge extension's package version.
+- `welcome.capabilities?: BridgeCapability[]` — currently `"http-health"`,
+  meaning the server answers `GET /health` with JSON metadata.
+
+Both are **optional**. An absent `capabilities` array (or absent
+`serverVersion`) means the peer is a legacy 0.1.0 bridge: clients must degrade
+gracefully (the live WebSocket status is still authoritative) instead of
+assuming the server is unreachable.
+
+See `src/protocol.ts` for the typed shapes.

@@ -122,7 +122,9 @@ export interface SectionHeaderOptions {
   onAction?: () => void;
 }
 
-export function createSectionHeader(opts: SectionHeaderOptions): HTMLDivElement {
+export function createSectionHeader(
+  opts: SectionHeaderOptions,
+): HTMLDivElement {
   const header = document.createElement("div");
   header.className = "pi-section-header";
 
@@ -154,6 +156,12 @@ export function createSectionHeader(opts: SectionHeaderOptions): HTMLDivElement 
 
 export type ItemCardIconColor = "green" | "blue" | "purple" | "amber";
 
+/** A small status pill shown in the card header (right side). */
+export interface ItemCardBadge {
+  text: string;
+  tone: "ok" | "warn" | "muted" | "info";
+}
+
 export interface ItemCardOptions {
   icon: IconContent;
   iconColor?: ItemCardIconColor;
@@ -162,7 +170,7 @@ export interface ItemCardOptions {
   meta?: string;
   expandable?: boolean;
   expanded?: boolean;
-  badges?: Array<{ text: string; tone: "ok" | "warn" | "muted" | "info" }>;
+  badges?: ItemCardBadge[];
   /** Content for the right side of the header (before chevron). */
   rightContent?: HTMLElement;
 }
@@ -172,6 +180,11 @@ export interface ItemCardResult {
   header: HTMLDivElement;
   body: HTMLDivElement;
   setExpanded: (expanded: boolean) => void;
+  /**
+   * Replace the header badges without rebuilding the card. Preserves
+   * `rightContent` and the chevron; pass `[]` to clear all badges.
+   */
+  setBadges: (badges: ItemCardBadge[]) => void;
 }
 
 /**
@@ -218,25 +231,47 @@ export function createItemCard(opts: ItemCardOptions): ItemCardResult {
   const right = document.createElement("div");
   right.className = "pi-item-card__right";
 
+  let chevronEl: SVGElement | null = null;
+  let currentBadges: HTMLElement[] = [];
+
+  /** Rebuild badge pills, keeping their slot before the chevron. */
+  const setBadges = (badges: ItemCardBadge[]): void => {
+    for (const el of currentBadges) el.remove();
+    currentBadges = [];
+    for (const badge of badges) {
+      const badgeEl = document.createElement("span");
+      badgeEl.className = `pi-overlay-badge pi-overlay-badge--${badge.tone}`;
+      badgeEl.textContent = badge.text;
+      if (chevronEl) {
+        right.insertBefore(badgeEl, chevronEl);
+      } else {
+        right.appendChild(badgeEl);
+      }
+      currentBadges.push(badgeEl);
+    }
+  };
+
   if (opts.rightContent) {
     right.appendChild(opts.rightContent);
   }
 
   if (opts.badges) {
-    for (const badge of opts.badges) {
-      const badgeEl = document.createElement("span");
-      badgeEl.className = `pi-overlay-badge pi-overlay-badge--${badge.tone}`;
-      badgeEl.textContent = badge.text;
-      right.appendChild(badgeEl);
-    }
+    setBadges(opts.badges);
   }
 
   if (opts.expandable) {
     const chevron = document.createElement("span");
-    setSafeInnerHTML(chevron, CHEVRON_SVG, "trusted static chevron SVG constant");
+    setSafeInnerHTML(
+      chevron,
+      CHEVRON_SVG,
+      "trusted static chevron SVG constant",
+    );
     // The SVG is the first child, extract it
     const svg = chevron.firstElementChild;
-    if (svg) right.appendChild(svg);
+    if (svg) {
+      chevronEl = svg as SVGElement;
+      right.appendChild(chevronEl);
+    }
   }
 
   header.appendChild(right);
@@ -272,12 +307,16 @@ export function createItemCard(opts: ItemCardOptions): ItemCardResult {
         card.removeAttribute("data-expanded");
       }
     },
+    setBadges,
   };
 }
 
 // ── Config row (inside item card body) ──────────────
 
-export function createConfigRow(label: string, content: HTMLElement): HTMLDivElement {
+export function createConfigRow(
+  label: string,
+  content: HTMLElement,
+): HTMLDivElement {
   const row = document.createElement("div");
   row.className = "pi-item-card__config-row";
 
@@ -361,7 +400,10 @@ export function createAddFormInput(placeholder: string): HTMLInputElement {
 
 // ── Empty inline ────────────────────────────────────
 
-export function createEmptyInline(emptyIcon: IconContent, text: string): HTMLDivElement {
+export function createEmptyInline(
+  emptyIcon: IconContent,
+  text: string,
+): HTMLDivElement {
   const el = document.createElement("div");
   el.className = "pi-empty-inline";
 
@@ -388,7 +430,12 @@ export function createActionsRow(...buttons: HTMLElement[]): HTMLDivElement {
 
 export function createButton(
   label: string,
-  opts?: { primary?: boolean; danger?: boolean; compact?: boolean; onClick?: () => void },
+  opts?: {
+    primary?: boolean;
+    danger?: boolean;
+    compact?: boolean;
+    onClick?: () => void;
+  },
 ): HTMLButtonElement {
   const btn = document.createElement("button");
   btn.type = "button";

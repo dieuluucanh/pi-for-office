@@ -7,21 +7,65 @@
  */
 import { OfficeBridgeServer } from "../dist/bridge-server.js";
 import { PaneBridgeClient } from "../../add-in/src/bridge/pane-client.ts";
+import { request as httpRequest } from "node:http";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/** Minimal GET helper against the loopback HTTP surface. */
+function httpGet(port, path, headers = {}) {
+  return new Promise((resolve, reject) => {
+    const req = httpRequest(
+      { host: "127.0.0.1", port, path, method: "GET", headers },
+      (res) => {
+        let body = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk) => (body += chunk));
+        res.on("end", () =>
+          resolve({ status: res.statusCode, headers: res.headers, body }),
+        );
+      },
+    );
+    req.on("error", reject);
+    req.end();
+  });
+}
+
 async function main() {
   const userMessages = [];
+  /** Pane-count snapshots seen by the onPanesChanged hook. */
+  const paneEvents = [];
   const server = new OfficeBridgeServer({
     port: 0,
     serverName: "interop",
+    serverVersion: "0.2.0-test",
     piVersion: "0.85.1-test",
     handlers: {
-      onUserMessage: (text, pane) => userMessages.push({ text, host: pane.host }),
+      onUserMessage: (text, pane) =>
+        userMessages.push({ text, host: pane.host }),
+      onPanesChanged: (panes) => paneEvents.push(panes.length),
     },
   });
   await server.start();
   const port = server.actualPort;
+
+  // HTTP surface mirrors the advertised metadata (used by the add-in probe).
+  const health = await httpGet(port, "/health");
+  const healthBody = JSON.parse(health.body);
+  if (health.status !== 200) throw new Error(`health status ${health.status}`);
+  if (healthBody.serverVersion !== "0.2.0-test") {
+    throw new Error(
+      `/health serverVersion=${JSON.stringify(healthBody.serverVersion)}`,
+    );
+  }
+  if (
+    !Array.isArray(healthBody.capabilities) ||
+    !healthBody.capabilities.includes("http-health")
+  ) {
+    throw new Error(
+      `/health capabilities=${JSON.stringify(healthBody.capabilities)}`,
+    );
+  }
+  console.log("[ok] /health advertises serverVersion + capabilities");
 
   // A fake Word op executor (no Office in this test).
   const fakeRegistry = new Map([
@@ -36,41 +80,79 @@ async function main() {
 
   let assistantFinal = null;
   const client = new PaneBridgeClient(
-    { host: "word", registry: fakeRegistry, url: `ws://127.0.0.1:${port}`, paneId: "pane-interop" },
-    { onAssistantFinal: (text) => { assistantFinal = text; } },
+    {
+      host: "word",
+      registry: fakeRegistry,
+      url: `ws://127.0.0.1:${port}`,
+      paneId: "pane-interop",
+    },
+    {
+      onAssistantFinal: (text) => {
+        assistantFinal = text;
+      },
+    },
   );
 
   await client.connect();
   console.log("[ok] client connected (welcome received)");
+  if (paneEvents.length !== 1 || paneEvents[0] !== 1) {
+    throw new Error(
+      `onPanesChanged attach wrong: ${JSON.stringify(paneEvents)}`,
+    );
+  }
+  console.log("[ok] onPanesChanged(1) fired on pane attach");
 
   // Server sees the pane as host "word".
   const panes = server.attachedPanes();
-  if (panes.length !== 1 || panes[0].host !== "word") throw new Error("server did not register word pane");
+  if (panes.length !== 1 || panes[0].host !== "word")
+    throw new Error("server did not register word pane");
   console.log("[ok] server registered word pane");
 
   // Tool proxy: server → client → fake executor → result.
-  const result = await server.callOfficeTool("word", "read_document", { scope: "all" });
-  if (!result.text.includes("Fake doc text (all)")) throw new Error("tool result mismatch");
-  console.log("[ok] tool_call routed through shared protocol → executor → tool_result");
+  const result = await server.callOfficeTool("word", "read_document", {
+    scope: "all",
+  });
+  if (!result.text.includes("Fake doc text (all)"))
+    throw new Error("tool result mismatch");
+  console.log(
+    "[ok] tool_call routed through shared protocol → executor → tool_result",
+  );
 
   // Pane → Pi chat.
   client.sendPrompt("Summarize the doc");
   await sleep(100);
-  if (userMessages.length !== 1 || userMessages[0].text !== "Summarize the doc") {
+  if (
+    userMessages.length !== 1 ||
+    userMessages[0].text !== "Summarize the doc"
+  ) {
     throw new Error("user_message not delivered to server");
   }
   console.log("[ok] pane user_message delivered to server handler");
 
   // Pi → pane reply.
-  server.broadcast({ type: "agent_message", kind: "final", text: "Here is the summary." });
+  server.broadcast({
+    type: "agent_message",
+    kind: "final",
+    text: "Here is the summary.",
+  });
   await sleep(100);
-  if (assistantFinal !== "Here is the summary.") throw new Error("final reply not delivered to pane");
+  if (assistantFinal !== "Here is the summary.")
+    throw new Error("final reply not delivered to pane");
   console.log("[ok] agent final reply delivered to pane");
 
   client.disconnect();
   await sleep(100);
-  if (server.attachedPanes().length !== 0) throw new Error("pane not cleaned up on disconnect");
-  console.log("[ok] pane cleaned up on disconnect");
+  if (server.attachedPanes().length !== 0)
+    throw new Error("pane not cleaned up on disconnect");
+  const lastEvent = paneEvents[paneEvents.length - 1];
+  if (lastEvent !== 0) {
+    throw new Error(
+      `onPanesChanged detach wrong: ${JSON.stringify(paneEvents)}`,
+    );
+  }
+  console.log(
+    "[ok] pane cleaned up on disconnect; onPanesChanged(0) on detach",
+  );
 
   await server.stop();
   console.log("\nALL INTEROP TESTS PASSED");

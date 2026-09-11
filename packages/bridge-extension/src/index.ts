@@ -21,6 +21,9 @@ import type {
   RegisteredCommand,
 } from "@earendil-works/pi-coding-agent";
 import { Type, type Static } from "typebox";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { BRIDGE_DEFAULT_PORT } from "./protocol.js";
 import type { AttachedPane } from "./bridge-server.js";
@@ -46,6 +49,24 @@ function piVersion(): string | null {
   }
 }
 
+/**
+ * The bridge extension's own package version, read from the `package.json`
+ * that ships next to this module. Falls back to `"unknown"` so a bundled or
+ * relocated install never breaks the `welcome` frame.
+ */
+function serverVersion(): string {
+  try {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const raw = readFileSync(resolve(here, "..", "package.json"), "utf8");
+    const pkg = JSON.parse(raw) as { version?: unknown };
+    return typeof pkg.version === "string" && pkg.version.length > 0
+      ? pkg.version
+      : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
 export default function (pi: ExtensionAPI): void {
   let server: OfficeBridgeServer | null = null;
   let currentCtx: ExtensionContext | null = null;
@@ -62,12 +83,14 @@ export default function (pi: ExtensionAPI): void {
     const raw = pi.getFlag(FLAG_PORT);
     if (typeof raw === "string" && raw.trim() !== "") {
       const parsed = Number.parseInt(raw.trim(), 10);
-      if (Number.isFinite(parsed) && parsed > 0 && parsed < 65536) return parsed;
+      if (Number.isFinite(parsed) && parsed > 0 && parsed < 65536)
+        return parsed;
     }
     const env = process.env.PI_OFFICE_BRIDGE_PORT;
     if (env) {
       const parsed = Number.parseInt(env, 10);
-      if (Number.isFinite(parsed) && parsed > 0 && parsed < 65536) return parsed;
+      if (Number.isFinite(parsed) && parsed > 0 && parsed < 65536)
+        return parsed;
     }
     return BRIDGE_DEFAULT_PORT;
   }
@@ -82,11 +105,28 @@ export default function (pi: ExtensionAPI): void {
     }
     const port = server.actualPort ?? resolvePort();
     if (panes.length === 0) {
-      ui.setStatus("office-bridge", `office bridge on :${port} — no app attached`);
+      ui.setStatus(
+        "office-bridge",
+        `office bridge on :${port} — no app attached`,
+      );
       return;
     }
     const labels = panes.map((p) => HOST_APP_LABEL[p.host]).join(", ");
-    ui.setStatus("office-bridge", `office: ${labels} attached (bridge :${port})`);
+    ui.setStatus(
+      "office-bridge",
+      `office: ${labels} attached (bridge :${port})`,
+    );
+  }
+
+  let panesChangedTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Debounced status refresh triggered by pane attach/detach (~100 ms). */
+  function scheduleStatusUpdate(): void {
+    if (panesChangedTimer !== null) clearTimeout(panesChangedTimer);
+    panesChangedTimer = setTimeout(() => {
+      panesChangedTimer = null;
+      updateStatus();
+    }, 100);
   }
 
   /** Extract display text from an assistant message content payload. */
@@ -98,7 +138,8 @@ export default function (pi: ExtensionAPI): void {
       if (typeof part !== "object" || part === null) continue;
       const p = part as { type?: unknown; text?: unknown };
       if (p.type === "text" && typeof p.text === "string") parts.push(p.text);
-      if (p.type === "thinking" && typeof p.text === "string") parts.push(p.text);
+      if (p.type === "thinking" && typeof p.text === "string")
+        parts.push(p.text);
     }
     return parts.join("\n").trim();
   }
@@ -120,6 +161,9 @@ export default function (pi: ExtensionAPI): void {
         _onUpdate,
         _ctx,
       ): Promise<AgentToolResult<unknown>> {
+        // SAFETY: `Params` is the TypeBox-derived shape of
+        // `descriptor.parameters` (always an object); the bridge forwards it
+        // verbatim as the Office.js args record, so this widening is sound.
         const args = params as unknown as Record<string, unknown>;
         const active = server;
         if (!active?.isRunning) {
@@ -127,8 +171,16 @@ export default function (pi: ExtensionAPI): void {
             `office-bridge: server is not running. Check the Pi extension loaded, then open the add-in.`,
           );
         }
-        const result = await active.callOfficeTool(descriptor.host, descriptor.op, args, signal);
-        return { content: [{ type: "text", text: result.text }], details: result.details };
+        const result = await active.callOfficeTool(
+          descriptor.host,
+          descriptor.op,
+          args,
+          signal,
+        );
+        return {
+          content: [{ type: "text", text: result.text }],
+          details: result.details,
+        };
       },
     });
   }
@@ -154,6 +206,7 @@ export default function (pi: ExtensionAPI): void {
     const bridge = new OfficeBridgeServer({
       port,
       serverName: "pi-office-bridge",
+      serverVersion: serverVersion(),
       piVersion: piVersion(),
       handlers: {
         onUserMessage: (text, pane) => {
@@ -163,16 +216,32 @@ export default function (pi: ExtensionAPI): void {
           // triggers a turn; if a turn is running it is queued until it settles.
           pi.sendUserMessage(text, { deliverAs: "followUp" });
         },
+        // Keep the TUI status line live: flip to "Excel attached" the moment
+        // the pane connects instead of waiting for the next message.
+        onPanesChanged: () => scheduleStatusUpdate(),
       },
     });
 
     try {
       await bridge.start();
       server = bridge;
-      ctx.ui.notify(`Office bridge listening on ws://127.0.0.1:${port}`, "info");
+      ctx.ui.notify(
+        `Office bridge listening on ws://127.0.0.1:${port}`,
+        "info",
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      ctx.ui.notify(`Office bridge failed to start: ${message}`, "error");
+      const code = (error as NodeJS.ErrnoException | null)?.code;
+      if (code === "EADDRINUSE") {
+        ctx.ui.notify(
+          `Office bridge: port ${port} is already in use — another Pi process ` +
+            `is running the bridge. Start this one on a free port with ` +
+            `--${FLAG_PORT} <port> or PI_OFFICE_BRIDGE_PORT=<port>.`,
+          "error",
+        );
+      } else {
+        ctx.ui.notify(`Office bridge failed to start: ${message}`, "error");
+      }
       console.error(`[office-bridge] start failed: ${message}`);
     }
     updateStatus();
@@ -181,6 +250,10 @@ export default function (pi: ExtensionAPI): void {
   pi.on("session_shutdown", async () => {
     currentCtx = null;
     pendingReplyTargets.length = 0;
+    if (panesChangedTimer !== null) {
+      clearTimeout(panesChangedTimer);
+      panesChangedTimer = null;
+    }
     const active = server;
     server = null;
     if (active) {
@@ -199,6 +272,8 @@ export default function (pi: ExtensionAPI): void {
 
     const text = flattenAssistantText(event.message.content);
     if (!text) return;
+    // SAFETY: assistant messages may carry an id that the Pi event type does
+    // not surface; read it through a narrow shape check before using it.
     const maybeId = (event.message as unknown as { id?: unknown }).id;
     server.broadcast({
       type: "agent_message",
@@ -230,7 +305,9 @@ export default function (pi: ExtensionAPI): void {
       type: "tool_activity",
       tool: event.toolName,
       status: event.isError ? "error" : "end",
-      summary: event.isError ? String(event.result ?? "tool failed") : undefined,
+      summary: event.isError
+        ? String(event.result ?? "tool failed")
+        : undefined,
     });
   });
 
@@ -248,7 +325,10 @@ export default function (pi: ExtensionAPI): void {
       const port = active.actualPort ?? resolvePort();
       const panes = active.attachedPanes();
       if (panes.length === 0) {
-        ctx.ui.notify(`Office bridge is listening on :${port} — no app attached yet.`, "info");
+        ctx.ui.notify(
+          `Office bridge is listening on :${port} — no app attached yet.`,
+          "info",
+        );
         return;
       }
       const lines = panes.map((p) => {
@@ -265,7 +345,8 @@ export default function (pi: ExtensionAPI): void {
 
   // Also list every office tool we exposed so users can confirm them:
   pi.registerCommand("office-tools", {
-    description: "List the office tools registered by the pi-office bridge extension.",
+    description:
+      "List the office tools registered by the pi-office bridge extension.",
     handler: async (_args: string, ctx: ExtensionCommandContext) => {
       ctx.ui.notify(
         `Office tools (${OFFICE_TOOL_NAMES.length}):\n${OFFICE_TOOL_NAMES.join("\n")}`,
