@@ -25,6 +25,11 @@ import { createWordInsertTextTool } from "./word/insert-text.js";
 import { createWordReplaceTextTool } from "./word/replace-text.js";
 import { createWordGetOverviewTool } from "./word/get-overview.js";
 import { createWordFormatRangeTool } from "./word/format-range.js";
+import { createWordInsertBlocksTool } from "./word/insert-blocks.js";
+import { createWordInsertTableTool } from "./word/insert-table.js";
+import { createWordInsertPageBreakTool } from "./word/insert-page-break.js";
+import { createWordInsertImageTool } from "./word/insert-image.js";
+import { createWordInsertHyperlinkTool } from "./word/insert-hyperlink.js";
 import { createPowerPointReadSlideTool } from "./powerpoint/read-slide.js";
 import { createPowerPointAddSlideTool } from "./powerpoint/add-slide.js";
 import { createPowerPointAddTextBoxTool } from "./powerpoint/add-text-box.js";
@@ -109,6 +114,11 @@ export function createAllTools(
           createWordInsertTextTool(),
           createWordReplaceTextTool(),
           createWordFormatRangeTool(),
+          createWordInsertBlocksTool(),
+          createWordInsertTableTool(),
+          createWordInsertPageBreakTool(),
+          createWordInsertImageTool(),
+          createWordInsertHyperlinkTool(),
         ]
       : []),
     ...(hostApp === "powerpoint"

@@ -18,6 +18,7 @@ import {
   BRIDGE_DEFAULT_PORT,
   BRIDGE_PROTOCOL_VERSION,
   type ClientMessage,
+  type HelloMessage,
   type OfficeHostApp,
   type ServerMessage,
   type WelcomeMessage,
@@ -52,6 +53,14 @@ export interface PaneBridgeClientOptions {
   url?: string;
   clientName?: string;
   paneId?: string;
+  /**
+   * Op ids this pane can execute, advertised in `hello` so the Pi server can
+   * gate tool calls and expose only the supported tools. When omitted the
+   * server treats this pane as a legacy 0.2.x client (v1 op set only).
+   */
+  ops?: readonly string[];
+  /** Catalog version the ops were derived from (documented in the shared catalog). */
+  catalogVersion?: number;
 }
 
 export interface PaneBridgeClientCallbacks {
@@ -85,6 +94,8 @@ export class PaneBridgeClient {
   private readonly registry: ReadonlyMap<string, OfficeOpExecutor>;
   private readonly callbacks: PaneBridgeClientCallbacks;
   private readonly url: string;
+  private readonly ops: readonly string[] | undefined;
+  private readonly catalogVersion: number | undefined;
 
   private ws: WebSocket | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
@@ -105,6 +116,8 @@ export class PaneBridgeClient {
     this.paneId = options.paneId ?? defaultPaneId();
     this.registry = options.registry;
     this.callbacks = callbacks;
+    this.ops = options.ops;
+    this.catalogVersion = options.catalogVersion;
     const port = extractPort(options.url) ?? BRIDGE_DEFAULT_PORT;
     this.url = options.url ?? `ws://127.0.0.1:${port}`;
   }
@@ -159,13 +172,17 @@ export class PaneBridgeClient {
         }
       });
       ws.addEventListener("open", () => {
-        this.send({
+        const hello: HelloMessage = {
           type: "hello",
           protocolVersion: BRIDGE_PROTOCOL_VERSION,
           host: this.host,
           clientName: this.clientName,
           paneId: this.paneId,
-        });
+        };
+        if (this.ops !== undefined) hello.ops = [...this.ops];
+        if (this.catalogVersion !== undefined)
+          hello.catalogVersion = this.catalogVersion;
+        this.send(hello);
       });
       ws.addEventListener("message", (event) => {
         if (gen === this.connectionGen) {

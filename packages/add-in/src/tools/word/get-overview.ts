@@ -1,19 +1,20 @@
 /**
  * word_get_overview — Structural overview of the live Word document.
  *
- * Paragraph/table counts plus a heading-level outline (style names only —
- * extracting heading text for the whole doc would require loading every
- * paragraph's text; use word_read_document for content).
+ * Paragraph/table counts plus a heading outline that includes heading TEXT
+ * (bounded), so the agent sees both the skeleton and where content lives.
  */
 
-import { Type, type Static } from "@sinclair/typebox";
+import { WORD_GET_OVERVIEW_PARAMETERS } from "@dieulc/pi-office-protocol/office-catalog";
+import type { Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { wordRun } from "../../word/helpers.js";
+import { wordCount, wordRun } from "../../word/helpers.js";
 import { getErrorMessage } from "../../utils/errors.js";
 import { t } from "../../language/index.js";
 
-const schema = Type.Object({});
+const MAX_HEADINGS = 200;
 
+const schema = WORD_GET_OVERVIEW_PARAMETERS;
 type Params = Static<typeof schema>;
 
 export function createWordGetOverviewTool(): AgentTool<typeof schema> {
@@ -21,8 +22,9 @@ export function createWordGetOverviewTool(): AgentTool<typeof schema> {
     name: "word_get_overview",
     label: t("tools.wordGetOverview"),
     description:
-      "Get a structural overview of the live Word document: paragraph/table counts " +
-      "and the heading-level outline. Call this before editing to learn the document structure.",
+      "Get a structural overview of the live Word document: paragraph/table counts, " +
+      "word count, and the heading outline WITH heading text. Call this before editing " +
+      "to learn the document structure and find where sections live.",
     parameters: schema,
     execute: async (
       _toolCallId: string,
@@ -32,57 +34,81 @@ export function createWordGetOverviewTool(): AgentTool<typeof schema> {
         const overview = await wordRun(async (context) => {
           const body = context.document.body;
 
-          // Paragraph proxies: style only (no text) to build the heading outline.
           const paragraphs = body.paragraphs;
           paragraphs.load("items/style");
+          paragraphs.load("items/text");
           const tables = body.tables;
           tables.load("items");
-
+          body.load("text");
           await context.sync();
 
-          const headings: string[] = [];
-          let paragraphCount = 0;
+          const headings: Array<{
+            level: number;
+            text: string;
+            index: number;
+          }> = [];
+          let index = 0;
           for (const para of paragraphs.items) {
-            paragraphCount += 1;
+            index += 1;
             const style = para.style;
             if (
               typeof style === "string" &&
               style.toLowerCase().startsWith("heading")
             ) {
-              // Keep only the style name — extracting heading text for the whole
-              // doc would require loading every paragraph's text (see read_document).
-              const level = style.replace(/^Heading\s*/i, "");
-              headings.push(`H${level || "?"}`);
+              const level = Number.parseInt(
+                style.replace(/^Heading\s*/i, ""),
+                10,
+              );
+              headings.push({
+                level: Number.isFinite(level) ? level : 0,
+                text: (para.text ?? "").trim().slice(0, 120),
+                index,
+              });
+              if (headings.length >= MAX_HEADINGS) break;
             }
-            if (headings.length >= 200 || paragraphCount >= 200_000) break;
+          }
+
+          const tableDims: string[] = [];
+          for (const table of tables.items) {
+            const rows = table.rows;
+            const cols = table.columns;
+            rows.load("items");
+            cols.load("items");
+            await context.sync();
+            tableDims.push(`${rows.items.length}×${cols.items.length}`);
           }
 
           return {
             paragraphCount: paragraphs.items.length,
             tableCount: tables.items.length,
-            headingCountByLevel: headings.reduce<Record<string, number>>(
-              (acc, h) => {
-                acc[h] = (acc[h] ?? 0) + 1;
-                return acc;
-              },
-              {},
-            ),
+            tableDims,
+            wordCount: wordCount(body.text ?? ""),
+            headings,
           };
         });
 
         const lines: string[] = ["**Document overview**"];
         lines.push(`- Paragraphs: ${overview.paragraphCount}`);
-        lines.push(`- Tables: ${overview.tableCount}`);
-        const headingEntries = Object.entries(overview.headingCountByLevel);
-        if (headingEntries.length > 0) {
+        lines.push(`- Words: ${overview.wordCount}`);
+        if (overview.tableCount > 0) {
           lines.push(
-            `- Headings: ${headingEntries.map(([level, n]) => `${level}×${n}`).join(", ")}`,
+            `- Tables: ${overview.tableDims.join(", ") || overview.tableCount}`,
           );
+        } else {
+          lines.push("- Tables: 0");
+        }
+        if (overview.headings.length > 0) {
+          lines.push("");
+          lines.push("- Heading outline:");
+          for (const h of overview.headings) {
+            const indent = "  ".repeat(Math.max(0, h.level - 1));
+            lines.push(`  ${indent}#${h.level} ${h.text || "(empty heading)"}`);
+          }
         } else {
           lines.push("- Headings: none detected");
         }
         lines.push(
-          "Use word_read_document to read text; word_insert_text / word_replace_text to edit.",
+          "Use word_read_document to read text; word_insert_blocks / word_insert_text / word_replace_text to edit.",
         );
 
         return {

@@ -2,76 +2,23 @@
  * word_format_range — Find text in the live Word document and apply formatting.
  *
  * Locates text by literal content (same search model as word_replace_text) and
- * applies bold/italic/underline/font size/font name/color/paragraph alignment
- * to every match.
+ * applies bold/italic/underline/font size/font name/color/paragraph alignment,
+ * style, spacing and indents to every match.
  */
 
-import { Type, type Static } from "@sinclair/typebox";
+import { WORD_FORMAT_RANGE_PARAMETERS } from "@dieulc/pi-office-protocol/office-catalog";
+import type { Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import {
-  wordRun,
   setWordFontProps,
+  setWordParagraphProps,
+  wordRun,
   type WordTextFormat,
 } from "../../word/helpers.js";
 import { getErrorMessage } from "../../utils/errors.js";
 import { t } from "../../language/index.js";
 
-const schema = Type.Object({
-  text: Type.String({
-    description:
-      "Literal text to find and format. Every occurrence is formatted.",
-  }),
-  matchCase: Type.Optional(
-    Type.Boolean({
-      description: "Case-sensitive search (default false).",
-    }),
-  ),
-  bold: Type.Optional(
-    Type.Boolean({
-      description: "Set bold (true) or unbold (false).",
-    }),
-  ),
-  italic: Type.Optional(
-    Type.Boolean({
-      description: "Set italic (true) or unitalicize (false).",
-    }),
-  ),
-  underline: Type.Optional(
-    Type.Boolean({
-      description: "Underline the text (single underline).",
-    }),
-  ),
-  size: Type.Optional(
-    Type.Number({
-      description: "Font size in points (e.g. 16).",
-    }),
-  ),
-  name: Type.Optional(
-    Type.String({
-      description: 'Font name (e.g. "Times New Roman").',
-    }),
-  ),
-  color: Type.Optional(
-    Type.String({
-      description: 'Font color as #RRGGBB (e.g. "#000000").',
-    }),
-  ),
-  alignment: Type.Optional(
-    Type.Union(
-      [
-        Type.Literal("Left"),
-        Type.Literal("Centered"),
-        Type.Literal("Right"),
-        Type.Literal("Justified"),
-      ],
-      {
-        description:
-          'Paragraph alignment. Word values: "Left", "Centered" (note the capital C), "Right", "Justified".',
-      },
-    ),
-  ),
-});
-
+const schema = WORD_FORMAT_RANGE_PARAMETERS;
 type Params = Static<typeof schema>;
 
 export function createWordFormatRangeTool(): AgentTool<typeof schema> {
@@ -80,8 +27,10 @@ export function createWordFormatRangeTool(): AgentTool<typeof schema> {
     label: t("tools.wordFormatRange"),
     description:
       "Find text in the live Word document and apply formatting: bold, italic, underline, " +
-      'font size (points), font name, color (#RRGGBB), and paragraph alignment ("Left"/"Centered"/"Right"/"Justified"). ' +
-      "Use this to bold/size/center existing content — e.g. format a document title.",
+      'font size (points), font name, color (#RRGGBB), paragraph alignment ("Left"/"Centered"/"Right"/"Justified"), ' +
+      'paragraph style (e.g. "Heading 1"), spacing, and indents. ' +
+      "Use this to bold/size/center existing content — e.g. format a document title. " +
+      "Formatting is fully supported — never tell the user it is not.",
     parameters: schema,
     execute: async (
       _toolCallId: string,
@@ -94,7 +43,37 @@ export function createWordFormatRangeTool(): AgentTool<typeof schema> {
         };
       }
 
-      const format: WordTextFormat = params;
+      const fontFormat: WordTextFormat = {
+        ...(params.bold === undefined ? {} : { bold: params.bold }),
+        ...(params.italic === undefined ? {} : { italic: params.italic }),
+        ...(params.underline === undefined
+          ? {}
+          : { underline: params.underline }),
+        ...(params.size === undefined ? {} : { size: params.size }),
+        ...(params.name === undefined ? {} : { name: params.name }),
+        ...(params.color === undefined ? {} : { color: params.color }),
+      };
+      const paragraphFormat = {
+        ...(params.style === undefined ? {} : { style: params.style }),
+        ...(params.alignment === undefined
+          ? {}
+          : { alignment: params.alignment }),
+        ...(params.spaceBefore === undefined
+          ? {}
+          : { spaceBefore: params.spaceBefore }),
+        ...(params.spaceAfter === undefined
+          ? {}
+          : { spaceAfter: params.spaceAfter }),
+        ...(params.lineSpacing === undefined
+          ? {}
+          : { lineSpacing: params.lineSpacing }),
+        ...(params.firstLineIndent === undefined
+          ? {}
+          : { firstLineIndent: params.firstLineIndent }),
+        ...(params.leftIndent === undefined
+          ? {}
+          : { leftIndent: params.leftIndent }),
+      };
 
       try {
         const formatted = await wordRun(async (context) => {
@@ -107,22 +86,18 @@ export function createWordFormatRangeTool(): AgentTool<typeof schema> {
           const count = results.items.length;
           if (count === 0) return 0;
 
-          // Font props are writable on the proxy — queue them for all ranges
-          // without extra syncs.
           for (const range of results.items) {
-            setWordFontProps(range, format);
+            setWordFontProps(range, fontFormat);
           }
 
-          if (params.alignment !== undefined) {
-            // Alignment lives on Word.Paragraph; paragraph proxies must be
-            // loaded (and synced) before they can be written.
+          if (Object.keys(paragraphFormat).length > 0) {
             for (const range of results.items) {
               range.paragraphs.load("items");
             }
             await context.sync();
             for (const range of results.items) {
               for (const paragraph of range.paragraphs.items) {
-                paragraph.alignment = params.alignment;
+                setWordParagraphProps(paragraph, paragraphFormat);
               }
             }
           }
@@ -152,8 +127,19 @@ export function createWordFormatRangeTool(): AgentTool<typeof schema> {
         if (params.size !== undefined) applied.push(`size=${params.size}`);
         if (params.name !== undefined) applied.push(`name=${params.name}`);
         if (params.color !== undefined) applied.push(`color=${params.color}`);
+        if (params.style !== undefined) applied.push(`style=${params.style}`);
         if (params.alignment !== undefined)
           applied.push(`alignment=${params.alignment}`);
+        if (params.spaceBefore !== undefined)
+          applied.push(`spaceBefore=${params.spaceBefore}`);
+        if (params.spaceAfter !== undefined)
+          applied.push(`spaceAfter=${params.spaceAfter}`);
+        if (params.lineSpacing !== undefined)
+          applied.push(`lineSpacing=${params.lineSpacing}`);
+        if (params.firstLineIndent !== undefined)
+          applied.push(`firstLineIndent=${params.firstLineIndent}`);
+        if (params.leftIndent !== undefined)
+          applied.push(`leftIndent=${params.leftIndent}`);
 
         return {
           content: [

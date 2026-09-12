@@ -123,11 +123,11 @@ async function main() {
   console.log("[ok] GET /nope → 404");
 
   // --- connect a fake Excel pane ---
-  const ws = new WebSocket(`ws://127.0.0.1:${port}`);
+  let ws = new WebSocket(`ws://127.0.0.1:${port}`);
   const opened = new Promise((r) => ws.once("open", r));
   await opened;
 
-  const incoming = [];
+  let incoming = [];
   ws.on("message", (raw) => incoming.push(JSON.parse(raw.toString())));
 
   ws.send(
@@ -163,6 +163,29 @@ async function main() {
   console.log(
     "[ok] welcome advertises serverVersion + capabilities; onPanesChanged(1) on attach",
   );
+
+  // --- legacy pane (no ops advertised) → v1 capability gating ---
+  const legacyPane = server.attachedPanes().find((p) => p.host === "excel");
+  if (!legacyPane) throw new Error("excel pane missing");
+  if (legacyPane.ops !== null)
+    throw new Error("legacy pane should have ops=null");
+  if (legacyPane.catalogVersion !== null)
+    throw new Error("legacy pane should have catalogVersion=null");
+  console.log("[ok] pane without ops treated as legacy (v1 op set)");
+  const legacyBlocked = server.callOfficeTool("excel", "format_cells", {
+    range: "A1",
+  });
+  try {
+    await legacyBlocked;
+    throw new Error("legacy pane must not run post-v1 ops");
+  } catch (e) {
+    if (!e.message.includes("requires a newer add-in")) {
+      throw new Error(`legacy gating message wrong: ${e.message}`);
+    }
+    console.log(
+      `[ok] legacy pane gated from post-v1 op: ${e.message.slice(0, 60)}…`,
+    );
+  }
 
   // --- tool proxy: call from server side, answer from pane ---
   const toolPromise = server.callOfficeTool("excel", "read_range", {
@@ -249,7 +272,119 @@ async function main() {
     throw new Error("health pane host wrong");
   if (healthWithPane.panes[0].model !== "mimo-v2.5")
     throw new Error("health pane model wrong");
+  if (healthWithPane.panes[0].ops !== null)
+    throw new Error("health legacy pane should show ops=null");
+  if (healthWithPane.catalogVersion !== 1)
+    throw new Error("health should advertise server catalogVersion=1");
   console.log("[ok] /health lists attached excel pane w/ model+provider");
+
+  // --- modern pane (advertises ops) → normalization + per-op gating ---
+  ws.close();
+  await sleep(150);
+
+  const ws2 = new WebSocket(`ws://127.0.0.1:${port}`);
+  const opened2 = new Promise((r) => ws2.once("open", r));
+  await opened2;
+  const incoming2 = [];
+  ws2.on("message", (raw) => incoming2.push(JSON.parse(raw.toString())));
+  ws2.send(
+    JSON.stringify({
+      type: "hello",
+      protocolVersion: 1,
+      host: "excel",
+      clientName: "modern-pane",
+      paneId: "pane-modern",
+      ops: [
+        "excel.get_overview",
+        "excel.read_range",
+        "excel.write_cells",
+        "excel.fill_formula",
+        "excel.format_cells",
+        "excel.bogus", // unknown → ignored
+        "word.get_overview", // foreign host → ignored
+      ],
+      catalogVersion: 1,
+    }),
+  );
+  await sleep(100);
+
+  const modern = server.attachedPanes().find((p) => p.paneId === "pane-modern");
+  if (!modern) throw new Error("modern pane missing");
+  const expectedModernOps = [
+    "excel.get_overview",
+    "excel.read_range",
+    "excel.write_cells",
+    "excel.fill_formula",
+    "excel.format_cells",
+  ];
+  if (
+    modern.ops.length !== expectedModernOps.length ||
+    expectedModernOps.some((op) => !modern.ops.includes(op))
+  ) {
+    throw new Error(
+      `modern ops normalized wrong: ${JSON.stringify(modern.ops)}`,
+    );
+  }
+  if (modern.catalogVersion !== 1)
+    throw new Error("modern catalogVersion not stored");
+  if (modern.opsIgnoredCount !== 2)
+    throw new Error(
+      `opsIgnoredCount should be 2, got ${modern.opsIgnoredCount}`,
+    );
+  console.log(
+    "[ok] hello ops normalized against catalog (unknown/foreign dropped)",
+  );
+
+  const unadvertised = server.callOfficeTool("excel", "charts", {
+    action: "list",
+  });
+  try {
+    await unadvertised;
+    throw new Error("unadvertised op must be rejected");
+  } catch (e) {
+    if (!e.message.includes("does not advertise")) {
+      throw new Error(`unadvertised gating message wrong: ${e.message}`);
+    }
+    console.log(
+      `[ok] unadvertised op rejected on modern pane: ${e.message.slice(0, 70)}…`,
+    );
+  }
+
+  const healthModern = JSON.parse((await httpGet(port, "/health")).body);
+  const modernEntry = healthModern.panes.find(
+    (p) => p.paneId === "pane-modern",
+  );
+  if (!modernEntry) throw new Error("modern pane not in /health");
+  if (modernEntry.catalogVersion !== 1)
+    throw new Error("health modern catalogVersion");
+  if (modernEntry.ops.length !== expectedModernOps.length)
+    throw new Error("health modern ops count wrong");
+  if (modernEntry.opsIgnoredCount !== 2)
+    throw new Error("health modern opsIgnoredCount");
+  console.log("[ok] /health advertises per-pane ops + catalogVersion");
+
+  // Tool proxy still works for an advertised op on the modern pane.
+  const toolPromise2 = server.callOfficeTool("excel", "format_cells", {
+    range: "A1:B1",
+    bold: true,
+  });
+  await sleep(100);
+  const toolCall2 = incoming2.find((m) => m.type === "tool_call");
+  if (!toolCall2) throw new Error("no tool_call for advertised format_cells");
+  ws2.send(
+    JSON.stringify({
+      type: "tool_result",
+      id: toolCall2.id,
+      ok: true,
+      text: "formatted A1:B1",
+    }),
+  );
+  const formatResult = await toolPromise2;
+  console.log(`[ok] advertised op proxied: "${formatResult.text}"`);
+
+  // Point the remaining legacy sections at the modern connection.
+  ws = ws2;
+  incoming = incoming2;
 
   // --- timeout path: a tool call nobody answers ---
   const slow = server.callOfficeTool(

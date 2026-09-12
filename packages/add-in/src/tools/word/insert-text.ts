@@ -2,87 +2,36 @@
  * word_insert_text — Insert text into the live Word document.
  *
  * Locations: "end" (default), "start", or "replace_selection".
- * Optional formatting (bold/italic/underline/size/name/color/alignment) is
- * applied to the inserted text in the same call.
+ * Multi-line text becomes separate paragraphs. Supports optional formatting
+ * (bold/italic/underline/size/name/color), paragraph props (style, alignment,
+ * spacing, indents), and `format: "markdown"` for a markdown subset
+ * (headings, bold/italic, bullets, page-break rules).
  */
 
-import { Type, type Static } from "@sinclair/typebox";
+import { WORD_INSERT_TEXT_PARAMETERS } from "@dieulc/pi-office-protocol/office-catalog";
+import type { Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import {
+  insertWordBlocks,
   wordRun,
-  setWordFontProps,
-  applyWordAlignment,
-  type WordTextFormat,
+  type WordInsertBlock,
+  type WordInsertLocation,
 } from "../../word/helpers.js";
+import { parseMarkdownToBlocks } from "../../word/markdown.js";
 import { getErrorMessage } from "../../utils/errors.js";
 import { t } from "../../language/index.js";
 
-const schema = Type.Object({
-  text: Type.String({
-    description: "Text to insert into the document.",
-  }),
-  location: Type.Optional(
-    Type.Union(
-      [
-        Type.Literal("start"),
-        Type.Literal("end"),
-        Type.Literal("replace_selection"),
-      ],
-      {
-        description:
-          '"end" (default): append at the end of the document. ' +
-          '"start": insert at the beginning. ' +
-          '"replace_selection": overwrite the currently selected text.',
-      },
-    ),
-  ),
-  bold: Type.Optional(
-    Type.Boolean({
-      description: "Make the inserted text bold.",
-    }),
-  ),
-  italic: Type.Optional(
-    Type.Boolean({
-      description: "Make the inserted text italic.",
-    }),
-  ),
-  underline: Type.Optional(
-    Type.Boolean({
-      description: "Underline the inserted text (single underline).",
-    }),
-  ),
-  size: Type.Optional(
-    Type.Number({
-      description: "Font size in points (e.g. 16).",
-    }),
-  ),
-  name: Type.Optional(
-    Type.String({
-      description: 'Font name (e.g. "Times New Roman").',
-    }),
-  ),
-  color: Type.Optional(
-    Type.String({
-      description: 'Font color as #RRGGBB (e.g. "#000000").',
-    }),
-  ),
-  alignment: Type.Optional(
-    Type.Union(
-      [
-        Type.Literal("Left"),
-        Type.Literal("Centered"),
-        Type.Literal("Right"),
-        Type.Literal("Justified"),
-      ],
-      {
-        description:
-          'Paragraph alignment for the inserted text. Word values: "Left", "Centered" (capital C), "Right", "Justified".',
-      },
-    ),
-  ),
-});
-
+const schema = WORD_INSERT_TEXT_PARAMETERS;
 type Params = Static<typeof schema>;
+
+/** Build blocks from plain text: newlines → separate paragraphs. */
+function plainTextBlocks(text: string): WordInsertBlock[] {
+  const lines = text.split(/\r?\n/u);
+  return lines.map((line) => ({
+    text: line.trimEnd(),
+    type: "paragraph" as const,
+  }));
+}
 
 export function createWordInsertTextTool(): AgentTool<typeof schema> {
   return {
@@ -90,15 +39,18 @@ export function createWordInsertTextTool(): AgentTool<typeof schema> {
     label: t("tools.wordInsertText"),
     description:
       "Insert text into the live Word document — at the start, at the end (default), " +
-      "or replacing the current selection. Optionally format the inserted text " +
-      '(bold, italic, underline, size in points, font name, color #RRGGBB, alignment "Left"/"Centered"/"Right"/"Justified") ' +
-      "in the same call — e.g. insert a bold centered title. Use this to add new content to the opened document.",
+      "or replacing the current selection. Multi-line text becomes separate paragraphs. " +
+      "Optionally format the inserted text in the same call: bold, italic, underline, size (points), " +
+      'font name, color (#RRGGBB), alignment ("Left"/"Centered"/"Right"/"Justified"), style names ' +
+      '(e.g. "Heading 1", "Title"), spacing, and indents. Pass format: "markdown" to insert a markdown ' +
+      "document (headings, bold/italic, bullets, page-break rules). " +
+      "Use this to add new content to the opened document.",
     parameters: schema,
     execute: async (
       _toolCallId: string,
       params: Params,
     ): Promise<AgentToolResult<undefined>> => {
-      const location =
+      const location: WordInsertLocation =
         params.location === "start" || params.location === "replace_selection"
           ? params.location
           : "end";
@@ -111,41 +63,60 @@ export function createWordInsertTextTool(): AgentTool<typeof schema> {
       }
 
       try {
-        const format: WordTextFormat = params;
-        const hasFormatting =
-          params.bold !== undefined ||
-          params.italic !== undefined ||
-          params.underline !== undefined ||
-          params.size !== undefined ||
-          params.name !== undefined ||
-          params.color !== undefined ||
-          params.alignment !== undefined;
+        const format = params.format === "markdown" ? "markdown" : "text";
+        const blocks =
+          format === "markdown"
+            ? parseMarkdownToBlocks(params.text)
+            : plainTextBlocks(params.text);
+
+        const fontFormat = {
+          ...(params.bold === undefined ? {} : { bold: params.bold }),
+          ...(params.italic === undefined ? {} : { italic: params.italic }),
+          ...(params.underline === undefined
+            ? {}
+            : { underline: params.underline }),
+          ...(params.size === undefined ? {} : { size: params.size }),
+          ...(params.name === undefined ? {} : { name: params.name }),
+          ...(params.color === undefined ? {} : { color: params.color }),
+        };
+        const paragraphFormat = {
+          ...(params.style === undefined ? {} : { style: params.style }),
+          ...(params.alignment === undefined
+            ? {}
+            : { alignment: params.alignment }),
+          ...(params.spaceBefore === undefined
+            ? {}
+            : { spaceBefore: params.spaceBefore }),
+          ...(params.spaceAfter === undefined
+            ? {}
+            : { spaceAfter: params.spaceAfter }),
+          ...(params.lineSpacing === undefined
+            ? {}
+            : { lineSpacing: params.lineSpacing }),
+          ...(params.firstLineIndent === undefined
+            ? {}
+            : { firstLineIndent: params.firstLineIndent }),
+          ...(params.leftIndent === undefined
+            ? {}
+            : { leftIndent: params.leftIndent }),
+        };
+
+        const hasFont = Object.keys(fontFormat).length > 0;
+        const hasParagraph = Object.keys(paragraphFormat).length > 0;
+        const blocksWithFormat: WordInsertBlock[] =
+          hasFont || hasParagraph
+            ? blocks.map((block) => ({
+                ...block,
+                format: { ...fontFormat, ...paragraphFormat },
+              }))
+            : blocks;
 
         await wordRun(async (context) => {
-          // insertText() returns a Range covering the inserted text, so the
-          // inserted text can be formatted in the same batch.
-          const inserted =
-            location === "replace_selection"
-              ? context.document
-                  .getSelection()
-                  .insertText(params.text, Word.InsertLocation.replace)
-              : context.document.body.insertText(
-                  params.text,
-                  Word.InsertLocation.start,
-                ); // start/end both supported on body
-
-          if (hasFormatting) {
-            setWordFontProps(inserted, format);
-            if (params.alignment !== undefined) {
-              // Alignment lives on Word.Paragraph; load paragraph proxies first.
-              await applyWordAlignment(inserted, params.alignment);
-            }
-          }
-
+          insertWordBlocks(context, blocksWithFormat, location);
           await context.sync();
         });
 
-        const formatNote = hasFormatting ? " with formatting" : "";
+        const formatNote = hasFont || hasParagraph ? " with formatting" : "";
         const summary =
           location === "replace_selection"
             ? `Replaced the current selection with ${params.text.length} chars${formatNote}.`

@@ -5,6 +5,7 @@
 Notes for agents working in this repo.
 
 ## Read before changing behavior
+
 - Agent coding standards: `docs/coding-standards.md`
 - Tool behavior rules: `src/tools/DECISIONS.md`
 - UI/CSS architecture: `src/ui/README.md` (first-party preflight; keep it faithful)
@@ -15,6 +16,7 @@ Notes for agents working in this repo.
 ## High-leverage conventions
 
 ### Core tools: one source of truth
+
 - Define core tool names in `src/tools/registry.ts` (`CORE_TOOL_NAMES`, `CoreToolName`, `createCoreTools()`).
 - Do not duplicate tool-name lists; import `CORE_TOOL_NAMES`.
 - When adding/removing a core tool, update in the same PR:
@@ -24,7 +26,22 @@ Notes for agents working in this repo.
   - `src/context/tool-disclosure.ts`
   - `src/prompt/system-prompt.ts` (if documented tool list changes)
 
+### Bridge ops: one shared catalog
+
+- The office bridge op catalog is the **single source of truth** for every
+  `office_<host>_<op>` tool. It lives in `@dieulc/pi-office-protocol`
+  (`src/office-catalog.ts`) and both the Pi bridge extension and this add-in's
+  pane registry (`src/bridge/`) derive from it.
+- **Adding an office op = updating the catalog once**; the pane's bridge
+  executors then delegate to the existing local tool factories
+  (`src/bridge/delegate.ts` + `*-ops.ts`), so bridge and browser-only paths
+  share one implementation by construction.
+- Word/PowerPoint local tools import their parameter schemas from the catalog.
+- `tests/bridge-catalog-parity.test.ts` fails CI if the pane registry ever
+  drifts from the catalog (run it via `npm run test:pi-bridge`).
+
 ### UI i18n (`t()` layer)
+
 - All user-visible UI strings go through `t()` from `src/language/index.ts`.
   `en.json` is the source of truth (values must exactly match the intended
   English UI); `zh-CN.json` mirrors the key set. Parity + usage enforced by
@@ -39,17 +56,20 @@ Notes for agents working in this repo.
   (`settings.section.language.zh`).
 
 ### Tool results (`ToolResultMessage.details`)
+
 - Keep human-readable output in `result.content`.
 - Put stable machine metadata in `result.details`.
 - UI should prefer `details`, with fallback for older persisted sessions.
 - Reuse guards/types from `src/tools/tool-details.ts`.
 
 ### Workbook identity + session restore
+
 - Never persist raw `Office.context.document.url`.
 - Use `getWorkbookContext()` from `src/workbook/context.ts`.
 - Use `src/workbook/session-association.ts` helpers for SettingsStore mapping keys.
 
 ### Security / HTML / local servers
+
 - Avoid `innerHTML` for user/tool/session content; use DOM APIs or `src/utils/html.ts`.
 - Keep markdown protections from `installMarkedSafetyPatch()` (`src/compat/marked-safety.ts`).
 - Keep strict origin allowlists in:
@@ -60,10 +80,12 @@ Notes for agents working in this repo.
   - Do not commit permissive defaults (e.g. `ALLOW_ALL_TARGET_HOSTS=1`).
 
 ### Bundle hygiene (Office WebView)
+
 - Avoid Node-only imports and side-effect barrel imports.
 - After import/dependency changes, run `npm run build` and check chunk sizes + Vite browser-compat warnings.
 
 ### Prompt caching gotchas
+
 - Prompt cache keys are prefix-based and sensitive to: model identity, system prompt, tool schemas, and session key.
 - Keep static prefix content stable (no timestamps/random IDs in system prompt or tool metadata).
 - Prefer message-tail updates for volatile state (auto-context/system reminders) instead of mutating base prompt text every turn.
@@ -72,6 +94,7 @@ Notes for agents working in this repo.
 - When changing context/tool/model wiring, validate against `docs/cache-observability-baselines.md` and record expected vs observed `prefixChangeReasons`.
 
 ## TypeScript policy
+
 - No `// @ts-ignore`.
 - If unavoidable: `// @ts-expect-error -- <reason>` with a real reason.
 - No explicit `any`, `as any`, non-null assertions, or direct `unknown` syntax.
@@ -80,6 +103,7 @@ Notes for agents working in this repo.
 - Type assertions and lint suppressions must stay local and explain the safety invariant.
 
 ## Verification
+
 - `npm run check`
 - `npm run build`
 - `npm run test:models`
@@ -105,6 +129,7 @@ Available gallery sections (use as argument):
 `text-preview`, `buttons`, `toasts`, `markdown`
 
 Or use agent-browser directly for interactive inspection:
+
 ```bash
 npx agent-browser --session pi-ui open http://localhost:3141/src/ui-gallery.html
 npx agent-browser --session pi-ui wait 2000
@@ -114,6 +139,7 @@ npx agent-browser --session pi-ui close                # Clean up
 ```
 
 For **full taskpane** inspection (boots without Excel after 3s timeout):
+
 ```bash
 npx agent-browser open http://localhost:3141/src/taskpane.html
 npx agent-browser wait 4000           # Wait for Office.js fallback
@@ -123,19 +149,23 @@ npx agent-browser errors --json       # Check for page errors
 ```
 
 When to add new gallery sections:
+
 - Adding a new component type → add a mock render in `src/ui-gallery.ts`
 - Changing CSS for an existing component → verify via `./scripts/ui-verify.sh <section>`
 - Before/after comparison → screenshot before change, make edit, screenshot again
 
 ## Pre-commit
+
 - `.githooks/pre-commit` runs `npm run check`.
 - Bypass only when needed: `git commit --no-verify`.
 
 ## Excel sideloaded manifest gotcha (macOS)
+
 Excel loads a sideloaded manifest from:
 `~/Library/Containers/com.microsoft.Excel/Data/Documents/wef/{add-in-id}.manifest.xml`
 
 If local changes do not show up:
+
 1. Verify sideloaded manifest points to `https://localhost:3141/...` (not production URL).
 2. Recopy manifest:
    `cp manifest.xml ~/Library/Containers/com.microsoft.Excel/Data/Documents/wef/a1b2c3d4-e5f6-7890-abcd-ef1234567890.manifest.xml`

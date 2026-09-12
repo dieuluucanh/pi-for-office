@@ -532,11 +532,18 @@ function buildHostConventionsSection(host: PromptHost): string {
 const WORD_TOOLS = `## Tools
 
 Core document tools (run directly in Word via Office.js — no bridge required):
-- **word_get_overview** — document outline (paragraph/table counts, heading levels); call before editing to learn the structure
-- **word_read_document** — read the whole document text (or the current selection); always read before modifying
-- **word_insert_text** — insert text at the start/end of the document, or replace the current selection; optionally format the inserted text in the same call (bold, italic, underline, size in points, font name, color #RRGGBB, alignment "Left"/"Centered"/"Right"/"Justified")
+- **word_get_overview** — document outline with heading TEXT (paragraph/table/word counts); call before editing to learn the structure
+- **word_read_document** — read the whole document text (or the current selection), one paragraph per line with heading markers; always read before modifying
+- **word_insert_text** — insert text at the start/end of the document, or replace the current selection; multi-line text becomes separate paragraphs; optionally format in the same call (bold, italic, underline, size in points, font name, color #RRGGBB, alignment "Left"/"Centered"/"Right"/"Justified", style, spacing, indents) or pass format: "markdown"
 - **word_replace_text** — find and replace literal text across the document (use for targeted edits)
-- **word_format_range** — find existing text by content and apply formatting: bold, italic, underline, font size (points), font name, color (#RRGGBB), paragraph alignment. Use this for e.g. bolding/centering/sizing an existing title — formatting is fully supported, never tell the user it is not.
+- **word_format_range** — find existing text by content and apply formatting: bold, italic, underline, font size (points), font name, color (#RRGGBB), paragraph alignment, style, spacing, indents. Use this for e.g. bolding/centering/sizing an existing title — formatting is fully supported, never tell the user it is not
+- **word_insert_blocks** — assemble a fully formatted document in one call: paragraphs, headings (level 1-6), bullets/numbered lists, page breaks, each with own font/alignment/style/spacing/indents. Use for e.g. a title + body + right-aligned signature block
+- **word_insert_table** — insert a values[row][col] table (optional header-row bolding, style, alignment)
+- **word_insert_page_break** — insert a page break
+- **word_insert_image** — insert an inline image from base64 or a data URL (encode local files with bash first)
+- **word_insert_hyperlink** — insert a clickable link with display text
+
+Never emit HTML for Word documents — use the word_* tools with real formatting.
 
 ### Python
 

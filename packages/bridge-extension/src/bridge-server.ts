@@ -18,6 +18,9 @@ import type { AddressInfo } from "node:net";
 
 import {
   BRIDGE_PROTOCOL_VERSION,
+  CATALOG_VERSION,
+  LEGACY_V1_OPS,
+  OFFICE_CATALOG_BY_OP,
   nextCallId,
   parseClientMessage,
   type BridgeCapability,
@@ -36,6 +39,16 @@ export interface AttachedPane {
   lastSeen: number;
   model?: string;
   provider?: string;
+  /**
+   * Ops this pane advertised in `hello` (validated against the server catalog
+   * and normalized to `<host>.<op>` ids). `null` means a legacy pane that did
+   * not advertise an `ops` list — only the v1 op set is allowed for it.
+   */
+  ops: readonly string[] | null;
+  /** Catalog version the pane derived its ops from, when advertised. */
+  catalogVersion: number | null;
+  /** Count of advertised ops dropped because they are unknown to this server. */
+  opsIgnoredCount: number;
 }
 
 export interface BridgeServerHandlers {
@@ -219,11 +232,34 @@ export class OfficeBridgeServer {
       );
     }
 
+    const opId = `${host}.${op}`;
+    // Capability gate: a pane may only execute ops it advertised (or, for
+    // legacy panes that advertise nothing, only the v1 op set).
+    if (pane.ops !== null) {
+      if (!pane.ops.includes(opId)) {
+        return Promise.reject(
+          new Error(
+            `office-bridge: the attached ${host} pane does not advertise "${opId}" ` +
+              `(it supports ${pane.ops.length} ops). ` +
+              "Reload the pi-for-office add-in to enable this tool.",
+          ),
+        );
+      }
+    } else if (!LEGACY_V1_OPS.includes(opId)) {
+      return Promise.reject(
+        new Error(
+          `office-bridge: "${opId}" requires a newer add-in. ` +
+            "The attached pane is a legacy client (no capability list); update " +
+            "pi-for-office and reload the document to enable this tool.",
+        ),
+      );
+    }
+
     const id = nextCallId("tool");
     const message: ServerMessage = {
       type: "tool_call",
       id,
-      tool: `${host}.${op}`,
+      tool: opId,
       args,
     };
 
@@ -328,6 +364,9 @@ export class OfficeBridgeServer {
         lastSeen: p.lastSeen,
         model: p.model,
         provider: p.provider,
+        ops: p.ops,
+        catalogVersion: p.catalogVersion,
+        opsIgnoredCount: p.opsIgnoredCount,
       }));
 
       this.writeHttp(
@@ -342,6 +381,7 @@ export class OfficeBridgeServer {
           piVersion: this.piVersion,
           port: this.actualPort,
           uptimeMs: Date.now() - this.startedAt,
+          catalogVersion: CATALOG_VERSION,
           panes,
         },
         req,
@@ -396,6 +436,36 @@ export class OfficeBridgeServer {
     return sorted.find((p) => p.host === host) ?? null;
   }
 
+  /**
+   * Normalize a pane's advertised ops against the server catalog: keep only
+   * ops that exist in the catalog and belong to the pane's host; return null
+   * when the pane advertised nothing (legacy client).
+   */
+  private normalizeAdvertisedOps(
+    host: OfficeHostApp,
+    advertised: readonly string[] | undefined,
+  ): readonly string[] | null {
+    if (advertised === undefined || advertised.length === 0) return null;
+    const known = new Set<string>();
+    for (const op of advertised) {
+      const entry = OFFICE_CATALOG_BY_OP.get(op);
+      if (entry && entry.host === host) known.add(op);
+    }
+    return known.size > 0 ? [...known] : null;
+  }
+
+  /** Count ops the pane advertised that this server dropped as unknown/host-mismatched. */
+  private countIgnoredOps(
+    host: OfficeHostApp,
+    advertised: readonly string[] | undefined,
+  ): number {
+    if (advertised === undefined) return 0;
+    return advertised.filter((op) => {
+      const entry = OFFICE_CATALOG_BY_OP.get(op);
+      return entry === undefined || entry.host !== host;
+    }).length;
+  }
+
   private handleConnection(ws: WebSocket): void {
     let pane: AttachedPane | null = null;
 
@@ -432,6 +502,12 @@ export class OfficeBridgeServer {
             clientName: msg.clientName,
             connectedAt: Date.now(),
             lastSeen: Date.now(),
+            // Normalize advertised ops against the server catalog: entries the
+            // server does not know (or that belong to a different host) are
+            // dropped and counted so the operator can see the mismatch.
+            ops: this.normalizeAdvertisedOps(msg.host, msg.ops),
+            catalogVersion: msg.catalogVersion ?? null,
+            opsIgnoredCount: this.countIgnoredOps(msg.host, msg.ops),
           };
           // A pane reconnecting replaces any older pane with the same paneId.
           this.panes.splice(

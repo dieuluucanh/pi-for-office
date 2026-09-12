@@ -17,7 +17,13 @@
  *    session and streams the assistant's reply back as `agent_message`.
  *
  * Every connection starts with a `hello` (client) / `welcome` (server) pair so
- * both sides know which Office host app is attached.
+ * both sides know which Office host app is attached. The client may also
+ * advertise the op ids it can execute (`hello.ops`) plus the catalog version
+ * they were derived from; the server validates them against its own catalog.
+ *
+ * The office op catalog is exported via the `@dieulc/pi-office-protocol/office-catalog`
+ * subpath (kept out of this entry so Node loads this raw-TS file without a
+ * `.js`→`.ts` rewrite).
  */
 
 /** Default TCP port the bridge server listens on (loopback only). */
@@ -40,6 +46,14 @@ export interface HelloMessage {
  host: OfficeHostApp;
  clientName: string;
  paneId: string;
+ /**
+  * Op ids this pane can execute (optional; additive since protocol v1).
+  * When absent the pane is treated as a legacy 0.2.x client and only the
+  * v1 op set is activated server-side.
+  */
+ ops?: string[];
+ /** Catalog version the pane's ops were derived from (see office-catalog.ts). */
+ catalogVersion?: number;
 }
 
 export interface PingMessage {
@@ -190,6 +204,23 @@ export function parseClientMessage(raw: string): ClientMessage {
    const m = data as HelloMessage;
    if (!["excel", "word", "powerpoint"].includes(m.host)) {
     throw new Error(`bridge: hello with unknown host '${String(m.host)}'`);
+   }
+   if (m.ops !== undefined) {
+    if (!Array.isArray(m.ops) || m.ops.some((op) => typeof op !== "string")) {
+     throw new Error("bridge: hello with malformed 'ops' (expected string[])");
+    }
+   }
+   if (m.catalogVersion !== undefined) {
+    if (
+     typeof m.catalogVersion !== "number" ||
+     !Number.isFinite(m.catalogVersion) ||
+     !Number.isInteger(m.catalogVersion) ||
+     m.catalogVersion < 1
+    ) {
+     throw new Error(
+      `bridge: hello with malformed 'catalogVersion' (${String(m.catalogVersion)})`,
+     );
+    }
    }
    return m;
   }

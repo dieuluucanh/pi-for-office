@@ -61,6 +61,28 @@ Pi for Office is an AI agent that lives inside Excel. It reads your workbook, ma
 - Files workspace write/delete gate — shared artifact storage across sessions (assistant built-in docs under `assistant-docs/` are always available read-only)
 - Advanced extension controls — remote URL opt-in, permission enforcement, sandbox rollback, and Widget API v2
 
+**Local Pi agent bridge (advanced mode)** — when a local Pi process runs the
+[`@dieulc/pi-office-bridge`](../bridge-extension/README.md) extension and you
+turn on **Settings → Connections → Local Pi agent**, the pane drives a real Pi
+agent over a loopback WebSocket. The agent gets **input + document tools** for
+what's open:
+
+- **Excel** — 14 ops: overview, read/write/fill, search, structure,
+  `format_cells`, conditional formatting, charts, trace/explain, view
+  settings, comments, workbook history (delegated to the same local tools the
+  browser path uses).
+- **Word** — 10 ops: overview, read (paragraph-aware), `insert_text` with
+  markdown + formatting, replace, `format_range`, `insert_blocks` (title /
+  headings / lists / alignment / spacing), tables, page breaks, images
+  (base64), hyperlinks.
+- **PowerPoint** — 5 ops: overview, read slide, add slide, add text box (with
+  formatting), format slide.
+
+The op catalog is the **single source of truth**: it lives in
+`@dieulc/pi-office-protocol` (`office-catalog.ts`); this add-in's bridge
+registry (`src/bridge/`) delegates to the local tool factories and a parity
+test (`tests/bridge-catalog-parity.test.ts`) fails if the two ever drift.
+
 (Web Search + MCP are managed in `/tools`, or `/extensions` → Connections.)
 
 ## Install

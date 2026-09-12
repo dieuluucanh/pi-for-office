@@ -85,6 +85,8 @@ async function main() {
       registry: fakeRegistry,
       url: `ws://127.0.0.1:${port}`,
       paneId: "pane-interop",
+      ops: ["word.read_document", "word.insert_text"],
+      catalogVersion: 1,
     },
     {
       onAssistantFinal: (text) => {
@@ -107,6 +109,33 @@ async function main() {
   if (panes.length !== 1 || panes[0].host !== "word")
     throw new Error("server did not register word pane");
   console.log("[ok] server registered word pane");
+
+  // Capability handshake: the pane's advertised ops reach the server.
+  const paneOps = panes[0].ops;
+  if (
+    !Array.isArray(paneOps) ||
+    !paneOps.includes("word.read_document") ||
+    !paneOps.includes("word.insert_text") ||
+    paneOps.some((op) => !op.startsWith("word."))
+  ) {
+    throw new Error(`server saw wrong ops: ${JSON.stringify(paneOps)}`);
+  }
+  if (panes[0].catalogVersion !== 1)
+    throw new Error("server did not store catalogVersion");
+  console.log("[ok] hello.ops + catalogVersion reached the server");
+
+  // Capability gating: an op the pane did not advertise is rejected.
+  try {
+    await server.callOfficeTool("word", "format_range", { text: "x" });
+    throw new Error("unadvertised op must be rejected");
+  } catch (e) {
+    if (!e.message.includes("does not advertise")) {
+      throw new Error(`gating message wrong: ${e.message}`);
+    }
+    console.log(
+      `[ok] unadvertised word op rejected: ${e.message.slice(0, 70)}…`,
+    );
+  }
 
   // Tool proxy: server → client → fake executor → result.
   const result = await server.callOfficeTool("word", "read_document", {

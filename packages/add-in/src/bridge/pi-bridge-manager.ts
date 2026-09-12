@@ -16,12 +16,13 @@ import {
   PaneBridgeClient,
   type PaneBridgeClientCallbacks,
 } from "./pane-client.js";
-import { ALL_BRIDGE_OPS } from "./registry.js";
+import { ALL_BRIDGE_OPS, opsForHost } from "./registry.js";
 import { detectOfficeAppFromGlobals } from "../host/index.js";
 import {
   BRIDGE_DEFAULT_PORT,
   type OfficeHostApp,
 } from "@dieulc/pi-office-protocol";
+import { CATALOG_VERSION } from "@dieulc/pi-office-protocol/office-catalog";
 
 const PI_BRIDGE_SETTING_KEY = "pi-bridge.enabled";
 
@@ -255,8 +256,17 @@ function defaultCreateClient(
   options: { host: OfficeHostApp; url: string },
   callbacks: PaneBridgeClientCallbacks,
 ): PiBridgeClientLike {
+  // Advertise exactly the bridge ops this pane can execute so the Pi server
+  // activates only the host's tools and gates unsupported calls.
+  const ops = [...opsForHost(options.host).keys()];
   return new PaneBridgeClient(
-    { host: options.host, registry: ALL_BRIDGE_OPS, url: options.url },
+    {
+      host: options.host,
+      registry: ALL_BRIDGE_OPS,
+      url: options.url,
+      ops,
+      catalogVersion: CATALOG_VERSION,
+    },
     callbacks,
   );
 }

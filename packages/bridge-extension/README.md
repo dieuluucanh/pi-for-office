@@ -116,18 +116,47 @@ attaches or detaches (`onPanesChanged`).
 ## Office tools
 
 The extension registers a `office_<host>_<op>` tool per op in the shared
-catalog. The catalog lives in
-[`src/office-tools.ts`](./src/office-tools.ts); op ids are namespaced by host:
+catalog. The catalog is the single source of truth: it lives in
+`@dieulc/pi-office-protocol` (`office-catalog.ts`) and BOTH the Pi extension
+and the add-in derive from it — the Pi side here, and the pane's bridge op
+registry (`packages/add-in/src/bridge/`) there. Op ids are namespaced by host:
 
 | Host | Ops |
-|------|-----|
-| Excel | `get_overview`, `read_range`, `write_cells`, `fill_formula`, `search_workbook` |
-| Word | `get_overview`, `read_document`, `insert_text`, `replace_text` |
-| PowerPoint | `get_overview`, `read_slide`, `add_slide`, `add_text_box` |
+| --- | --- |
+| Excel | `get_overview`, `read_range`, `write_cells`, `fill_formula`, `search_workbook`, `modify_structure`, `format_cells`, `conditional_format`, `charts`, `trace_dependencies`, `explain_formula`, `view_settings`, `comments`, `workbook_history` |
+| Word | `get_overview`, `read_document`, `insert_text`, `replace_text`, `format_range`, `insert_blocks`, `insert_table`, `insert_page_break`, `insert_image`, `insert_hyperlink` |
+| PowerPoint | `get_overview`, `read_slide`, `add_slide`, `add_text_box`, `format_slide` |
 
-The pane-side executors are the counterpart contract — see
-`packages/add-in/src/bridge/` (same repo). **When adding an op, update both
-sides** (see "Bridge contract" in the add-in README).
+### Active-tool reconciliation
+
+The office tools are registered at `session_start` from the catalog, but only
+**the ops the currently attached pane advertises are kept active** in the Pi
+session (`pi.setActiveTools()`). Opening an app activates that host's tools;
+closing it deactivates them; everything else stays untouched. Panes that don't
+advertise an `ops` list (legacy 0.2.x clients) are given only the v1 op set.
+This keeps the agent's prompt small and focused on the app actually open.
+
+### Capability handshake
+
+Panes send `hello.ops` + `hello.catalogVersion` with the op ids they can
+execute. The server validates them against its own catalog (entries that don't
+belong to the pane's host, or that the server doesn't know, are dropped and
+counted). `callOfficeTool` then rejects any op the pane did not advertise with
+an actionable message, so a mismatched add-in/bridge pair fails loudly instead
+of silently.
+
+- `/office` shows each attached pane's host, op count, catalog version, and any
+  ignored-op count.
+- `/office-tools` lists every registered tool + catalog version.
+- `GET /health` exposes `catalogVersion` and per-pane `ops` / `catalogVersion`.
+- `before_agent_start` appends a pane-context block (attached host, "the
+  office_* tools edit the live document; formatting is fully supported; never
+  emit HTML for Word") so the agent uses the tools directly.
+
+The pane-side executors are thin delegates to the same local tool factories the
+browser-only path uses (see `packages/add-in/src/bridge/`), and a parity test
+(`packages/add-in/tests/bridge-catalog-parity.test.ts`) fails CI if the pane
+registry ever drifts from the shared catalog.
 
 ## Development
 

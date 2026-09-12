@@ -25,7 +25,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { BRIDGE_DEFAULT_PORT } from "./protocol.js";
+import { CATALOG_VERSION, BRIDGE_DEFAULT_PORT } from "./protocol.js";
 import type { AttachedPane } from "./bridge-server.js";
 import { OfficeBridgeServer } from "./bridge-server.js";
 import {
@@ -35,6 +35,10 @@ import {
   HOST_APP_LABEL,
 } from "./office-tools.js";
 import type { OfficeToolDescriptor } from "./office-tools.js";
+import {
+  reconcileOfficeToolActivation,
+  type PaneCapability,
+} from "./active-tools.js";
 
 const FLAG_PORT = "office-bridge-port";
 
@@ -151,6 +155,7 @@ export default function (pi: ExtensionAPI): void {
       name: descriptor.name,
       label: descriptor.label,
       description: descriptor.description,
+      promptSnippet: descriptor.promptSnippet,
       promptGuidelines: descriptor.promptGuidelines,
       parameters: descriptor.parameters,
       executionMode: "sequential",
@@ -191,6 +196,46 @@ export default function (pi: ExtensionAPI): void {
     }
   }
 
+  /**
+   * Reconcile the Pi active tool set with the currently attached panes: only
+   * the office ops the attached panes advertise stay active; everything else
+   * (user/other-extension tools) is preserved. Called on attach/detach.
+   */
+  function reconcileActiveTools(panes: readonly AttachedPane[]): void {
+    const capabilities: PaneCapability[] = panes.map((pane) => ({
+      host: pane.host,
+      ops: pane.ops,
+    }));
+    const next = reconcileOfficeToolActivation(
+      pi.getActiveTools(),
+      capabilities,
+    );
+    pi.setActiveTools(next);
+  }
+
+  /** Stable per-turn pane-awareness block appended to the system prompt. */
+  function paneContextBlock(): string | null {
+    const active = server;
+    if (!active?.isRunning) return null;
+    const panes = active.attachedPanes();
+    if (panes.length === 0) return null;
+
+    const lines = panes.map((p) => {
+      const legacy =
+        p.ops === null
+          ? " (legacy client: only v1 ops — update the add-in for newer tools)"
+          : "";
+      return `- ${HOST_APP_LABEL[p.host]} is attached via the office bridge${legacy}. The open document is live: the office_${p.host}_* tools edit it directly.`;
+    });
+    return (
+      "\n\n## Attached Office documents\n" +
+      lines.join("\n") +
+      "\n\nEditing these documents with the office_* tools is fully supported, including formatting and " +
+      "structured documents (titles, headings, lists, tables, alignment, indents). Never claim formatting is " +
+      "unavailable, and never emit HTML for Word — use the office_word_* tools."
+    );
+  }
+
   /* ── lifecycle ─────────────────────────────────────────────────────── */
 
   pi.on("session_start", async (_event, ctx) => {
@@ -216,9 +261,13 @@ export default function (pi: ExtensionAPI): void {
           // triggers a turn; if a turn is running it is queued until it settles.
           pi.sendUserMessage(text, { deliverAs: "followUp" });
         },
-        // Keep the TUI status line live: flip to "Excel attached" the moment
-        // the pane connects instead of waiting for the next message.
-        onPanesChanged: () => scheduleStatusUpdate(),
+        // Keep the TUI status line live and the active tool set in sync:
+        // opening an app activates that host's office tools; closing it
+        // deactivates them.
+        onPanesChanged: (panes) => {
+          scheduleStatusUpdate();
+          reconcileActiveTools(panes);
+        },
       },
     });
 
@@ -262,6 +311,14 @@ export default function (pi: ExtensionAPI): void {
   });
 
   /* ── agent → pane forwarding ───────────────────────────────────────── */
+
+  // Tell the agent which Office apps are attached before each turn so it uses
+  // the office_* tools directly instead of claiming capabilities are missing.
+  pi.on("before_agent_start", (event, _ctx) => {
+    const block = paneContextBlock();
+    if (block === null) return undefined;
+    return { systemPrompt: event.systemPrompt + block };
+  });
 
   // Forward the final assistant reply to the pane that prompted it.
   pi.on("message_end", async (event, _ctx) => {
@@ -335,9 +392,20 @@ export default function (pi: ExtensionAPI): void {
         const model = p.model ? `, model=${p.model}` : "";
         const provider = p.provider ? `, provider=${p.provider}` : "";
         const ago = Math.max(0, Math.round((Date.now() - p.lastSeen) / 1000));
-        return `- ${HOST_APP_LABEL[p.host]} (${p.clientName}, pane ${p.paneId.slice(0, 8)})${model}${provider}, seen ${ago}s ago`;
+        const ops =
+          p.ops !== null
+            ? `${p.ops.length} ops${p.catalogVersion ? ` (catalog v${p.catalogVersion})` : ""}`
+            : "legacy client (v1 ops)";
+        const ignored =
+          p.opsIgnoredCount > 0
+            ? `, ${p.opsIgnoredCount} advertised op(s) ignored (unknown to this server)`
+            : "";
+        return `- ${HOST_APP_LABEL[p.host]} (${p.clientName}, pane ${p.paneId.slice(0, 8)})${model}${provider}, seen ${ago}s ago — ${ops}${ignored}`;
       });
-      ctx.ui.notify(`Office bridge on :${port}\n${lines.join("\n")}`, "info");
+      ctx.ui.notify(
+        `Office bridge on :${port} (catalog v${CATALOG_VERSION})\n${lines.join("\n")}`,
+        "info",
+      );
     },
   };
 
@@ -349,7 +417,7 @@ export default function (pi: ExtensionAPI): void {
       "List the office tools registered by the pi-office bridge extension.",
     handler: async (_args: string, ctx: ExtensionCommandContext) => {
       ctx.ui.notify(
-        `Office tools (${OFFICE_TOOL_NAMES.length}):\n${OFFICE_TOOL_NAMES.join("\n")}`,
+        `Office tools (${OFFICE_TOOL_NAMES.length}, catalog v${CATALOG_VERSION}):\n${OFFICE_TOOL_NAMES.join("\n")}`,
         "info",
       );
     },

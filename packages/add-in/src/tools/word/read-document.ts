@@ -2,10 +2,13 @@
  * word_read_document — Read the live Word document text.
  *
  * Scope "all" (default) reads the whole body; "selection" reads the current
- * selection. Output is truncated to maxChars (default 20k).
+ * selection. Paragraphs are rendered one per line — Word's `Body.text` strips
+ * paragraph marks, so we iterate paragraphs and join them with newlines, and
+ * mark heading/list paragraphs so structure survives round-trips.
  */
 
-import { Type, type Static } from "@sinclair/typebox";
+import { WORD_READ_DOCUMENT_PARAMETERS } from "@dieulc/pi-office-protocol/office-catalog";
+import type { Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { wordRun } from "../../word/helpers.js";
 import { getErrorMessage } from "../../utils/errors.js";
@@ -14,22 +17,19 @@ import { t } from "../../language/index.js";
 const MAX_READ_CHARS = 200_000;
 const DEFAULT_READ_CHARS = 20_000;
 
-const schema = Type.Object({
-  scope: Type.Optional(
-    Type.Union([Type.Literal("all"), Type.Literal("selection")], {
-      description:
-        '"all" (default): read the whole document body. ' +
-        '"selection": read only the currently selected text.',
-    }),
-  ),
-  maxChars: Type.Optional(
-    Type.Number({
-      description: `Maximum characters to return (default ${DEFAULT_READ_CHARS}, max ${MAX_READ_CHARS}).`,
-    }),
-  ),
-});
-
+const schema = WORD_READ_DOCUMENT_PARAMETERS;
 type Params = Static<typeof schema>;
+
+/** Prefix a paragraph's text based on its style (heading/list markers). */
+function prefixForStyle(style: string | undefined): string {
+  if (typeof style !== "string") return "";
+  if (/^heading\s*\d+$/i.test(style)) {
+    return `${"#".repeat(Number.parseInt(style.replace(/^.*?(\d+)/i, "1"), 10))} `;
+  }
+  if (style.toLowerCase().includes("list")) return "  ";
+  if (style.toLowerCase().includes("quote")) return "> ";
+  return "";
+}
 
 export function createWordReadDocumentTool(): AgentTool<typeof schema> {
   return {
@@ -37,6 +37,7 @@ export function createWordReadDocumentTool(): AgentTool<typeof schema> {
     label: t("tools.wordReadDocument"),
     description:
       "Read text from the live Word document: the whole body by default, or just the current selection. " +
+      "Paragraphs are preserved one per line; headings are prefixed with # and list items indented. " +
       "Always read before modifying — never guess what's in the document.",
     parameters: schema,
     execute: async (
@@ -57,10 +58,21 @@ export function createWordReadDocumentTool(): AgentTool<typeof schema> {
             await context.sync();
             return selection.text ?? "";
           }
-          const body = context.document.body;
-          body.load("text");
+          const paragraphs = context.document.body.paragraphs;
+          paragraphs.load("items/text");
+          paragraphs.load("items/style");
           await context.sync();
-          return body.text ?? "";
+
+          const lines: string[] = [];
+          for (const para of paragraphs.items.slice(0, 100_000)) {
+            const raw = para.text ?? "";
+            if (raw.trim().length === 0) {
+              lines.push("");
+              continue;
+            }
+            lines.push(`${prefixForStyle(para.style)}${raw}`);
+          }
+          return lines.join("\n");
         });
 
         const truncated = text.length > maxChars;
