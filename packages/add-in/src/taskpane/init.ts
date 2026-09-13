@@ -13,6 +13,7 @@ function isTaskpaneInitPayloadShape(
 
 import { html, render } from "lit";
 import { Agent } from "@earendil-works/pi-agent-core";
+import type { RetryPolicy } from "@earendil-works/pi-ai";
 import { getAppStorage } from "../storage/local/app-storage.js";
 import type { SessionData } from "../storage/local/types.js";
 
@@ -209,8 +210,16 @@ import {
 import { doesOverlayClaimEscape } from "../utils/escape-guard.js";
 import { initPiBridgeFromSettings } from "../bridge/pi-bridge-manager.js";
 
-function showErrorBanner(errorRoot: HTMLElement, message: string): void {
-  render(renderError(message), errorRoot);
+function showErrorBanner(
+  errorRoot: HTMLElement,
+  message: string,
+  actions?: readonly {
+    label: string;
+    onClick: () => void | Promise<void>;
+    variant?: "ok" | "cancel";
+  }[],
+): void {
+  render(renderError(message, actions), errorRoot);
 }
 
 function clearErrorBanner(errorRoot: HTMLElement): void {
@@ -368,6 +377,21 @@ export async function initTaskpane(opts: {
       (await settings.get<boolean>("compaction.enabled")) ?? true;
   } catch {
     autoCompactEnabled = true;
+  }
+
+  // 1b2. Retry policy (mirrors pi settings.retry defaults: true / 3 / 2000).
+  let retryPolicy: RetryPolicy | undefined;
+  try {
+    const retryEnabled = await settings.get<boolean>("retry.enabled");
+    const retryMaxRetries = await settings.get<number>("retry.maxRetries");
+    const retryBaseDelayMs = await settings.get<number>("retry.baseDelayMs");
+    retryPolicy = {
+      enabled: retryEnabled ?? true,
+      maxRetries: retryMaxRetries ?? 3,
+      baseDelayMs: retryBaseDelayMs ?? 2000,
+    };
+  } catch {
+    retryPolicy = { enabled: true, maxRetries: 3, baseDelayMs: 2000 };
   }
 
   // 1c. Security warning: remote proxies can see your prompts + credentials.
@@ -1294,12 +1318,24 @@ export async function initTaskpane(opts: {
     };
 
     const queueDisplay = createQueueDisplay({ agent });
+
+    // Wire persistence of compacted transcripts: runCompactCommand commits to
+    // agent.state.messages; after the persistence controller exists, every
+    // compaction run triggers an immediate autosave so a pane reload can't
+    // resurrect the oversized pre-compaction history (#566 follow-up).
+    const persistBridge: {
+      run: (() => void | Promise<void>) | undefined;
+    } = { run: undefined };
     const actionQueue = createActionQueue({
       agent,
       sidebar,
       queueDisplay,
       autoCompactEnabled,
-      runCompact: () => runCompactCommand(agent, ""),
+      retry: retryPolicy,
+      runCompact: () =>
+        runCompactCommand(agent, "", {
+          onCommitted: () => persistBridge.run?.(),
+        }),
     });
 
     const persistence = await setupSessionPersistence({
@@ -1310,6 +1346,8 @@ export async function initTaskpane(opts: {
       initialSessionId: runtimeSessionId,
       autoRestoreLatest: optsForRuntime.autoRestoreLatest,
     });
+
+    persistBridge.run = () => persistence.saveSession({ force: true });
 
     runtimeSessionId = persistence.getSessionId();
     await refreshRuntimeCapabilities();
@@ -1357,12 +1395,45 @@ export async function initTaskpane(opts: {
           /cancel/i.test(errorMessage);
         if (!isAbort) {
           const err = errorMessage;
+          const retryAction = {
+            label: t("banner.retry"),
+            variant: "ok" as const,
+            onClick: () => {
+              clearErrorBanner(errorRoot);
+              // Retry with the same context (auto-compaction + recovery will
+              // catch overflow/transient failures).
+              actionQueue.enqueuePrompt(
+                "Continue from where the last request was interrupted.",
+              );
+            },
+          };
+          const compactAndRetryAction = {
+            label: t("banner.compactRetry"),
+            variant: "ok" as const,
+            onClick: () => {
+              clearErrorBanner(errorRoot);
+              actionQueue.enqueueCommand("compact", "");
+              actionQueue.enqueuePrompt(
+                "Continue from where the last request was interrupted.",
+              );
+            },
+          };
+          const newSessionAction = {
+            label: t("banner.newSession"),
+            variant: "cancel" as const,
+            onClick: () => {
+              clearErrorBanner(errorRoot);
+              persistence.startNewSession();
+            },
+          };
+
           if (findTrailingContextOverflowError(agent.state)) {
             showErrorBanner(
               errorRoot,
               autoCompactEnabled
                 ? "Context window exceeded — Pi will try compacting older history and retrying once. If this error persists, run /compact, scope your request to a smaller range, or use a larger-context model."
                 : "Context window exceeded. Run /compact to free up context, scope your request to a smaller range, or use a larger-context model.",
+              [retryAction, compactAndRetryAction, newSessionAction],
             );
           } else if (isProxyTargetBlockedMessage(err)) {
             showErrorBanner(errorRoot, t("init.proxyHostBlocked"));
@@ -1374,7 +1445,10 @@ export async function initTaskpane(opts: {
               t("init.corsError", { url: PROXY_HELPER_DOCS_URL }),
             );
           } else {
-            showErrorBanner(errorRoot, t("init.llmError", { error: err }));
+            showErrorBanner(errorRoot, t("init.llmError", { error: err }), [
+              retryAction,
+              newSessionAction,
+            ]);
           }
         }
       } else {

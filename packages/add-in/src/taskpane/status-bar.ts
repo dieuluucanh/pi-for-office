@@ -9,7 +9,7 @@ import { showToast } from "../ui/toast.js";
 import { BRAND_ICON_SMALL } from "../ui/brand-assets.js";
 import { escapeAttr, escapeHtml, setSafeInnerHTML } from "../utils/html.js";
 import { formatUsageDebug, isDebugEnabled } from "../debug/debug.js";
-import { estimateContextTokens } from "../utils/context-tokens.js";
+import { estimateEffectiveRequestTokens } from "../utils/context-tokens.js";
 import type { ExecutionMode } from "../execution/mode.js";
 import {
   getStatusContextHealth,
@@ -88,14 +88,20 @@ function renderStatusBar(
   //
   // For providers with prompt caching (e.g. Anthropic), `usage.input` excludes cached
   // prompt tokens. Cached tokens still count towards the model's context window.
-  //
-  // The most reliable signal we have in the UI is the last successful assistant
-  // turn's usage, which already reflects the prompt size.
-  const { totalTokens, lastUsage } = estimateContextTokens(state);
-
   const contextWindow = state.model?.contextWindow || 200000;
+
+  // Use the request-facing (shaping-aware) estimate as the primary meter: it
+  // reflects what actually gets sent to the provider after older large tool
+  // results are compacted to previews. The raw persisted-history count is kept
+  // for the popover/debug detail.
+  const { rawTokens, effectiveTokens, lastUsage } =
+    estimateEffectiveRequestTokens({
+      state,
+      tools: state.tools,
+      contextWindow,
+    });
   const pct =
-    contextWindow > 0 ? Math.round((totalTokens / contextWindow) * 100) : 0;
+    contextWindow > 0 ? Math.round((effectiveTokens / contextWindow) * 100) : 0;
   const ctxLabel =
     contextWindow >= 1_000_000
       ? `${(contextWindow / 1_000_000).toFixed(0)}M`
@@ -107,9 +113,19 @@ function renderStatusBar(
   // Context health: color + tooltip based on usage
   const ctxDescription = getStatusContextTooltipDescription();
   const ctxTokenDetail = t("status.context.tokens", {
-    used: totalTokens.toLocaleString(),
+    used: effectiveTokens.toLocaleString(),
     total: contextWindow.toLocaleString(),
   });
+  // When the shaping-aware (request-facing) estimate is meaningfully lower than
+  // the raw persisted history, surface the raw count so users understand why
+  // the meter differs from the accumulated transcript size.
+  const rawDetail =
+    rawTokens > effectiveTokens * 1.1
+      ? `\n${t("status.context.raw", {
+          used: rawTokens.toLocaleString(),
+        })}`
+      : "";
+  const ctxTokenDetailFull = ctxTokenDetail + rawDetail;
 
   const contextHealth = getStatusContextHealth(pct);
   const ctxColor = contextHealth.colorClass;
@@ -151,7 +167,6 @@ function renderStatusBar(
   const thinkingTooltip = escapeAttr(t("status.thinking.tooltip"));
 
   const ctxPopoverDesc = escapeAttr(ctxDescription);
-  const ctxPopoverTokens = escapeAttr(ctxTokenDetail);
   const ctxPopoverWarnText =
     ctxWarningText.length > 0 ? escapeAttr(ctxWarningText) : "";
 
@@ -163,7 +178,7 @@ function renderStatusBar(
         ${chevronSvg}
       </button>
       <button type="button" class="pi-status-thinking pi-status-clickable" data-tooltip="${thinkingTooltip}" aria-label="${escapeAttr(t("status.thinking.aria", { level: thinkingLevel }))}">${brainSvg} ${escapeHtml(thinkingLevel)}<span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span></button>
-      <button type="button" class="pi-status-ctx pi-status-ctx--trigger pi-status-clickable has-tooltip" ${STATUS_CONTEXT_DESC_ATTR}="${ctxPopoverDesc}" ${STATUS_CONTEXT_TOKENS_ATTR}="${ctxPopoverTokens}" ${STATUS_CONTEXT_WARNING_ATTR}="${ctxPopoverWarnText}" ${STATUS_CONTEXT_WARNING_SEVERITY_ATTR}="${ctxWarningSeverity}" aria-label="${escapeAttr(t("status.context.aria", { pct, label: ctxLabel }))}"><span class="pi-status-ctx__pct ${ctxColor}">${pct}%</span><span class="pi-status-ctx__sep">/</span><span class="pi-status-ctx__limit">${ctxLabel}</span>${usageDebug}<span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span><span class="pi-tooltip"><span class="pi-tooltip__desc">${escapeHtml(ctxDescription)}</span><span class="pi-tooltip__tokens">${escapeHtml(ctxTokenDetail)}</span>${ctxWarning}</span></button>
+      <button type="button" class="pi-status-ctx pi-status-ctx--trigger pi-status-clickable has-tooltip" ${STATUS_CONTEXT_DESC_ATTR}="${ctxPopoverDesc}" ${STATUS_CONTEXT_TOKENS_ATTR}="${ctxTokenDetailFull}" ${STATUS_CONTEXT_WARNING_ATTR}="${ctxPopoverWarnText}" ${STATUS_CONTEXT_WARNING_SEVERITY_ATTR}="${ctxWarningSeverity}" aria-label="${escapeAttr(t("status.context.aria", { pct, label: ctxLabel }))}"><span class="pi-status-ctx__pct ${ctxColor}">${pct}%</span><span class="pi-status-ctx__sep">/</span><span class="pi-status-ctx__limit">${ctxLabel}</span>${usageDebug}<span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span><span class="pi-tooltip"><span class="pi-tooltip__desc">${escapeHtml(ctxDescription)}</span><span class="pi-tooltip__tokens">${escapeHtml(ctxTokenDetailFull)}</span>${ctxWarning}</span></button>
       ${lockBadge}
     </div>
     <div class="pi-status-side">
@@ -177,7 +192,7 @@ function renderStatusBar(
     pct,
     ctxLabel,
     ctxColor,
-    ctxTokenDetail,
+    ctxTokenDetailFull,
     ctxWarningText,
     ctxWarningSeverity,
     usageDebug,

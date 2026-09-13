@@ -6,7 +6,19 @@ import type { Api, ImageContent, Model, Usage } from "@earendil-works/pi-ai";
 
 import { commandRegistry, type SlashCommand } from "../src/commands/types.ts";
 import { createActionQueue } from "../src/taskpane/action-queue.ts";
+import type { CompactionOutcome } from "../src/compaction/engine.ts";
 import { failOnUnexpectedStream } from "./fail-on-unexpected-stream.ts";
+
+function compactedOutcome(): CompactionOutcome {
+  return {
+    changed: true,
+    reason: "summarized",
+    tokensBefore: 1000,
+    tokensAfter: 400,
+    keptCount: 2,
+    summarizedCount: 3,
+  };
+}
 
 class TestAgent extends Agent {
   promptCalls: string[] = [];
@@ -70,7 +82,10 @@ function createDeferred(): { promise: Promise<void>; resolve: () => void } {
   };
 }
 
-async function waitForCondition(predicate: () => boolean, timeoutMs = 1500): Promise<void> {
+async function waitForCondition(
+  predicate: () => boolean,
+  timeoutMs = 1500,
+): Promise<void> {
   const start = Date.now();
 
   while (!predicate()) {
@@ -84,7 +99,10 @@ async function waitForCondition(predicate: () => boolean, timeoutMs = 1500): Pro
   }
 }
 
-async function withRegisteredCommand(command: SlashCommand, run: () => Promise<void>): Promise<void> {
+async function withRegisteredCommand(
+  command: SlashCommand,
+  run: () => Promise<void>,
+): Promise<void> {
   const previous = commandRegistry.get(command.name);
   commandRegistry.register(command);
 
@@ -138,8 +156,11 @@ void test("queued prompt survives compact replaceMessages and runs after compact
   const compactFinished = createDeferred();
 
   const executionOrder: string[] = [];
-  const busyIndicators: Array<{ label: string | null; hint: string | null }> = [];
-  const queueSnapshots: Array<Array<{ type: "prompt" | "command"; label: string; text: string }>> = [];
+  const busyIndicators: Array<{ label: string | null; hint: string | null }> =
+    [];
+  const queueSnapshots: Array<
+    Array<{ type: "prompt" | "command"; label: string; text: string }>
+  > = [];
 
   await withRegisteredCommand(
     {
@@ -192,7 +213,9 @@ void test("queued prompt survives compact replaceMessages and runs after compact
       compactGate.resolve();
 
       await compactFinished.promise;
-      await waitForCondition(() => agent.promptCalls.length === 1 && !queue.isBusy());
+      await waitForCondition(
+        () => agent.promptCalls.length === 1 && !queue.isBusy(),
+      );
 
       assert.deepEqual(agent.promptCalls, ["after compact"]);
       assert.deepEqual(executionOrder, [
@@ -209,7 +232,9 @@ void test("queued prompt survives compact replaceMessages and runs after compact
       assert.equal(busyIndicators[busyIndicators.length - 1]?.label, null);
 
       const queuedPromptWasShown = queueSnapshots.some((snapshot) =>
-        snapshot.some((item) => item.type === "prompt" && item.text === "after compact")
+        snapshot.some(
+          (item) => item.type === "prompt" && item.text === "after compact",
+        ),
       );
       assert.equal(queuedPromptWasShown, true);
 
@@ -220,7 +245,10 @@ void test("queued prompt survives compact replaceMessages and runs after compact
 
 void test("ordered queue runs compact, prompt, then compact", async () => {
   const agent = new TestAgent();
-  const compactRuns: Array<{ start: ReturnType<typeof createDeferred>; gate: ReturnType<typeof createDeferred> }> = [
+  const compactRuns: Array<{
+    start: ReturnType<typeof createDeferred>;
+    gate: ReturnType<typeof createDeferred>;
+  }> = [
     { start: createDeferred(), gate: createDeferred() },
     { start: createDeferred(), gate: createDeferred() },
   ];
@@ -294,7 +322,9 @@ void test("drainQueuedActions clears pending prompts and commands in FIFO order"
   const agent = new TestAgent();
   const waitGate = createDeferred();
 
-  const queueSnapshots: Array<Array<{ type: "prompt" | "command"; label: string; text: string }>> = [];
+  const queueSnapshots: Array<
+    Array<{ type: "prompt" | "command"; label: string; text: string }>
+  > = [];
 
   agent.onWaitForIdle = () => waitGate.promise;
 
@@ -362,7 +392,8 @@ void test("prompt ending in context overflow triggers compact-and-retry once", a
         model: model.id,
         usage: EMPTY_USAGE,
         stopReason: "error",
-        errorMessage: "Requested token count exceeds the model's maximum context length of 65536 tokens",
+        errorMessage:
+          "Requested token count exceeds the model's maximum context length of 65536 tokens",
         timestamp: 3,
       },
     ];
@@ -374,8 +405,11 @@ void test("prompt ending in context overflow triggers compact-and-retry once", a
     autoCompactEnabled: true,
     runCompact: () => {
       compactRuns += 1;
-      agent.state.messages = [createUserMessage("compaction summary", 4), toolResult];
-      return Promise.resolve();
+      agent.state.messages = [
+        createUserMessage("compaction summary", 4),
+        toolResult,
+      ];
+      return Promise.resolve(compactedOutcome());
     },
     sidebar: {
       setBusyIndicator: () => {

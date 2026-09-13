@@ -483,9 +483,9 @@ void test("inferOpenCodeContextWindow maps known families to catalog-tier values
   assert.equal(inferOpenCodeContextWindow("Claude-Opus-4-6"), 1_000_000);
 });
 
-void test("inferOpenCodeContextWindow falls back to 128k for unknown families", () => {
-  assert.equal(inferOpenCodeContextWindow("brand-new-model"), 128_000);
-  assert.equal(inferOpenCodeContextWindow("acme-ultra-9"), 128_000);
+void test("inferOpenCodeContextWindow falls back to the default for unknown families", () => {
+  assert.equal(inferOpenCodeContextWindow("brand-new-model"), 256_000);
+  assert.equal(inferOpenCodeContextWindow("acme-ultra-9"), 256_000);
 });
 
 void test("OpenCode discovery keeps static catalog values and infers context for new ids", async () => {
@@ -517,13 +517,13 @@ void test("OpenCode discovery keeps static catalog values and infers context for
   // Static catalog stays authoritative for known ids.
   assert.equal(byId.get("claude-opus-4-6")?.contextWindow, 1_000_000);
   // Newly listed ids get inferred windows instead of a stale 32k default.
-  assert.equal(byId.get("brand-new-model")?.contextWindow, 128_000);
+  assert.equal(byId.get("brand-new-model")?.contextWindow, 256_000);
   assert.equal(byId.get("deepseek-v4-flash-free")?.contextWindow, 200_000);
   // Persisted catalog reflects the inferred values for next-launch restore.
   const stored = catalogs.entries.get("opencode");
   const storedById = new Map(
     (stored?.models ?? []).map((model) => [model.id, model]),
   );
-  assert.equal(storedById.get("brand-new-model")?.contextWindow, 128_000);
+  assert.equal(storedById.get("brand-new-model")?.contextWindow, 256_000);
   assert.equal(storedById.has("claude-opus-4-6"), false);
 });

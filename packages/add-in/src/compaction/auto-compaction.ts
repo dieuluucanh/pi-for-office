@@ -10,13 +10,21 @@
  * Two trigger points share the same budgets:
  * - before a queued user prompt (`maybeAutoCompactBeforePrompt`)
  * - mid-turn, between tool-loop continuations (`maybeAutoCompactBeforeContinuation`)
+ *
+ * Both use the request-facing (shaping-aware) estimate and verify that
+ * compaction actually reduced the transcript below the trigger before allowing
+ * the request to proceed — the guard never dispatches an over-budget request.
  */
 
 import type { Agent, AgentLoopTurnUpdate } from "@earendil-works/pi-agent-core";
 
-import { estimateContextTokens, estimateTextTokens } from "../utils/context-tokens.js";
+import {
+  estimateEffectiveRequestTokens,
+  estimateTextTokens,
+} from "../utils/context-tokens.js";
 
 import { getCompactionThresholds } from "./defaults.js";
+import type { CompactionOutcome } from "./engine.js";
 
 export function shouldAutoCompactForProjectedTokens(args: {
   projectedTokens: number;
@@ -27,13 +35,37 @@ export function shouldAutoCompactForProjectedTokens(args: {
   return projectedTokens > hardTriggerTokens;
 }
 
-export async function maybeAutoCompactBeforePrompt(args: {
+/** Context needed for the pre-flight guard. */
+export interface AutoCompactContext {
   agent: Agent;
   nextUserText: string;
   enabled: boolean;
-  runCompact: () => Promise<void>;
-}): Promise<boolean> {
-  const { agent, nextUserText, enabled, runCompact } = args;
+  /** Effective window (may be smaller than model.contextWindow after a failure). */
+  contextWindow: number;
+  /** When true, trust the runtime to have compacted (verify reduction). */
+  runCompact: () => Promise<CompactionOutcome>;
+}
+
+function projectedTokensFor(
+  agent: Agent,
+  nextUserText: string,
+  contextWindow: number,
+): number {
+  const state = agent.state;
+  const maxOutput = state.model?.maxTokens ?? 0;
+  const { effectiveTokens } = estimateEffectiveRequestTokens({
+    state,
+    tools: state.tools,
+    contextWindow,
+    maxOutputTokens: maxOutput,
+  });
+  return effectiveTokens + estimateTextTokens(nextUserText);
+}
+
+export async function maybeAutoCompactBeforePrompt(
+  args: AutoCompactContext,
+): Promise<boolean> {
+  const { agent, nextUserText, enabled, contextWindow, runCompact } = args;
 
   if (!enabled) return false;
   if (agent.state.isStreaming) return false;
@@ -41,22 +73,49 @@ export async function maybeAutoCompactBeforePrompt(args: {
   const model = agent.state.model;
   if (!model) return false;
 
-  const contextWindow = model.contextWindow || 200000;
-
-  const { totalTokens } = estimateContextTokens(agent.state);
-  const projectedTokens = totalTokens + estimateTextTokens(nextUserText);
-
-  if (!shouldAutoCompactForProjectedTokens({ projectedTokens, contextWindow })) {
+  const projectedTokens = projectedTokensFor(
+    agent,
+    nextUserText,
+    contextWindow,
+  );
+  if (
+    !shouldAutoCompactForProjectedTokens({ projectedTokens, contextWindow })
+  ) {
     return false;
   }
 
   // Nothing to summarize / no room to improve.
   if (agent.state.messages.length < 4) return false;
 
-  // Delegate compaction execution to the caller so UI can show indicators and
-  // to ensure we respect any ordered action queue.
-  await runCompact();
-  return true;
+  const before = estimateEffectiveRequestTokens({
+    state: agent.state,
+    tools: agent.state.tools,
+    contextWindow,
+    maxOutputTokens: model.maxTokens ?? 0,
+  }).effectiveTokens;
+
+  const outcome = await runCompact();
+
+  // Verify compaction actually reduced the transcript below the trigger. If
+  // not (compaction failed or the tail is dominated by one huge message), the
+  // caller must not proceed with an over-budget request.
+  const after = estimateEffectiveRequestTokens({
+    state: agent.state,
+    tools: agent.state.tools,
+    contextWindow,
+    maxOutputTokens: model.maxTokens ?? 0,
+  }).effectiveTokens;
+
+  // Verify compaction actually reduced the transcript below the trigger. If
+  // not (compaction failed or the tail is dominated by one huge message), the
+  // caller must not proceed with an over-budget request.
+  return (
+    outcome.changed &&
+    outcome.reason !== "failed" &&
+    after < before &&
+    projectedTokensFor(agent, nextUserText, contextWindow) <=
+      getCompactionThresholds(contextWindow).hardTriggerTokens
+  );
 }
 
 /**
@@ -70,42 +129,70 @@ export async function maybeAutoCompactBeforePrompt(args: {
 export async function maybeAutoCompactBeforeContinuation(args: {
   agent: Agent;
   enabled: boolean;
-  runCompact: () => Promise<void>;
+  contextWindow: number;
+  runCompact: () => Promise<CompactionOutcome>;
 }): Promise<AgentLoopTurnUpdate | undefined> {
-  const { agent, enabled, runCompact } = args;
+  const { agent, enabled, contextWindow, runCompact } = args;
 
   if (!enabled) return undefined;
 
   const messages = agent.state.messages;
-  const last = messages[messages.length - 1];
-  // Only act when another continuation request is coming (tool loop). When the
-  // turn ended with a plain assistant message, the run is about to stop.
+  const last = messages.at(-1);
+  // Only act when another continuation request is coming (tool loop).
   if (!last || last.role !== "toolResult") return undefined;
 
   const model = agent.state.model;
   if (!model) return undefined;
 
-  const contextWindow = model.contextWindow || 200000;
-
-  const { totalTokens } = estimateContextTokens(agent.state);
-  if (!shouldAutoCompactForProjectedTokens({ projectedTokens: totalTokens, contextWindow })) {
+  const { effectiveTokens } = estimateEffectiveRequestTokens({
+    state: agent.state,
+    tools: agent.state.tools,
+    contextWindow,
+    maxOutputTokens: model.maxTokens ?? 0,
+  });
+  if (
+    !shouldAutoCompactForProjectedTokens({
+      projectedTokens: effectiveTokens,
+      contextWindow,
+    })
+  ) {
     return undefined;
   }
 
-  // Nothing to summarize / no room to improve.
   if (messages.length < 4) return undefined;
 
-  // `state.messages` is replaced (new array identity) when compaction rewrites
-  // history; an unchanged reference means compaction failed or was a no-op.
   const before = agent.state.messages;
-  await runCompact();
+  const beforeTokens = estimateEffectiveRequestTokens({
+    state: agent.state,
+    tools: agent.state.tools,
+    contextWindow,
+    maxOutputTokens: model.maxTokens ?? 0,
+  }).effectiveTokens;
+
+  const outcome = await runCompact();
   if (agent.state.messages === before) return undefined;
+
+  const afterTokens = estimateEffectiveRequestTokens({
+    state: agent.state,
+    tools: agent.state.tools,
+    contextWindow,
+    maxOutputTokens: model.maxTokens ?? 0,
+  }).effectiveTokens;
+
+  // Only continue the loop from the compacted context when it actually fit.
+  if (
+    !outcome.changed ||
+    outcome.reason === "failed" ||
+    afterTokens >= beforeTokens
+  ) {
+    return undefined;
+  }
 
   return {
     context: {
       systemPrompt: agent.state.systemPrompt,
-      messages: agent.state.messages.slice(),
-      tools: agent.state.tools.slice(),
+      messages: [...agent.state.messages],
+      tools: [...agent.state.tools],
     },
   };
 }

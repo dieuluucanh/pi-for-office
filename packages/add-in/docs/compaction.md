@@ -8,9 +8,13 @@ Pi for Office runs each chat inside the selected model’s **context window** (e
 
 Auto-compaction (enabled by default, `compaction.enabled`) uses the shared hard budgets from `getCompactionThresholds` and fires at three points:
 
-1. **Before a queued prompt** — projected context (current estimate + the new prompt) exceeds the hard trigger.
+1. **Before a queued prompt** — projected context (current estimate + the new prompt) exceeds the hard trigger. The projection uses the **request-facing (shaping-aware)** estimate, and the request is only dispatched after compaction verifiably reduced the transcript below the trigger.
 2. **Mid-turn, between tool-loop continuations** — after each completed tool batch, so a single tool-heavy turn can’t overflow a small context window before the next between-prompt check. The in-flight run continues from the compacted history.
-3. **Context-overflow recovery** — when a run still ends in a provider context-overflow error (e.g. a LiteLLM `ContextWindowExceededError`), Pi drops the failed assistant message, compacts, and retries the turn **once**. A second overflow stays in the transcript with an actionable error banner pointing at `/compact`.
+3. **Post-run recovery (Pi parity)** — when a run settles in an error tail:
+   - **context overflow** (error text, silent usage overflow like z.ai, MiMo length-stop, or a stream-end at high usage) → drop the failed assistant message, compact, retry **once**;
+   - **transient stream failures** (e.g. `Stream ended without finish_reason`, which pi-ai classifies as retryable via the `ended without` pattern) → drop the failed message, exponential-backoff retry (`retry.enabled`, `retry.maxRetries`, `retry.baseDelayMs`; defaults true / 3 / 2000, mirroring pi coding-agent).
+
+Deterministic quota/billing errors are never retried (`isRetryableAssistantError` already excludes them). When budgets are exhausted, the error stays in the transcript with an actionable banner offering **Retry / Compact & retry / New session**.
 
 When auto-compaction is disabled, overflow errors surface a banner suggesting `/compact`, scoping the request, or a larger-context model — instead of the raw provider error.
 
@@ -40,9 +44,15 @@ If the session already contains a `compactionSummary` message, we treat it as th
 
 ### 2) Choose what to keep vs summarize
 
-We estimate token sizes using a conservative heuristic (**~chars/4**) and select a cut point so we keep roughly the last **~20,000 tokens** of conversation as a “recent tail”.
+The compaction engine (`src/compaction/engine.ts`) selects a **valid turn boundary** (user/assistant messages only — never inside a tool batch) so the kept tail stays roughly the last **`keepRecentTokens` (~20,000)** tokens, and then **bounds the kept tail to a hard budget** with an escalation ladder:
 
-We also avoid starting the kept tail with a `toolResult` message (to keep tool call/result structure sane across providers).
+1. reduce effective `keepRecentTokens` (halved toward a 2k floor);
+2. preview oversized kept tool results (keep the most recent few verbatim), truncate oversized tool-call argument JSON;
+3. drop old images/thinking blocks;
+4. drop oldest kept turns, preserving tool-call/result pairing and always keeping the latest user message and latest assistant+results cycle;
+5. truncate oversized text payloads with an explicit marker.
+
+This is the fix for the historical stuck-loop: an oversized **trailing tool batch** (dozens of parallel results × 50KB) can no longer be kept wholesale, and `/compact` can never report “Nothing to compact” while the transcript is still over budget — it trims instead.
 
 ### 3) Generate the structured summary
 
@@ -70,12 +80,12 @@ Compaction also runs a lightweight **memory nudge** on the messages being summar
 
 ### 4) Replace the session messages
 
-After summarization succeeds, we replace the in-memory session with:
+After summarization succeeds, we **verify the assembled transcript fits** (`contextWindow - reserveTokens`), escalating the tail trim if needed, then atomically replace the in-memory session with:
 
 - `compactionSummary` (new/updated)
 - `...keptTail`
 
-In the UI, the summary is rendered as a collapsible “compact” card.
+The committed transcript is **persisted immediately** (`persistence.saveSession({ force: true })` via the `onCommitted` hook), so a pane reload can’t resurrect the oversized pre-compaction history. In the UI, the summary is rendered as a collapsible “compact” card.
 
 ## What the model sees after compaction
 
@@ -104,21 +114,17 @@ We mirror Pi’s compaction defaults:
 - `keepRecentTokens`: **20,000** (also clamped)
 - summary generation `maxTokens`: `floor(0.8 * reserveTokens)` (then clamped to `model.maxTokens`)
 
-We also truncate very large message blocks before summarization. If the summarization request still fails with a “prompt too long” error, we retry once with:
+Estimates are **script-aware** (CJK/Hangul/Kana count ~1 token per char instead of chars/4), include tool schemas, per-message framing, and size-aware image costs. The status bar uses the request-facing (shaping-aware) effective estimate as the primary meter, with the raw persisted-history count shown when it diverges.
 
-- more aggressive truncation, and
-- a larger kept tail (so fewer messages are summarized)
+The summarization prompt has a **total serialized budget** (chars), so the summarizer itself can never overflow: per-message limits are applied first, then oldest messages are omitted with an explicit marker. The summarizer call is wrapped in `retryAssistantCall` (transient retries), and a `length` stop is treated as failure (partial summaries never become checkpoints). If the request is still “too long”, one retry with aggressive truncation runs.
 
 ## What happens when context is >100%
 
 If the status bar shows **>100%** context usage, normal chat turns are likely to fail.
 
-Running `/compact` will usually still work because it generates a *separate* summarization request built from a bounded subset of messages. If compaction succeeds:
+The engine keeps the transcript under budget by trimming (see above), so `/compact` always makes progress — it never reports “Nothing to compact” while over budget. The boundary safety net (`src/auth/context-trim.ts`) additionally trims the outgoing request (previews old tool results, drops old images, truncates text) so **no over-budget request is ever dispatched** — including the summarizer call.
 
-- older history is replaced by the summary
-- the context usage % should drop immediately
-
-If compaction fails even after the retry, the fallback is to start a new chat (`/new`) and/or export the transcript first (`/export`).
+If compaction is exhausted even after escalation (e.g. a single message alone exceeds the window), an actionable banner offers **Retry / Compact & retry / New session** and explains the dominating item instead of silently failing.
 
 ## Small context windows (custom gateways)
 
@@ -138,9 +144,18 @@ The status bar context % is computed from:
 
 After `/compact`, last usage becomes stale (because the message list is rewritten). The UI detects this and temporarily estimates context usage from scratch until a new assistant response provides fresh usage.
 
+## Adaptive effective window
+
+Provider catalogs can overstate the real cap (e.g. an OpenCode Go contributor tier). After an overflow-like failure with a request estimate ≥50% of the claimed window, the runtime records the failure estimate and uses a **reduced effective window** (`×0.9`) for subsequent compaction triggers and guards — visible in the status bar. It resets on model switch.
+
 ## Where this is implemented
 
 - `/compact` implementation: `src/commands/builtins/export.ts`
+- Compaction engine (cut selection, tail trim ladder, fit verification): `src/compaction/engine.ts`
+- Failure classification (overflow/transient/fatal): `src/compaction/failure-classification.ts`
+- Pi-parity post-run recovery loop: `src/compaction/run-recovery.ts`
+- Adaptive effective window: `src/compaction/adaptive-window.ts`
+- Provider-boundary context trim: `src/auth/context-trim.ts`
 - Summary message type: `src/messages/compaction.ts`
 - Injecting summary into LLM context: `src/messages/convert-to-llm.ts`
 - UI rendering of the summary card: `src/ui/message-renderers.ts`

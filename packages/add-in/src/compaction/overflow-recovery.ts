@@ -9,7 +9,12 @@
  */
 
 import type { Agent, AgentState } from "@earendil-works/pi-agent-core";
-import { isContextOverflow, type AssistantMessage } from "@earendil-works/pi-ai";
+import {
+ isContextOverflow,
+ type AssistantMessage,
+} from "@earendil-works/pi-ai";
+
+import type { CompactionOutcome } from "./engine.js";
 
 /**
  * Returns the trailing assistant context-overflow error message, or null.
@@ -18,19 +23,33 @@ import { isContextOverflow, type AssistantMessage } from "@earendil-works/pi-ai"
  * larger-context model, a stale overflow error must not trigger recovery.
  */
 export function findTrailingContextOverflowError(
-  state: Pick<AgentState, "messages" | "model">,
+ state: Pick<AgentState, "messages" | "model">,
 ): AssistantMessage | null {
-  const messages = state.messages;
-  const last = messages[messages.length - 1];
-  if (!last || last.role !== "assistant") return null;
-  if (last.stopReason !== "error") return null;
+ const messages = state.messages;
+ const last = messages.at(-1);
+ if (!last || last.role !== "assistant") return null;
+ if (last.stopReason !== "error") return null;
 
-  const model = state.model;
-  if (model && (last.provider !== model.provider || last.model !== model.id)) {
-    return null;
-  }
+ const model = state.model;
+ if (model && (last.provider !== model.provider || last.model !== model.id)) {
+  return null;
+ }
 
-  return isContextOverflow(last, model?.contextWindow || undefined) ? last : null;
+ return isContextOverflow(last, model?.contextWindow || undefined)
+  ? last
+  : null;
+}
+
+/**
+ * True when the compaction outcome actually freed context (changed transcript
+ * and not a failure).
+ */
+function compactionMadeProgress(outcome: CompactionOutcome): boolean {
+ return (
+  outcome.changed &&
+  outcome.reason !== "failed" &&
+  outcome.tokensAfter < outcome.tokensBefore
+ );
 }
 
 /**
@@ -42,42 +61,41 @@ export function findTrailingContextOverflowError(
  * is pointed at `/compact` instead.
  */
 export async function recoverFromContextOverflow(args: {
-  agent: Agent;
-  runCompact: () => Promise<void>;
+ agent: Agent;
+ runCompact: () => Promise<CompactionOutcome>;
 }): Promise<boolean> {
-  const { agent, runCompact } = args;
+ const { agent, runCompact } = args;
 
-  const failure = findTrailingContextOverflowError(agent.state);
-  if (!failure) return false;
+ const failure = findTrailingContextOverflowError(agent.state);
+ if (!failure) return false;
 
-  // Drop the failed assistant message so the retry context is clean.
-  agent.state.messages = agent.state.messages.slice(0, -1);
+ // Drop the failed assistant message so the retry context is clean.
+ agent.state.messages = agent.state.messages.slice(0, -1);
 
-  // `state.messages` is replaced (new array identity) when compaction rewrites
-  // history; an unchanged reference means compaction failed or was a no-op.
-  const beforeCompact = agent.state.messages;
-  let compacted = false;
-  try {
-    await runCompact();
-    compacted = agent.state.messages !== beforeCompact;
-  } catch (err) {
-    // Compaction errors are normally surfaced via toasts inside runCompact;
-    // don't let an unexpected throw break the caller's queue processing.
-    console.warn("[pi] Overflow recovery compaction failed:", err);
-  }
-  if (!compacted) {
-    // Compaction freed nothing (no-op or failure) — restore the failure so it
-    // stays visible and persisted, and let the user act on the banner hint.
-    agent.state.messages = [...agent.state.messages, failure];
-    return false;
-  }
+ const beforeCompact = agent.state.messages;
+ let compacted = false;
+ try {
+  const outcome = await runCompact();
+  compacted =
+   agent.state.messages !== beforeCompact && compactionMadeProgress(outcome);
+ } catch (err) {
+  // Compaction errors are normally surfaced via toasts inside runCompact;
+  // don't let an unexpected throw break the caller's queue processing.
+  console.warn("[pi] Overflow recovery compaction failed:", err);
+ }
+ if (!compacted) {
+  // Compaction freed nothing (no-op or failure) — restore the failure so it
+  // stays visible and persisted, and let the user act on the banner hint.
+  agent.state.messages = [...agent.state.messages, failure];
+  return false;
+ }
 
-  const messages = agent.state.messages;
-  const last = messages[messages.length - 1];
-  // Continuations require a non-assistant tail (compaction keeps the original
-  // tail, so this only fails in pathological cases).
-  if (!last || last.role === "assistant") return false;
+ const messages = agent.state.messages;
+ const last = messages.at(-1);
+ // Continuations require a non-assistant tail (compaction keeps the original
+ // tail, so this only fails in pathological cases).
+ if (!last || last.role === "assistant") return false;
 
-  await agent.continue();
-  return true;
+ await agent.continue();
+ return true;
 }

@@ -6,7 +6,10 @@
 import { getAppStorage } from "../../../storage/local/app-storage.js";
 
 import { listOpenAiGatewayConfigs } from "../../../auth/custom-gateways.js";
-import { PI_EXECUTION_MODE_CHANGED_EVENT, type ExecutionMode } from "../../../execution/mode.js";
+import {
+  PI_EXECUTION_MODE_CHANGED_EVENT,
+  type ExecutionMode,
+} from "../../../execution/mode.js";
 import type { ModelSwitchBehavior } from "../../../models/switch-behavior.js";
 import { getLanguage, initLanguage, t } from "../../../language/index.js";
 import {
@@ -28,7 +31,10 @@ import {
   createSettingSelectRow,
   createSettingToggleRow,
 } from "../../../ui/settings-rows.js";
-import type { SettingsPageContext, SettingsShellPage } from "../../../ui/settings-shell.js";
+import type {
+  SettingsPageContext,
+  SettingsShellPage,
+} from "../../../ui/settings-shell.js";
 import { showToast } from "../../../ui/toast.js";
 import { getSettingsPagesDependencies } from "./dependencies.js";
 
@@ -80,7 +86,9 @@ function buildProvidersGroup(ctx: SettingsPageContext): HTMLElement {
     try {
       const gateways = await listOpenAiGatewayConfigs(storage.customProviders);
       gatewayRow.setValue(
-        gateways.length > 0 ? String(gateways.length) : t("settings.value.none"),
+        gateways.length > 0
+          ? String(gateways.length)
+          : t("settings.value.none"),
       );
     } catch {
       // leave preview empty
@@ -88,7 +96,11 @@ function buildProvidersGroup(ctx: SettingsPageContext): HTMLElement {
 
     try {
       const proxyEnabled = await storage.settings.get<boolean>("proxy.enabled");
-      proxyRow.setValue(proxyEnabled === true ? t("settings.value.on") : t("settings.value.off"));
+      proxyRow.setValue(
+        proxyEnabled === true
+          ? t("settings.value.on")
+          : t("settings.value.off"),
+      );
     } catch {
       // leave preview empty
     }
@@ -121,18 +133,24 @@ function buildBehaviorGroup(ctx: SettingsPageContext): HTMLElement {
       if (nextMode === currentMode) return;
 
       autoApply.input.disabled = true;
-      void setExecutionMode(nextMode).then(
-        () => {
-          currentMode = nextMode;
-          showToast(nextMode === "yolo" ? t("settings.toast.auto_mode") : t("settings.toast.confirm_mode"));
-        },
-        () => {
-          autoApply.input.checked = currentMode === "yolo";
-          showToast(t("settings.toast.execution_failed"));
-        },
-      ).finally(() => {
-        autoApply.input.disabled = false;
-      });
+      void setExecutionMode(nextMode)
+        .then(
+          () => {
+            currentMode = nextMode;
+            showToast(
+              nextMode === "yolo"
+                ? t("settings.toast.auto_mode")
+                : t("settings.toast.confirm_mode"),
+            );
+          },
+          () => {
+            autoApply.input.checked = currentMode === "yolo";
+            showToast(t("settings.toast.execution_failed"));
+          },
+        )
+        .finally(() => {
+          autoApply.input.disabled = false;
+        });
     });
 
     const onExecutionModeChanged = (event: Event): void => {
@@ -145,9 +163,15 @@ function buildBehaviorGroup(ctx: SettingsPageContext): HTMLElement {
       autoApply.input.checked = mode === "yolo";
     };
 
-    document.addEventListener(PI_EXECUTION_MODE_CHANGED_EVENT, onExecutionModeChanged);
+    document.addEventListener(
+      PI_EXECUTION_MODE_CHANGED_EVENT,
+      onExecutionModeChanged,
+    );
     ctx.addCleanup(() => {
-      document.removeEventListener(PI_EXECUTION_MODE_CHANGED_EVENT, onExecutionModeChanged);
+      document.removeEventListener(
+        PI_EXECUTION_MODE_CHANGED_EVENT,
+        onExecutionModeChanged,
+      );
     });
   }
 
@@ -167,22 +191,30 @@ function buildBehaviorGroup(ctx: SettingsPageContext): HTMLElement {
     forkToggle.input.checked = currentBehavior === "fork";
 
     forkToggle.input.addEventListener("change", () => {
-      const nextBehavior: ModelSwitchBehavior = forkToggle.input.checked ? "fork" : "inPlace";
+      const nextBehavior: ModelSwitchBehavior = forkToggle.input.checked
+        ? "fork"
+        : "inPlace";
       if (nextBehavior === currentBehavior) return;
 
       forkToggle.input.disabled = true;
-      void setModelSwitchBehavior(nextBehavior).then(
-        () => {
-          currentBehavior = nextBehavior;
-          showToast(nextBehavior === "fork" ? t("settings.toast.fork_on") : t("settings.toast.fork_off"));
-        },
-        () => {
-          forkToggle.input.checked = currentBehavior === "fork";
-          showToast(t("settings.toast.fork_failed"));
-        },
-      ).finally(() => {
-        forkToggle.input.disabled = false;
-      });
+      void setModelSwitchBehavior(nextBehavior)
+        .then(
+          () => {
+            currentBehavior = nextBehavior;
+            showToast(
+              nextBehavior === "fork"
+                ? t("settings.toast.fork_on")
+                : t("settings.toast.fork_off"),
+            );
+          },
+          () => {
+            forkToggle.input.checked = currentBehavior === "fork";
+            showToast(t("settings.toast.fork_failed"));
+          },
+        )
+        .finally(() => {
+          forkToggle.input.disabled = false;
+        });
     });
   }
 
@@ -210,7 +242,87 @@ function buildBehaviorGroup(ctx: SettingsPageContext): HTMLElement {
     },
   });
 
-  group.list.append(autoApply.root, forkToggle.root, languageRow.root);
+  // ── Auto-compaction ──
+  const compactionToggle = createSettingToggleRow({
+    label: t("settings.section.advanced.compaction_label"),
+    sublabel: t("settings.section.advanced.compaction_sublabel"),
+  });
+
+  void (async () => {
+    try {
+      const storage = getAppStorage();
+      const current =
+        (await storage.settings.get<boolean>("compaction.enabled")) ?? true;
+      compactionToggle.input.checked = current;
+    } catch {
+      compactionToggle.input.checked = true;
+    }
+  })();
+
+  compactionToggle.input.addEventListener("change", () => {
+    const next = compactionToggle.input.checked;
+    compactionToggle.input.disabled = true;
+    void (async () => {
+      try {
+        const storage = getAppStorage();
+        await storage.settings.set("compaction.enabled", next);
+        showToast(
+          next
+            ? t("settings.toast.compaction_on")
+            : t("settings.toast.compaction_off"),
+        );
+      } catch {
+        compactionToggle.input.checked = !next;
+        showToast(t("settings.toast.compaction_failed"));
+      } finally {
+        compactionToggle.input.disabled = false;
+      }
+    })();
+  });
+
+  // ── Auto-retry ──
+  const retryToggle = createSettingToggleRow({
+    label: t("settings.section.advanced.retry_label"),
+    sublabel: t("settings.section.advanced.retry_sublabel"),
+  });
+
+  void (async () => {
+    try {
+      const storage = getAppStorage();
+      const current =
+        (await storage.settings.get<boolean>("retry.enabled")) ?? true;
+      retryToggle.input.checked = current;
+    } catch {
+      retryToggle.input.checked = true;
+    }
+  })();
+
+  retryToggle.input.addEventListener("change", () => {
+    const next = retryToggle.input.checked;
+    retryToggle.input.disabled = true;
+    void (async () => {
+      try {
+        const storage = getAppStorage();
+        await storage.settings.set("retry.enabled", next);
+        showToast(
+          next ? t("settings.toast.retry_on") : t("settings.toast.retry_off"),
+        );
+      } catch {
+        retryToggle.input.checked = !next;
+        showToast(t("settings.toast.retry_failed"));
+      } finally {
+        retryToggle.input.disabled = false;
+      }
+    })();
+  });
+
+  group.list.append(
+    autoApply.root,
+    forkToggle.root,
+    compactionToggle.root,
+    retryToggle.root,
+    languageRow.root,
+  );
   return group.root;
 }
 
@@ -265,7 +377,9 @@ function buildExtensionsGroup(ctx: SettingsPageContext): HTMLElement {
     try {
       const installed = extensionManager.list().length;
       if (installed > 0) {
-        pluginsRow.setValue(t("settings.value.installed_count", { count: installed }));
+        pluginsRow.setValue(
+          t("settings.value.installed_count", { count: installed }),
+        );
       }
     } catch {
       // leave preview empty

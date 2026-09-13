@@ -173,3 +173,35 @@
   color: var(--destructive);
   border-bottom: 1px solid oklch(0.55 0.22 25 / 0.2);
 }
+
+.pi-error__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.pi-error__action {
+  appearance: none;
+  border: 1px solid oklch(0.55 0.22 25 / 0.35);
+  background: oklch(0.55 0.22 25 / 0.06);
+  color: var(--destructive);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.pi-error__action:hover {
+  background: oklch(0.55 0.22 25 / 0.14);
+  border-color: oklch(0.55 0.22 25 / 0.55);
+}
+
+.pi-error__action--cancel {
+  border-color: oklch(0.55 0.22 25 / 0.2);
+  background: transparent;
+  color: var(--muted-foreground);
+}

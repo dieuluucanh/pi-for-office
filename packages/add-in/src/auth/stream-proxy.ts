@@ -19,6 +19,7 @@ import type {
 } from "@earendil-works/pi-ai";
 
 import { isDebugEnabled } from "../debug/debug.js";
+import { fitLlmContextToWindow } from "./context-trim.js";
 import {
   selectToolBundle,
   type ToolBundleId,
@@ -633,6 +634,14 @@ export function createOfficeStreamFn(
       callRecord.captureSnapshot,
     );
 
+    // Boundary safety net (#566): if the shaped request still exceeds the model
+    // window, defensively trim before dispatch so an over-budget request is
+    // never sent (also protects the compaction summarizer call).
+    const dispatchContext = fitLlmContextToWindow(
+      normalizedModel,
+      effectiveContext,
+    ).context;
+
     const proxyUrl = await getProxyUrl();
     const needsCodexBridge = requiresCodexWebSocketBridge(normalizedModel);
     if (!proxyUrl) {
@@ -658,7 +667,7 @@ export function createOfficeStreamFn(
       }
       return modelsRuntime.streamSimple(
         normalizedModel,
-        effectiveContext,
+        dispatchContext,
         effectiveOptions,
       );
     }
@@ -672,7 +681,7 @@ export function createOfficeStreamFn(
     ) {
       return modelsRuntime.streamSimple(
         normalizedModel,
-        effectiveContext,
+        dispatchContext,
         effectiveOptions,
       );
     }
@@ -714,7 +723,7 @@ export function createOfficeStreamFn(
           "x-opencode-session": GATEWAY_SESSION_ID,
         },
       },
-      effectiveContext,
+      dispatchContext,
       proxiedOptions,
     );
   };

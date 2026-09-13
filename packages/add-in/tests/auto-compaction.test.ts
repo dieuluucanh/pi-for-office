@@ -14,6 +14,18 @@ import {
   mergeCompactionAdditionalFocus,
 } from "../src/compaction/memory-nudge.ts";
 import { failOnUnexpectedStream } from "./fail-on-unexpected-stream.ts";
+import type { CompactionOutcome } from "../src/compaction/engine.ts";
+
+function compactedOutcome(): CompactionOutcome {
+  return {
+    changed: true,
+    reason: "summarized",
+    tokensBefore: 1000,
+    tokensAfter: 300,
+    keptCount: 2,
+    summarizedCount: 3,
+  };
+}
 
 function createUserMessage(text: string, timestamp: number): AgentMessage {
   return {
@@ -31,7 +43,10 @@ function createAssistantMessage(text: string, timestamp: number): AgentMessage {
   };
 }
 
-function createCompleteAssistantMessage(text: string, timestamp: number): AgentMessage {
+function createCompleteAssistantMessage(
+  text: string,
+  timestamp: number,
+): AgentMessage {
   return {
     role: "assistant",
     content: [{ type: "text", text }],
@@ -51,7 +66,10 @@ function createCompleteAssistantMessage(text: string, timestamp: number): AgentM
   };
 }
 
-function createToolResultMessage(text: string, timestamp: number): ToolResultMessage {
+function createToolResultMessage(
+  text: string,
+  timestamp: number,
+): ToolResultMessage {
   return {
     role: "toolResult",
     toolCallId: `call-${timestamp}`,
@@ -77,7 +95,10 @@ function createModel(contextWindow: number): Model<Api> {
   };
 }
 
-function createAgent(args: { contextWindow: number; messages: AgentMessage[] }): Agent {
+function createAgent(args: {
+  contextWindow: number;
+  messages: AgentMessage[];
+}): Agent {
   return new Agent({
     streamFn: failOnUnexpectedStream,
     initialState: {
@@ -111,24 +132,31 @@ void test("mid-turn check compacts and returns a replacement loop context", asyn
   const update = await maybeAutoCompactBeforeContinuation({
     agent,
     enabled: true,
+    contextWindow: 32_768,
     runCompact: () => {
       compactRuns += 1;
-      agent.state.messages = [createUserMessage("compaction summary", 6), ...keptTail];
-      return Promise.resolve();
+      agent.state.messages = [
+        createUserMessage("compaction summary", 6),
+        ...keptTail,
+      ];
+      return Promise.resolve(compactedOutcome());
     },
   });
 
   assert.equal(compactRuns, 1);
   assert.notEqual(update, undefined);
   assert.equal(update?.context?.messages.length, 3);
-  assert.equal(update?.context?.messages[update.context.messages.length - 1]?.role, "toolResult");
+  assert.equal(
+    update?.context?.messages[update.context.messages.length - 1]?.role,
+    "toolResult",
+  );
 });
 
 void test("mid-turn check is a no-op when disabled or under threshold", async () => {
   let compactRuns = 0;
   const runCompact = () => {
     compactRuns += 1;
-    return Promise.resolve();
+    return Promise.resolve(compactedOutcome());
   };
 
   const overBudget = createAgent({
@@ -136,7 +164,12 @@ void test("mid-turn check is a no-op when disabled or under threshold", async ()
     messages: createToolLoopMessages(80_000),
   });
   assert.equal(
-    await maybeAutoCompactBeforeContinuation({ agent: overBudget, enabled: false, runCompact }),
+    await maybeAutoCompactBeforeContinuation({
+      agent: overBudget,
+      enabled: false,
+      contextWindow: 32_768,
+      runCompact,
+    }),
     undefined,
   );
 
@@ -145,7 +178,12 @@ void test("mid-turn check is a no-op when disabled or under threshold", async ()
     messages: createToolLoopMessages(1_000),
   });
   assert.equal(
-    await maybeAutoCompactBeforeContinuation({ agent: underBudget, enabled: true, runCompact }),
+    await maybeAutoCompactBeforeContinuation({
+      agent: underBudget,
+      enabled: true,
+      contextWindow: 32_768,
+      runCompact,
+    }),
     undefined,
   );
 
@@ -165,9 +203,10 @@ void test("mid-turn check skips when the turn is not continuing (no trailing too
   const update = await maybeAutoCompactBeforeContinuation({
     agent,
     enabled: true,
+    contextWindow: 32_768,
     runCompact: () => {
       compactRuns += 1;
-      return Promise.resolve();
+      return Promise.resolve(compactedOutcome());
     },
   });
 
@@ -184,9 +223,10 @@ void test("mid-turn check returns undefined when compaction does not rewrite his
   const update = await maybeAutoCompactBeforeContinuation({
     agent,
     enabled: true,
+    contextWindow: 32_768,
     runCompact: () => {
       // compaction failed / nothing to do
-      return Promise.resolve();
+      return Promise.resolve(compactedOutcome());
     },
   });
 
@@ -228,7 +268,10 @@ void test("small context windows still use reserve-based hard threshold", () => 
 void test("collects memory cues from user messages and ignores auto-context", () => {
   const messages: AgentMessage[] = [
     createUserMessage("[Auto-context] Please remember this summary.", 1),
-    createUserMessage("Please remember this: this workbook uses calendar year.", 2),
+    createUserMessage(
+      "Please remember this: this workbook uses calendar year.",
+      2,
+    ),
     createAssistantMessage("Got it.", 3),
     createUserMessage("Don't forget to keep EUR as the default currency.", 4),
   ];
@@ -237,7 +280,9 @@ void test("collects memory cues from user messages and ignores auto-context", ()
 
   assert.equal(summary.cueCount, 2);
   assert.equal(summary.snippets.length, 2);
-  assert.ok(summary.snippets.every((snippet) => !snippet.startsWith("[Auto-context]")));
+  assert.ok(
+    summary.snippets.every((snippet) => !snippet.startsWith("[Auto-context]")),
+  );
   assert.match(summary.snippets[0] ?? "", /remember this/i);
   assert.match(summary.snippets[1] ?? "", /don['’]t forget/i);
 });
@@ -246,8 +291,14 @@ void test("deduplicates snippets and respects snippet limits", () => {
   const messages: AgentMessage[] = [
     createUserMessage("Remember this: freeze panes on Summary.", 1),
     createUserMessage("Remember this: freeze panes on Summary.", 2),
-    createUserMessage("Please save this for future reference: Revenue is net of refunds.", 3),
-    createUserMessage("Please save this for future reference: Revenue is net of refunds.", 4),
+    createUserMessage(
+      "Please save this for future reference: Revenue is net of refunds.",
+      3,
+    ),
+    createUserMessage(
+      "Please save this for future reference: Revenue is net of refunds.",
+      4,
+    ),
   ];
 
   const summary = collectCompactionMemoryCues(messages, 1);

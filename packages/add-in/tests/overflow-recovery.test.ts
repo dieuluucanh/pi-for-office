@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
-import type { Api, AssistantMessage, Model, ToolResultMessage, Usage } from "@earendil-works/pi-ai";
+import type {
+  Api,
+  AssistantMessage,
+  Model,
+  ToolResultMessage,
+  Usage,
+} from "@earendil-works/pi-ai";
+import type { CompactionOutcome } from "../src/compaction/engine.ts";
 
 import {
   findTrailingContextOverflowError,
@@ -19,13 +26,27 @@ const EMPTY_USAGE: Usage = {
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 };
 
+function compactedOutcome(tokensBefore: number): CompactionOutcome {
+  return {
+    changed: true,
+    reason: "summarized",
+    tokensBefore,
+    tokensAfter: Math.floor(tokensBefore / 2),
+    keptCount: 2,
+    summarizedCount: 3,
+  };
+}
+
 // Real error shape from #558 (LiteLLM custom gateway, 65k model).
 const LITELLM_OVERFLOW_ERROR =
   "400 litellm.ContextWindowExceededError: litellm.BadRequestError: ContextWindowExceededError: " +
   "Hosted_vllmException - This model's maximum context length is 65536 tokens. However, you requested " +
   "4096 output tokens and your prompt contains at least 61441 input tokens.";
 
-function createModel(contextWindow: number, id = "deepseek-r1-32b"): Model<Api> {
+function createModel(
+  contextWindow: number,
+  id = "deepseek-r1-32b",
+): Model<Api> {
   return {
     id,
     name: id,
@@ -55,7 +76,10 @@ function createToolResult(text: string, timestamp: number): ToolResultMessage {
   };
 }
 
-function createOverflowError(model: Model<Api>, timestamp: number): AssistantMessage {
+function createOverflowError(
+  model: Model<Api>,
+  timestamp: number,
+): AssistantMessage {
   return {
     role: "assistant",
     content: [{ type: "text", text: "" }],
@@ -97,7 +121,11 @@ void test("findTrailingContextOverflowError matches LiteLLM overflow from the ac
   const failure = createOverflowError(model, 3);
 
   const found = findTrailingContextOverflowError({
-    messages: [createUser("analyze this data", 1), createToolResult("rows...", 2), failure],
+    messages: [
+      createUser("analyze this data", 1),
+      createToolResult("rows...", 2),
+      failure,
+    ],
     model,
   });
 
@@ -157,7 +185,7 @@ void test("recoverFromContextOverflow drops the failure, compacts, and retries o
       compactRuns += 1;
       // Simulate compaction rewriting history (new array identity, kept tail).
       agent.state.messages = [createUser("compaction summary", 4), toolResult];
-      return Promise.resolve();
+      return Promise.resolve(compactedOutcome(500));
     },
   });
 
@@ -182,7 +210,14 @@ void test("recoverFromContextOverflow restores the failure when compaction is a 
     agent,
     runCompact: () => {
       // Compaction failed / nothing to compact: messages left untouched.
-      return Promise.resolve();
+      return Promise.resolve({
+        changed: false,
+        reason: "nothing-to-compact",
+        tokensBefore: 500,
+        tokensAfter: 500,
+        keptCount: 2,
+        summarizedCount: 0,
+      });
     },
   });
 
@@ -190,7 +225,8 @@ void test("recoverFromContextOverflow restores the failure when compaction is a 
   assert.equal(agent.continueCalls, 0);
 
   const last = agent.state.messages[agent.state.messages.length - 1];
-  if (last?.role !== "assistant") throw new Error("expected trailing assistant failure");
+  if (last?.role !== "assistant")
+    throw new Error("expected trailing assistant failure");
   assert.equal(last.errorMessage, LITELLM_OVERFLOW_ERROR);
 });
 
@@ -211,7 +247,8 @@ void test("recoverFromContextOverflow restores the failure when compaction throw
   assert.equal(agent.continueCalls, 0);
 
   const last = agent.state.messages[agent.state.messages.length - 1];
-  if (last?.role !== "assistant") throw new Error("expected trailing assistant failure");
+  if (last?.role !== "assistant")
+    throw new Error("expected trailing assistant failure");
   assert.equal(last.errorMessage, LITELLM_OVERFLOW_ERROR);
 });
 
@@ -227,7 +264,14 @@ void test("recoverFromContextOverflow does nothing without a trailing overflow e
     agent,
     runCompact: () => {
       compactRuns += 1;
-      return Promise.resolve();
+      return Promise.resolve({
+        changed: true,
+        reason: "summarized",
+        tokensBefore: 500,
+        tokensAfter: 100,
+        keptCount: 2,
+        summarizedCount: 3,
+      });
     },
   });
 

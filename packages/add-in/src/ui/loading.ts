@@ -22,9 +22,32 @@ export function renderLoading(): TemplateResult {
   `;
 }
 
+export interface ErrorBannerAction {
+ label: string;
+ onClick: () => void | Promise<void>;
+ variant?: "ok" | "cancel";
+}
+
 /**
- * Show an error message. Returns a template that can be rendered into #error.
+ * Show an error message, optionally with action buttons (retry / compact /
+ * new session). Rendered into #error via showErrorBanner.
  */
-export function renderError(message: string): TemplateResult {
- return html`<div class="pi-error">${message}</div>`;
+export function renderError(
+ message: string,
+ actions?: readonly ErrorBannerAction[],
+): TemplateResult {
+ const actionButtons =
+  actions && actions.length > 0
+   ? html`<div class="pi-error__actions">
+          ${actions.map(
+           (action) => html`<button
+              type="button"
+              class="pi-error__action pi-error__action--${action.variant ?? "ok"}"
+              @click=${() => void action.onClick()}
+            >${action.label}</button>`,
+          )}
+        </div>`
+   : null;
+
+ return html`<div class="pi-error">${message}${actionButtons}</div>`;
 }
