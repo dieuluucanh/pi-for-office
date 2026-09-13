@@ -74,6 +74,22 @@ const LISTEN_HOSTS = hasExplicitHost
 const hasExplicitPort =
   typeof process.env.PORT === "string" && process.env.PORT.trim().length > 0;
 
+/**
+ * Listen-port precedence: `--port <n>` argv flag, then the PORT env var,
+ * then the default. `--port` exists so the dev scripts can bind the dev
+ * ports cross-platform (npm cannot set env vars inline on Windows cmd).
+ */
+function parsePortArg(argv) {
+  const idx = argv.indexOf("--port");
+  if (idx === -1) return null;
+  const raw = argv[idx + 1];
+  if (typeof raw === "undefined") {
+    console.error("[pi-for-office] Invalid args: --port requires a value");
+    process.exit(1);
+  }
+  return raw;
+}
+
 function parsePort(rawPort) {
   const port = Number.parseInt(rawPort, 10);
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
@@ -84,7 +100,13 @@ function parsePort(rawPort) {
   return port;
 }
 
-const PORT = hasExplicitPort ? parsePort(process.env.PORT) : DEFAULT_PORT;
+const PORT_ARG = parsePortArg(process.argv.slice(2));
+const PORT =
+  PORT_ARG !== null
+    ? parsePort(PORT_ARG)
+    : hasExplicitPort
+      ? parsePort(process.env.PORT)
+      : DEFAULT_PORT;
 
 const OAUTH_CALLBACK_HOST = process.env.OAUTH_CALLBACK_HOST || "localhost";
 const OAUTH_CALLBACK_SERVER_ENABLED = !["0", "false", "no"].includes(

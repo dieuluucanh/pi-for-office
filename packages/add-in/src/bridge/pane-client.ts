@@ -15,7 +15,6 @@
  */
 
 import {
-  BRIDGE_DEFAULT_PORT,
   BRIDGE_PROTOCOL_VERSION,
   type ClientMessage,
   type HelloMessage,
@@ -23,6 +22,7 @@ import {
   type ServerMessage,
   type WelcomeMessage,
 } from "@dieulc/pi-office-protocol";
+import { defaultBridgePort } from "../config/local-service-defaults.js";
 import type { OfficeOpExecutor } from "./ops.js";
 
 const WELCOME_TIMEOUT_MS = 5_000;
@@ -118,7 +118,7 @@ export class PaneBridgeClient {
     this.callbacks = callbacks;
     this.ops = options.ops;
     this.catalogVersion = options.catalogVersion;
-    const port = extractPort(options.url) ?? BRIDGE_DEFAULT_PORT;
+    const port = extractPort(options.url) ?? defaultBridgePort();
     this.url = options.url ?? `ws://127.0.0.1:${port}`;
   }
 

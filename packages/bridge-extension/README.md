@@ -37,8 +37,8 @@ Two flows:
 pi install npm:@dieulc/pi-office-bridge
 ```
 
-**Update to the latest** (the add-in's `/health` probe and version display
-require ≥ 0.2.0):
+**Update to the latest** (the full 29-tool catalog incl. structure/format tools
+needs ≥ 0.3.0; the `/health` probe and version display need ≥ 0.2.0):
 
 ```bash
 pi install npm:@dieulc/pi-office-bridge@latest
@@ -48,14 +48,20 @@ Then restart Pi. Note that `pi install` pins the version it fetched into
 `~/.pi/agent/npm/package.json`, so Pi will **not** auto-upgrade — re-run the
 command above to get the newest bridge.
 
-Or from the monorepo (development):
+Or from the monorepo (development) as the **dev bridge** on port `38618`
+(`--no-extensions` ignores settings, so the globally installed prod bridge
+never double-loads in the same process):
 
 ```bash
-cd packages/bridge-extension
-npm install
-# then load it in pi for a quick test:
-pi -e ./src/index.ts
+npm run bridge:dev   # repo root → pi --no-extensions -e ./packages/bridge-extension/src/index.ts --office-bridge-port 38618
 ```
+
+> **Troubleshooting: the agent says it has no `office_excel_modify_structure`**
+> (or any other newer tool). A bridge **< 0.3.0** ships a small hardcoded
+> catalog (12 tools) and ignores the pane's `hello.ops`, so newer ops silently
+> never register. Fix: `pi install npm:@dieulc/pi-office-bridge@latest`, restart
+> Pi, then verify with `/office-tools` (29 tools) and `/office` (pane ops +
+> catalog version).
 
 ## Enable in the add-in
 

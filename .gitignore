@@ -28,4 +28,6 @@ npm-debug.log*
 Thumbs.db
 .idea/
 .vscode/
-.pi
+
+# Local AI plans (the rest of .pi/ is committable — dev config, etc.)
+.pi/plans/

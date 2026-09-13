@@ -19,7 +19,7 @@
     "extension"
   ],
   "dependencies": {
-    "@dieulc/pi-office-protocol": "*",
+    "@dieulc/pi-office-protocol": "^0.3.0",
     "typebox": "^1.3.10",
     "ws": "^8.18.0"
   },
@@ -52,7 +52,7 @@
     "build": "tsc -p tsconfig.build.json",
     "test:active": "node --test tests/active-tools.test.mjs",
     "test:smoke": "npm run build && node tests/smoke.mjs",
-    "test:interop": "npm run build && node tests/pane-interop.mjs",
+    "test:interop": "npm run build && node --import ./tests/register-ts-loader.mjs tests/pane-interop.mjs",
     "test": "npm run test:active && npm run test:smoke && npm run test:interop"
   },
   "publishConfig": {

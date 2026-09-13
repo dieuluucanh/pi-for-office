@@ -25,6 +25,8 @@ import {
   resolveRuntimeDefaultProxyUrl,
   validateOfficeProxyUrl,
 } from "../auth/proxy-validation.js";
+import { IS_DEV_BUILD } from "../config/local-service-defaults.js";
+import { applyDevServiceDefaultMigrations } from "../config/service-default-migration.js";
 import { restoreCredentials } from "../auth/restore.js";
 import { invalidateBlueprint } from "../context/blueprint.js";
 import { ChangeTracker } from "../context/change-tracker.js";
@@ -355,6 +357,10 @@ export async function initTaskpane(opts: {
 
   // Seed a predictable proxy default for OAuth flows.
   await ensureDefaultProxyUrl(settings, spreadsheetHost.kind);
+
+  // Dev builds: rewrite stored prod-default service URLs to the dev ports so
+  // the pane targets the dev local services (mirrors ensureDefaultProxyUrl).
+  await applyDevServiceDefaultMigrations(settings, IS_DEV_BUILD);
 
   // Migrate legacy web-search API keys to the connection store schema.
   try {

@@ -2,6 +2,10 @@ import {
   DEFAULT_PYTHON_BRIDGE_URL,
   DEFAULT_TMUX_BRIDGE_URL,
 } from "../tools/experimental-tool-gates.js";
+import {
+  resolvePythonBridgeSetupCommand,
+  resolveTmuxBridgeSetupCommand,
+} from "../config/local-service-defaults.js";
 import { probeBridgeHealth } from "../tools/bridge-service-utils.js";
 import {
   isLibreOfficeBridgeDetails,
@@ -23,8 +27,8 @@ import {
   lucide,
 } from "./lucide-icons.js";
 
-export const PYTHON_BRIDGE_SETUP_COMMAND = "npx pi-for-office-python-bridge";
-export const TMUX_BRIDGE_SETUP_COMMAND = "npx pi-for-office-tmux-bridge";
+export const PYTHON_BRIDGE_SETUP_COMMAND = resolvePythonBridgeSetupCommand();
+export const TMUX_BRIDGE_SETUP_COMMAND = resolveTmuxBridgeSetupCommand();
 
 export type BridgeSetupCardDetails =
   | TmuxBridgeDetails

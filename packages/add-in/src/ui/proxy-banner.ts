@@ -7,10 +7,11 @@
  * without any local process.
  */
 
+import { resolveProxySetupCommand } from "../config/local-service-defaults.js";
 import { t } from "../language/index.js";
 import { AlertTriangle, Check, Copy, lucide } from "./lucide-icons.js";
 
-const PROXY_COMMAND = "npx pi-for-office-proxy";
+const PROXY_COMMAND = resolveProxySetupCommand();
 const INSTALL_GUIDE_URL = "https://pi.dev/excel#connect";
 
 export type ProxyBannerState =

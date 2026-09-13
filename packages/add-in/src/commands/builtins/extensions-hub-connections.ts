@@ -46,6 +46,10 @@ import {
   PYTHON_BRIDGE_URL_SETTING_KEY,
   TMUX_BRIDGE_URL_SETTING_KEY,
 } from "../../tools/experimental-tool-gates.js";
+import {
+  resolvePythonBridgeSetupCommand,
+  resolveTmuxBridgeSetupCommand,
+} from "../../config/local-service-defaults.js";
 import { probeMcpServer } from "./extensions-hub-mcp-probe.js";
 import { showToast } from "../../ui/toast.js";
 import {
@@ -639,7 +643,7 @@ export async function renderConnectionsTab(args: {
           name: t("ext-hub-connections.pythonName"),
           description: t("ext-hub-connections.pythonDesc"),
           settingKey: PYTHON_BRIDGE_URL_SETTING_KEY,
-          setupCommand: "npx pi-for-office-python-bridge",
+          setupCommand: resolvePythonBridgeSetupCommand(),
           defaultUrl: DEFAULT_PYTHON_BRIDGE_URL,
           placeholder: DEFAULT_PYTHON_BRIDGE_URL,
           currentUrl: effectivePythonUrl,
@@ -657,7 +661,7 @@ export async function renderConnectionsTab(args: {
           name: t("ext-hub-connections.tmuxName"),
           description: t("ext-hub-connections.tmuxDesc"),
           settingKey: TMUX_BRIDGE_URL_SETTING_KEY,
-          setupCommand: "npx pi-for-office-tmux-bridge",
+          setupCommand: resolveTmuxBridgeSetupCommand(),
           defaultUrl: DEFAULT_TMUX_BRIDGE_URL,
           placeholder: DEFAULT_TMUX_BRIDGE_URL,
           currentUrl: effectiveTmuxUrl,

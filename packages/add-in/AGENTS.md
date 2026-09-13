@@ -39,6 +39,11 @@ Notes for agents working in this repo.
 - Word/PowerPoint local tools import their parameter schemas from the catalog.
 - `tests/bridge-catalog-parity.test.ts` fails CI if the pane registry ever
   drifts from the catalog (run it via `npm run test:pi-bridge`).
+- Local-service **ports are build-mode aware** (`src/config/local-service-defaults.ts`):
+  dev builds default to the dev ports (bridge `38618`, proxy `3004`, python
+  `3350`, tmux `3351`); prod builds keep the prod ports (`38617` / `3003` /
+  `3340` / `3341`). Dev builds migrate stored prod-default URLs once on boot
+  (`src/config/service-default-migration.ts`), never touching custom URLs.
 
 ### UI i18n (`t()` layer)
 

@@ -83,6 +83,22 @@ The op catalog is the **single source of truth**: it lives in
 registry (`src/bridge/`) delegates to the local tool factories and a parity
 test (`tests/bridge-catalog-parity.test.ts`) fails if the two ever drift.
 
+The bridge port profile follows the **build mode**: dev builds
+(`npm run dev`) default to the dev ports, prod builds to the prod ports
+(`src/config/local-service-defaults.ts`):
+
+| Service | Prod | Dev |
+| --- | --- | --- |
+| Pi bridge WS | `38617` | `38618` |
+| Python bridge | `3340` | `3350` |
+| Tmux bridge | `3341` | `3351` |
+| CORS proxy | `3003` | `3004` |
+
+Dev builds migrate any stored prod-default URL once on boot (dev builds only;
+custom URLs are never touched). Pair the modes: dev add-in ↔ dev bridge
+(`npm run bridge:dev`, repo root), prod add-in ↔ installed/prod bridge
+(`pi install npm:@dieulc/pi-office-bridge@latest`, port `38617`).
+
 (Web Search + MCP are managed in `/tools`, or `/extensions` → Connections.)
 
 ## Install

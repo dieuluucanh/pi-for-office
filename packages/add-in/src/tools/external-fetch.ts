@@ -7,6 +7,7 @@ import {
   DEFAULT_PROXY_URL,
   validateOfficeProxyUrl,
 } from "../auth/proxy-validation.js";
+import { resolveProxySetupCommand } from "../config/local-service-defaults.js";
 
 export interface ProxyAwareSettingsStore {
   get(key: string): Promise<DynamicValue>;
@@ -72,7 +73,7 @@ export function resolveOutboundRequestUrl(args: {
 
 /* ── Proxy-down error detection ─────────────────────────────── */
 
-const PROXY_START_COMMAND = "npx pi-for-office-proxy";
+const PROXY_START_COMMAND = resolveProxySetupCommand();
 
 /**
  * Common transport-level errors emitted when the app cannot connect to the

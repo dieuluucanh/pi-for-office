@@ -23,6 +23,7 @@ import {
   type WebSearchConfigStore,
   type WebSearchProvider,
 } from "../tools/web-search-config.js";
+import { resolveProxySetupCommand } from "../config/local-service-defaults.js";
 import {
   isWebSearchDetails,
   type WebSearchDetails,
@@ -32,7 +33,7 @@ import { AlertTriangle, Check, Copy, Search, lucide } from "./lucide-icons.js";
 import { showToast } from "./toast.js";
 import { t } from "../language/index.js";
 
-const PROXY_COMMAND = "npx pi-for-office-proxy";
+const PROXY_COMMAND = resolveProxySetupCommand();
 
 interface ProxyStepOptions {
   stepNumber: number | null;

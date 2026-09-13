@@ -19,16 +19,17 @@ import {
 import { ALL_BRIDGE_OPS, opsForHost } from "./registry.js";
 import { detectOfficeAppFromGlobals } from "../host/index.js";
 import {
-  BRIDGE_DEFAULT_PORT,
-  type OfficeHostApp,
-} from "@dieulc/pi-office-protocol";
+  defaultBridgePort,
+  resolvePiBridgeUrl,
+} from "../config/local-service-defaults.js";
+import type { OfficeHostApp } from "@dieulc/pi-office-protocol";
 import { CATALOG_VERSION } from "@dieulc/pi-office-protocol/office-catalog";
 
 const PI_BRIDGE_SETTING_KEY = "pi-bridge.enabled";
 
 /** Persisted bridge WebSocket URL; only loopback ws:// or wss:// is valid. */
 export const PI_BRIDGE_URL_SETTING_KEY = "pi-bridge.url";
-export const DEFAULT_PI_BRIDGE_URL = `ws://127.0.0.1:${BRIDGE_DEFAULT_PORT}`;
+export const DEFAULT_PI_BRIDGE_URL = resolvePiBridgeUrl();
 
 export type PiBridgeStatus = "off" | "connecting" | "connected" | "error";
 
@@ -219,7 +220,7 @@ export function validatePiBridgeUrl(raw: string): string {
     );
   }
   // Normalize: drop any path/trailing slashes and default the port.
-  const port = parsed.port !== "" ? parsed.port : String(BRIDGE_DEFAULT_PORT);
+  const port = parsed.port !== "" ? parsed.port : String(defaultBridgePort());
   return `${parsed.protocol}//${host}:${port}`;
 }
 

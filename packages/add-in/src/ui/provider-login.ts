@@ -34,6 +34,10 @@ import {
   filterProvidersByAllowlist,
   resolveAllowedProviderIds,
 } from "./provider-allowlist.js";
+import { resolveProxySetupCommand } from "../config/local-service-defaults.js";
+
+/** Local CORS proxy start command (dev-aware setup copy). */
+const PROXY_COMMAND = resolveProxySetupCommand();
 
 /**
  * Quick reachability check against the configured proxy URL.
@@ -92,7 +96,7 @@ function showProxyGateDialog(opts?: {
       "flex:1;padding:8px 10px;border-radius:6px;" +
       "background:var(--pi-code-bg, #1e1e1e);color:var(--pi-code-fg, #d4d4d4);" +
       "font-size:13px;font-family:var(--pi-monospace, monospace);user-select:all;";
-    codeEl.textContent = "npx pi-for-office-proxy";
+    codeEl.textContent = PROXY_COMMAND;
 
     const copyBtn = document.createElement("button");
     copyBtn.type = "button";
@@ -100,7 +104,7 @@ function showProxyGateDialog(opts?: {
     copyBtn.style.cssText =
       "padding:6px 12px;border-radius:6px;font-size:13px;cursor:pointer;";
     copyBtn.addEventListener("click", () => {
-      void navigator.clipboard.writeText("npx pi-for-office-proxy").then(() => {
+      void navigator.clipboard.writeText(PROXY_COMMAND).then(() => {
         copyBtn.textContent = t("provider.proxy_gate.copied");
         setTimeout(() => {
           copyBtn.textContent = t("provider.proxy_gate.copy");
@@ -1113,7 +1117,7 @@ export function buildProviderRow(
                 errorEl,
                 `${escapeHtml(t("provider.cors_error"))} <code style="padding:2px 5px;border-radius:4px;` +
                   'background:var(--pi-code-bg, #1e1e1e);color:var(--pi-code-fg, #d4d4d4)">' +
-                  `npx pi-for-office-proxy</code>${escapeHtml(t("provider.cors_error.retry"))} ` +
+                  `${PROXY_COMMAND}</code>${escapeHtml(t("provider.cors_error.retry"))} ` +
                   `<a href="${escapeAttr(PROXY_HELPER_DOCS_URL)}" target="_blank" rel="noopener noreferrer">${escapeHtml(t("provider.proxy_gate.guide"))}</a>`,
                 "provider CORS helper error markup with escaped localized text",
               );

@@ -13,12 +13,17 @@ export const PYTHON_BRIDGE_ONLY_TOOL_NAMES = new Set<string>([
   "libreoffice_convert",
 ]);
 
+import {
+  resolvePythonBridgeUrl,
+  resolveTmuxBridgeUrl,
+} from "../../config/local-service-defaults.js";
+
 export const TMUX_BRIDGE_URL_SETTING_KEY = "tmux.bridge.url";
 export const PYTHON_BRIDGE_URL_SETTING_KEY = "python.bridge.url";
 export const PYTHON_BRIDGE_APPROVED_URL_SETTING_KEY = "python.bridge.approved.url";
 
-export const DEFAULT_TMUX_BRIDGE_URL = "https://localhost:3341";
-export const DEFAULT_PYTHON_BRIDGE_URL = "https://localhost:3340";
+export const DEFAULT_TMUX_BRIDGE_URL = resolveTmuxBridgeUrl();
+export const DEFAULT_PYTHON_BRIDGE_URL = resolvePythonBridgeUrl();
 
 export type TmuxBridgeGateReason =
   | "missing_bridge_url"
