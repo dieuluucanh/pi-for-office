@@ -37,28 +37,29 @@ export interface ServiceDefaultMigration {
  * Keys mirror the canonical constants (`PI_BRIDGE_URL_SETTING_KEY`,
  * `"proxy.url"`, `PYTHON_BRIDGE_URL_SETTING_KEY`, `TMUX_BRIDGE_URL_SETTING_KEY`).
  */
-export const DEV_SERVICE_DEFAULT_MIGRATIONS: readonly ServiceDefaultMigration[] = [
-  {
-    settingKey: "pi-bridge.url",
-    prodDefault: PROD_PI_BRIDGE_URL,
-    devDefault: DEV_PI_BRIDGE_URL,
-  },
-  {
-    settingKey: "proxy.url",
-    prodDefault: PROD_LOCAL_PROXY_URL,
-    devDefault: DEV_LOCAL_PROXY_URL,
-  },
-  {
-    settingKey: "python.bridge.url",
-    prodDefault: PROD_PYTHON_BRIDGE_URL,
-    devDefault: DEV_PYTHON_BRIDGE_URL,
-  },
-  {
-    settingKey: "tmux.bridge.url",
-    prodDefault: PROD_TMUX_BRIDGE_URL,
-    devDefault: DEV_TMUX_BRIDGE_URL,
-  },
-];
+export const DEV_SERVICE_DEFAULT_MIGRATIONS: readonly ServiceDefaultMigration[] =
+  [
+    {
+      settingKey: "pi-bridge.url",
+      prodDefault: PROD_PI_BRIDGE_URL,
+      devDefault: DEV_PI_BRIDGE_URL,
+    },
+    {
+      settingKey: "proxy.url",
+      prodDefault: PROD_LOCAL_PROXY_URL,
+      devDefault: DEV_LOCAL_PROXY_URL,
+    },
+    {
+      settingKey: "python.bridge.url",
+      prodDefault: PROD_PYTHON_BRIDGE_URL,
+      devDefault: DEV_PYTHON_BRIDGE_URL,
+    },
+    {
+      settingKey: "tmux.bridge.url",
+      prodDefault: PROD_TMUX_BRIDGE_URL,
+      devDefault: DEV_TMUX_BRIDGE_URL,
+    },
+  ];
 
 /**
  * Compute the writes needed to migrate a stored settings snapshot to the dev
@@ -71,7 +72,11 @@ export function planDevServiceDefaultMigrations(
 ): ReadonlyArray<{ settingKey: string; value: string }> {
   if (!isDev) return [];
   const writes: { settingKey: string; value: string }[] = [];
-  for (const { settingKey, prodDefault, devDefault } of DEV_SERVICE_DEFAULT_MIGRATIONS) {
+  for (const {
+    settingKey,
+    prodDefault,
+    devDefault,
+  } of DEV_SERVICE_DEFAULT_MIGRATIONS) {
     const raw = stored[settingKey];
     if (typeof raw !== "string") continue;
     if (raw.trim() === prodDefault) {

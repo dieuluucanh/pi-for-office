@@ -23,11 +23,11 @@
 export const IS_DEV_BUILD = readIsDevBuild();
 
 function readIsDevBuild(): boolean {
-  try {
-    return import.meta.env.DEV === true;
-  } catch {
-    return false;
-  }
+ try {
+  return import.meta.env.DEV === true;
+ } catch {
+  return false;
+ }
 }
 
 /* ── Pi bridge (WebSocket) ──────────────────────────────────────────── */
@@ -39,11 +39,11 @@ export const PROD_PI_BRIDGE_URL = `ws://127.0.0.1:${BRIDGE_PROD_PORT}`;
 export const DEV_PI_BRIDGE_URL = `ws://127.0.0.1:${BRIDGE_DEV_PORT}`;
 
 export function defaultBridgePort(isDev = IS_DEV_BUILD): number {
-  return isDev ? BRIDGE_DEV_PORT : BRIDGE_PROD_PORT;
+ return isDev ? BRIDGE_DEV_PORT : BRIDGE_PROD_PORT;
 }
 
 export function resolvePiBridgeUrl(isDev = IS_DEV_BUILD): string {
-  return isDev ? DEV_PI_BRIDGE_URL : PROD_PI_BRIDGE_URL;
+ return isDev ? DEV_PI_BRIDGE_URL : PROD_PI_BRIDGE_URL;
 }
 
 /* ── CORS proxy (HTTP/S) ────────────────────────────────────────────── */
@@ -55,7 +55,7 @@ export const PROD_LOCAL_PROXY_URL = `https://localhost:${PROXY_PROD_PORT}`;
 export const DEV_LOCAL_PROXY_URL = `https://localhost:${PROXY_DEV_PORT}`;
 
 export function resolveLocalProxyUrl(isDev = IS_DEV_BUILD): string {
-  return isDev ? DEV_LOCAL_PROXY_URL : PROD_LOCAL_PROXY_URL;
+ return isDev ? DEV_LOCAL_PROXY_URL : PROD_LOCAL_PROXY_URL;
 }
 
 /* ── Python bridge ──────────────────────────────────────────────────── */
@@ -67,7 +67,7 @@ export const PROD_PYTHON_BRIDGE_URL = `https://localhost:${PYTHON_PROD_PORT}`;
 export const DEV_PYTHON_BRIDGE_URL = `https://localhost:${PYTHON_DEV_PORT}`;
 
 export function resolvePythonBridgeUrl(isDev = IS_DEV_BUILD): string {
-  return isDev ? DEV_PYTHON_BRIDGE_URL : PROD_PYTHON_BRIDGE_URL;
+ return isDev ? DEV_PYTHON_BRIDGE_URL : PROD_PYTHON_BRIDGE_URL;
 }
 
 /* ── Tmux bridge ────────────────────────────────────────────────────── */
@@ -79,7 +79,7 @@ export const PROD_TMUX_BRIDGE_URL = `https://localhost:${TMUX_PROD_PORT}`;
 export const DEV_TMUX_BRIDGE_URL = `https://localhost:${TMUX_DEV_PORT}`;
 
 export function resolveTmuxBridgeUrl(isDev = IS_DEV_BUILD): string {
-  return isDev ? DEV_TMUX_BRIDGE_URL : PROD_TMUX_BRIDGE_URL;
+ return isDev ? DEV_TMUX_BRIDGE_URL : PROD_TMUX_BRIDGE_URL;
 }
 
 /* ── Setup commands (one-liners the user runs to start a service) ───── */
@@ -90,19 +90,19 @@ export function resolveTmuxBridgeUrl(isDev = IS_DEV_BUILD): string {
  * published one-liner.
  */
 export function resolvePythonBridgeSetupCommand(isDev = IS_DEV_BUILD): string {
-  return isDev
-    ? "npm run python:bridge:dev:https"
-    : "npx pi-for-office-python-bridge";
+ return isDev
+  ? "npm run python:bridge:dev:https"
+  : "npx pi-for-office-python-bridge";
 }
 
 /** Tmux bridge setup command (dev script vs published one-liner). */
 export function resolveTmuxBridgeSetupCommand(isDev = IS_DEV_BUILD): string {
-  return isDev
-    ? "npm run tmux:bridge:dev:https"
-    : "npx pi-for-office-tmux-bridge";
+ return isDev
+  ? "npm run tmux:bridge:dev:https"
+  : "npx pi-for-office-tmux-bridge";
 }
 
 /** CORS proxy setup command (dev script vs published one-liner). */
 export function resolveProxySetupCommand(isDev = IS_DEV_BUILD): string {
-  return isDev ? "npm run proxy:dev" : "npx pi-for-office-proxy";
+ return isDev ? "npm run proxy:dev" : "npx pi-for-office-proxy";
 }

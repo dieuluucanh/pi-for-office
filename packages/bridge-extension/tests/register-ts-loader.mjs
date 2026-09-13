@@ -13,7 +13,7 @@
 import { register } from "node:module";
 
 const loaderUrl = new URL(
-  "../../add-in/scripts/test-ts-import-loader.mjs",
-  import.meta.url,
+ "../../add-in/scripts/test-ts-import-loader.mjs",
+ import.meta.url,
 );
 register(loaderUrl.href);

@@ -67,8 +67,7 @@ const PORT_ARG = parsePortArg(process.argv.slice(2));
 const PORT =
   PORT_ARG !== null
     ? parsePort(PORT_ARG)
-    : typeof process.env.PORT === "string" &&
-        process.env.PORT.trim().length > 0
+    : typeof process.env.PORT === "string" && process.env.PORT.trim().length > 0
       ? parsePort(process.env.PORT)
       : 3341;
 

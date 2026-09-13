@@ -44,7 +44,11 @@ import { DEFAULT_LOCAL_PROXY_URL } from "../src/auth/proxy-validation.ts";
 void test("Node/test runtime resolves to the production profile", () => {
   assert.equal(IS_DEV_BUILD, false);
   assert.equal(defaultBridgePort(), 38617);
-  assert.equal(DEFAULT_PI_BRIDGE_URL, PROD_PI_BRIDGE_URL, "bridge default must stay prod");
+  assert.equal(
+    DEFAULT_PI_BRIDGE_URL,
+    PROD_PI_BRIDGE_URL,
+    "bridge default must stay prod",
+  );
   assert.equal(DEFAULT_PYTHON_BRIDGE_URL, PROD_PYTHON_BRIDGE_URL);
   assert.equal(DEFAULT_TMUX_BRIDGE_URL, PROD_TMUX_BRIDGE_URL);
   assert.equal(DEFAULT_LOCAL_PROXY_URL, PROD_LOCAL_PROXY_URL);
