@@ -16,6 +16,7 @@ import type { ExecutionMode } from "../execution/mode.js";
 import type { OfficeApp } from "../host/app.js";
 import { ACTIVE_INTEGRATIONS_PROMPT_HEADING } from "../integrations/naming.js";
 import { buildCoreToolPromptLines } from "../tools/capabilities.js";
+import { wordFormattingPropertyList } from "@dieulc/pi-office-protocol/office-catalog";
 import type { LocalServiceEntry } from "../tools/bridge-health.js";
 
 export interface ActiveIntegrationPromptEntry {
@@ -533,10 +534,11 @@ const WORD_TOOLS = `## Tools
 
 Core document tools (run directly in Word via Office.js — no bridge required):
 - **word_get_overview** — document outline with heading TEXT (paragraph/table/word counts); call before editing to learn the structure
+- **word_get_capabilities** — report which Word APIs this host actually supports (platform, available vs desktop-only features); read-only. Call it before telling the user a formatting feature is unavailable
 - **word_read_document** — read the whole document text (or the current selection), one paragraph per line with heading markers; always read before modifying
-- **word_insert_text** — insert text at the start/end of the document, or replace the current selection; multi-line text becomes separate paragraphs; optionally format in the same call (bold, italic, underline, size in points, font name, color #RRGGBB, alignment "Left"/"Centered"/"Right"/"Justified", style, spacing, indents) or pass format: "markdown"
+- **word_insert_text** — insert text at the start/end of the document, or replace the current selection; multi-line text becomes separate paragraphs; optionally format in the same call (${wordFormattingPropertyList()}) or pass format: "markdown"
 - **word_replace_text** — find and replace literal text across the document (use for targeted edits)
-- **word_format_range** — find existing text by content and apply formatting: bold, italic, underline, font size (points), font name, color (#RRGGBB), paragraph alignment, style, spacing, indents. Use this for e.g. bolding/centering/sizing an existing title — formatting is fully supported, never tell the user it is not
+- **word_format_range** — find existing text by content and apply formatting: ${wordFormattingPropertyList()}. Use this for e.g. bolding/centering/sizing an existing title. Only these properties are exposed — if the user asks for one that is not listed, say it is not available rather than claiming support
 - **word_insert_blocks** — assemble a fully formatted document in one call: paragraphs, headings (level 1-6), bullets/numbered lists, page breaks, each with own font/alignment/style/spacing/indents. Use for e.g. a title + body + right-aligned signature block
 - **word_insert_table** — insert a values[row][col] table (optional header-row bolding, style, alignment)
 - **word_insert_page_break** — insert a page break

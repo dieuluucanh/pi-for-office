@@ -8,7 +8,8 @@
  * Uses Office.js direct APIs when available and falls back to formula parsing.
  */
 
-import { Type, type Static } from "@sinclair/typebox";
+import { EXCEL_TRACE_DEPENDENCIES_PARAMETERS } from "@dieulc/pi-office-protocol/office-catalog";
+import type { Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import {
   cellAddress,
@@ -37,24 +38,7 @@ import {
   type ParsedFormulaReference,
 } from "./trace-dependencies-logic.js";
 
-const schema = Type.Object({
-  cell: Type.String({
-    description: 'Cell to trace, e.g. "D10", "Sheet2!F5". Must be a single cell, not a range.',
-  }),
-  mode: Type.Optional(
-    Type.Union([
-      Type.Literal("precedents"),
-      Type.Literal("dependents"),
-    ], {
-      description: "Trace direction: precedents (upstream) or dependents (downstream). Default: precedents.",
-    }),
-  ),
-  depth: Type.Optional(
-    Type.Number({
-      description: "How many levels of dependencies to trace. Default: 2. Max: 5.",
-    }),
-  ),
-});
+const schema = EXCEL_TRACE_DEPENDENCIES_PARAMETERS;
 
 type Params = Static<typeof schema>;
 
@@ -93,8 +77,12 @@ async function loadLeafNode(
 
   const rawFmt: DynamicValue = range.numberFormat[0]?.[0];
   const rawFormula: DynamicValue = range.formulas[0]?.[0];
-  const numberFormat = typeof rawFmt === "string" && rawFmt !== "" ? rawFmt : undefined;
-  const formula = typeof rawFormula === "string" && rawFormula.startsWith("=") ? rawFormula : undefined;
+  const numberFormat =
+    typeof rawFmt === "string" && rawFmt !== "" ? rawFmt : undefined;
+  const formula =
+    typeof rawFormula === "string" && rawFormula.startsWith("=")
+      ? rawFormula
+      : undefined;
 
   return {
     address: qualifiedAddress(sheet.name, range.address),
@@ -107,7 +95,10 @@ async function loadLeafNode(
 
 function estimateAddressCellCount(address: string): number {
   const parsed = parseRangeRef(address);
-  const areas = parsed.address.split(",").map((part) => part.trim()).filter((part) => part.length > 0);
+  const areas = parsed.address
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
 
   let total = 0;
   for (const area of areas) {
@@ -168,7 +159,10 @@ async function buildDependentFormulaCandidates(
     }
 
     const parsedRange = parseRangeRef(candidate.range.address);
-    const startToken = parsedRange.address.split(":")[0]?.replace(/\$/gu, "").trim();
+    const startToken = parsedRange.address
+      .split(":")[0]
+      ?.replace(/\$/gu, "")
+      .trim();
     if (!startToken) continue;
 
     let startCellRef: { col: number; row: number };
@@ -206,7 +200,10 @@ async function buildDependentFormulaCandidates(
           continue;
         }
 
-        const references = extractFormulaReferences(formulaValue, loaded.sheetName);
+        const references = extractFormulaReferences(
+          formulaValue,
+          loaded.sheetName,
+        );
         if (references.length === 0) continue;
 
         formulaCandidates.push({
@@ -232,7 +229,10 @@ async function findDirectDependentsByFormulaScan(
   if (!target) return [];
 
   if (!state.dependentFormulaCandidates) {
-    state.dependentFormulaCandidates = await buildDependentFormulaCandidates(context, state);
+    state.dependentFormulaCandidates = await buildDependentFormulaCandidates(
+      context,
+      state,
+    );
   }
 
   const dependents = new Set<string>();
@@ -318,7 +318,11 @@ async function resolveChildAddresses(
   }
 
   state.usedFormulaScan = true;
-  const scannedDependents = await findDirectDependentsByFormulaScan(context, fullAddress, state);
+  const scannedDependents = await findDirectDependentsByFormulaScan(
+    context,
+    fullAddress,
+    state,
+  );
   for (const address of scannedDependents) {
     addChild(address);
   }
@@ -342,7 +346,8 @@ async function traceCell(
 
   const fullAddr = qualifiedAddress(sheet.name, range.address);
   const rawFmt: DynamicValue = range.numberFormat[0]?.[0];
-  const numberFormat = typeof rawFmt === "string" && rawFmt !== "" ? rawFmt : undefined;
+  const numberFormat =
+    typeof rawFmt === "string" && rawFmt !== "" ? rawFmt : undefined;
 
   if (visited.has(fullAddr)) {
     return {
@@ -357,9 +362,10 @@ async function traceCell(
 
   const rawFormula: DynamicValue = range.formulas[0]?.[0];
   const value: DynamicValue = range.values[0]?.[0];
-  const formula = typeof rawFormula === "string" && rawFormula.startsWith("=")
-    ? rawFormula
-    : undefined;
+  const formula =
+    typeof rawFormula === "string" && rawFormula.startsWith("=")
+      ? rawFormula
+      : undefined;
 
   // Precedent tracing requires a formula at the current node.
   if (mode === "precedents" && !formula) {
@@ -409,15 +415,23 @@ async function traceCell(
   return node;
 }
 
-function renderTree(node: DepNodeDetail, lines: string[], prefix: string, isLast: boolean): void {
+function renderTree(
+  node: DepNodeDetail,
+  lines: string[],
+  prefix: string,
+  isLast: boolean,
+): void {
   const connector = isLast ? "└── " : "├── ";
   const rawVal = node.value;
-  const valueStr = rawVal !== "" && rawVal !== null && rawVal !== undefined
-    ? ` = ${typeof rawVal === "string" || typeof rawVal === "number" || typeof rawVal === "boolean" ? String(rawVal) : JSON.stringify(rawVal)}`
-    : "";
+  const valueStr =
+    rawVal !== "" && rawVal !== null && rawVal !== undefined
+      ? ` = ${typeof rawVal === "string" || typeof rawVal === "number" || typeof rawVal === "boolean" ? String(rawVal) : JSON.stringify(rawVal)}`
+      : "";
   const formulaStr = node.formula ? ` (${node.formula})` : "";
 
-  lines.push(`${prefix}${connector}**${node.address}**${valueStr}${formulaStr}`);
+  lines.push(
+    `${prefix}${connector}**${node.address}**${valueStr}${formulaStr}`,
+  );
 
   const childPrefix = prefix + (isLast ? "    " : "│   ");
   for (const [index, child] of node.precedents.entries()) {
@@ -440,7 +454,12 @@ export function createTraceDependenciesTool(): AgentTool<typeof schema> {
       try {
         if (params.cell.includes(":")) {
           return {
-            content: [{ type: "text", text: "Error: trace_dependencies expects a single cell, not a range." }],
+            content: [
+              {
+                type: "text",
+                text: "Error: trace_dependencies expects a single cell, not a range.",
+              },
+            ],
             details: undefined,
           };
         }
@@ -455,18 +474,34 @@ export function createTraceDependenciesTool(): AgentTool<typeof schema> {
         };
 
         const tree = await excelRun(async (context) => {
-          return traceCell(context, params.cell, maxDepth, 0, new Set(), mode, traceState);
+          return traceCell(
+            context,
+            params.cell,
+            maxDepth,
+            0,
+            new Set(),
+            mode,
+            traceState,
+          );
         });
 
         if (!tree) {
           return {
-            content: [{ type: "text", text: `${params.cell} has no formula — it's a direct value or empty.` }],
+            content: [
+              {
+                type: "text",
+                text: `${params.cell} has no formula — it's a direct value or empty.`,
+              },
+            ],
             details: undefined,
           };
         }
 
         const heading = mode === "dependents" ? "Dependents" : "Precedents";
-        const lines: string[] = [`**${heading} tree for ${tree.address}:**`, ""];
+        const lines: string[] = [
+          `**${heading} tree for ${tree.address}:**`,
+          "",
+        ];
         renderTree(tree, lines, "", true);
 
         if (mode === "dependents" && tree.precedents.length === 0) {
@@ -474,7 +509,10 @@ export function createTraceDependenciesTool(): AgentTool<typeof schema> {
         }
 
         if (traceState.truncated) {
-          lines.push("", "_Trace output was truncated to keep the result responsive._");
+          lines.push(
+            "",
+            "_Trace output was truncated to keep the result responsive._",
+          );
         }
 
         const summary = summarizeTraceTree(tree);
@@ -494,7 +532,12 @@ export function createTraceDependenciesTool(): AgentTool<typeof schema> {
         };
       } catch (e) {
         return {
-          content: [{ type: "text", text: `Error tracing dependencies: ${getErrorMessage(e)}` }],
+          content: [
+            {
+              type: "text",
+              text: `Error tracing dependencies: ${getErrorMessage(e)}`,
+            },
+          ],
           details: undefined,
         };
       }

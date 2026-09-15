@@ -19,7 +19,9 @@ import type {
   RecoveryStructureValueRangeState,
 } from "./types.js";
 
-function cloneRecoveryConditionalDataBarRule(rule: RecoveryConditionalDataBarRule): RecoveryConditionalDataBarRule {
+function cloneRecoveryConditionalDataBarRule(
+  rule: RecoveryConditionalDataBarRule,
+): RecoveryConditionalDataBarRule {
   const cloned: RecoveryConditionalDataBarRule = {
     type: rule.type,
   };
@@ -31,7 +33,9 @@ function cloneRecoveryConditionalDataBarRule(rule: RecoveryConditionalDataBarRul
   return cloned;
 }
 
-function cloneRecoveryConditionalDataBarState(state: RecoveryConditionalDataBarState): RecoveryConditionalDataBarState {
+function cloneRecoveryConditionalDataBarState(
+  state: RecoveryConditionalDataBarState,
+): RecoveryConditionalDataBarState {
   const cloned: RecoveryConditionalDataBarState = {
     axisFormat: state.axisFormat,
     barDirection: state.barDirection,
@@ -84,13 +88,17 @@ function cloneRecoveryConditionalColorScaleState(
   };
 
   if (state.midpoint) {
-    cloned.midpoint = cloneRecoveryConditionalColorScaleCriterion(state.midpoint);
+    cloned.midpoint = cloneRecoveryConditionalColorScaleCriterion(
+      state.midpoint,
+    );
   }
 
   return cloned;
 }
 
-function cloneRecoveryConditionalIcon(icon: RecoveryConditionalIcon): RecoveryConditionalIcon {
+function cloneRecoveryConditionalIcon(
+  icon: RecoveryConditionalIcon,
+): RecoveryConditionalIcon {
   return {
     set: icon.set,
     index: icon.index,
@@ -113,16 +121,22 @@ function cloneRecoveryConditionalIconCriterion(
   return cloned;
 }
 
-function cloneRecoveryConditionalIconSetState(state: RecoveryConditionalIconSetState): RecoveryConditionalIconSetState {
+function cloneRecoveryConditionalIconSetState(
+  state: RecoveryConditionalIconSetState,
+): RecoveryConditionalIconSetState {
   return {
     style: state.style,
     reverseIconOrder: state.reverseIconOrder,
     showIconOnly: state.showIconOnly,
-    criteria: state.criteria.map((criterion) => cloneRecoveryConditionalIconCriterion(criterion)),
+    criteria: state.criteria.map((criterion) =>
+      cloneRecoveryConditionalIconCriterion(criterion),
+    ),
   };
 }
 
-function cloneRecoveryConditionalFormatRule(rule: RecoveryConditionalFormatRule): RecoveryConditionalFormatRule {
+function cloneRecoveryConditionalFormatRule(
+  rule: RecoveryConditionalFormatRule,
+): RecoveryConditionalFormatRule {
   const cloned: RecoveryConditionalFormatRule = {
     type: rule.type,
   };
@@ -134,18 +148,26 @@ function cloneRecoveryConditionalFormatRule(rule: RecoveryConditionalFormatRule)
   if (rule.formula2 !== undefined) cloned.formula2 = rule.formula2;
   if (rule.textOperator !== undefined) cloned.textOperator = rule.textOperator;
   if (rule.text !== undefined) cloned.text = rule.text;
-  if (rule.topBottomType !== undefined) cloned.topBottomType = rule.topBottomType;
+  if (rule.topBottomType !== undefined)
+    cloned.topBottomType = rule.topBottomType;
   if (rule.rank !== undefined) cloned.rank = rule.rank;
-  if (rule.presetCriterion !== undefined) cloned.presetCriterion = rule.presetCriterion;
-  if (rule.dataBar) cloned.dataBar = cloneRecoveryConditionalDataBarState(rule.dataBar);
-  if (rule.colorScale) cloned.colorScale = cloneRecoveryConditionalColorScaleState(rule.colorScale);
-  if (rule.iconSet) cloned.iconSet = cloneRecoveryConditionalIconSetState(rule.iconSet);
+  if (rule.presetCriterion !== undefined)
+    cloned.presetCriterion = rule.presetCriterion;
+  if (rule.dataBar)
+    cloned.dataBar = cloneRecoveryConditionalDataBarState(rule.dataBar);
+  if (rule.colorScale)
+    cloned.colorScale = cloneRecoveryConditionalColorScaleState(
+      rule.colorScale,
+    );
+  if (rule.iconSet)
+    cloned.iconSet = cloneRecoveryConditionalIconSetState(rule.iconSet);
   if (rule.fillColor !== undefined) cloned.fillColor = rule.fillColor;
   if (rule.fontColor !== undefined) cloned.fontColor = rule.fontColor;
   if (rule.bold !== undefined) cloned.bold = rule.bold;
   if (rule.italic !== undefined) cloned.italic = rule.italic;
   if (rule.underline !== undefined) cloned.underline = rule.underline;
-  if (rule.appliesToAddress !== undefined) cloned.appliesToAddress = rule.appliesToAddress;
+  if (rule.appliesToAddress !== undefined)
+    cloned.appliesToAddress = rule.appliesToAddress;
 
   return cloned;
 }
@@ -156,7 +178,9 @@ export function cloneRecoveryConditionalFormatRules(
   return rules.map((rule) => cloneRecoveryConditionalFormatRule(rule));
 }
 
-export function cloneRecoveryCommentThreadState(state: RecoveryCommentThreadState): RecoveryCommentThreadState {
+export function cloneRecoveryCommentThreadState(
+  state: RecoveryCommentThreadState,
+): RecoveryCommentThreadState {
   return {
     exists: state.exists,
     content: state.content,
@@ -165,7 +189,9 @@ export function cloneRecoveryCommentThreadState(state: RecoveryCommentThreadStat
   };
 }
 
-export function cloneRecoveryChartState(state: RecoveryChartState): RecoveryChartState {
+export function cloneRecoveryChartState(
+  state: RecoveryChartState,
+): RecoveryChartState {
   if (state.kind === "chart_absent") {
     const cloned: RecoveryChartState = {
       kind: "chart_absent",
@@ -214,7 +240,9 @@ function cloneRecoveryStructureValueRangeState(
   };
 }
 
-export function cloneRecoveryModifyStructureState(state: RecoveryModifyStructureState): RecoveryModifyStructureState {
+export function cloneRecoveryModifyStructureState(
+  state: RecoveryModifyStructureState,
+): RecoveryModifyStructureState {
   switch (state.kind) {
     case "sheet_name":
       return {
@@ -233,7 +261,9 @@ export function cloneRecoveryModifyStructureState(state: RecoveryModifyStructure
         kind: "sheet_absent",
         sheetId: state.sheetId,
         sheetName: state.sheetName,
-        ...(state.allowDataDelete === undefined ? {} : { allowDataDelete: state.allowDataDelete }),
+        ...(state.allowDataDelete === undefined
+          ? {}
+          : { allowDataDelete: state.allowDataDelete }),
       };
     case "sheet_present":
       return {
@@ -242,7 +272,11 @@ export function cloneRecoveryModifyStructureState(state: RecoveryModifyStructure
         sheetName: state.sheetName,
         position: state.position,
         visibility: state.visibility,
-        ...(state.dataRange ? { dataRange: cloneRecoveryStructureValueRangeState(state.dataRange) } : {}),
+        ...(state.dataRange
+          ? {
+              dataRange: cloneRecoveryStructureValueRangeState(state.dataRange),
+            }
+          : {}),
       };
     case "rows_absent":
       return {
@@ -251,7 +285,9 @@ export function cloneRecoveryModifyStructureState(state: RecoveryModifyStructure
         sheetName: state.sheetName,
         position: state.position,
         count: state.count,
-        ...(state.allowDataDelete === undefined ? {} : { allowDataDelete: state.allowDataDelete }),
+        ...(state.allowDataDelete === undefined
+          ? {}
+          : { allowDataDelete: state.allowDataDelete }),
       };
     case "rows_present":
       return {
@@ -260,7 +296,11 @@ export function cloneRecoveryModifyStructureState(state: RecoveryModifyStructure
         sheetName: state.sheetName,
         position: state.position,
         count: state.count,
-        ...(state.dataRange ? { dataRange: cloneRecoveryStructureValueRangeState(state.dataRange) } : {}),
+        ...(state.dataRange
+          ? {
+              dataRange: cloneRecoveryStructureValueRangeState(state.dataRange),
+            }
+          : {}),
       };
     case "columns_absent":
       return {
@@ -269,7 +309,9 @@ export function cloneRecoveryModifyStructureState(state: RecoveryModifyStructure
         sheetName: state.sheetName,
         position: state.position,
         count: state.count,
-        ...(state.allowDataDelete === undefined ? {} : { allowDataDelete: state.allowDataDelete }),
+        ...(state.allowDataDelete === undefined
+          ? {}
+          : { allowDataDelete: state.allowDataDelete }),
       };
     case "columns_present":
       return {
@@ -278,39 +320,62 @@ export function cloneRecoveryModifyStructureState(state: RecoveryModifyStructure
         sheetName: state.sheetName,
         position: state.position,
         count: state.count,
-        ...(state.dataRange ? { dataRange: cloneRecoveryStructureValueRangeState(state.dataRange) } : {}),
+        ...(state.dataRange
+          ? {
+              dataRange: cloneRecoveryStructureValueRangeState(state.dataRange),
+            }
+          : {}),
       };
   }
 }
 
-export function cloneRecoveryFormatSelection(selection: RecoveryFormatSelection): RecoveryFormatSelection {
+export function cloneRecoveryFormatSelection(
+  selection: RecoveryFormatSelection,
+): RecoveryFormatSelection {
   const cloned: RecoveryFormatSelection = {};
 
-  if (selection.numberFormat !== undefined) cloned.numberFormat = selection.numberFormat;
+  if (selection.numberFormat !== undefined)
+    cloned.numberFormat = selection.numberFormat;
   if (selection.fillColor !== undefined) cloned.fillColor = selection.fillColor;
   if (selection.fontColor !== undefined) cloned.fontColor = selection.fontColor;
   if (selection.bold !== undefined) cloned.bold = selection.bold;
   if (selection.italic !== undefined) cloned.italic = selection.italic;
-  if (selection.underlineStyle !== undefined) cloned.underlineStyle = selection.underlineStyle;
+  if (selection.underlineStyle !== undefined)
+    cloned.underlineStyle = selection.underlineStyle;
+  if (selection.strikethrough !== undefined)
+    cloned.strikethrough = selection.strikethrough;
+  if (selection.indentLevel !== undefined)
+    cloned.indentLevel = selection.indentLevel;
   if (selection.fontName !== undefined) cloned.fontName = selection.fontName;
   if (selection.fontSize !== undefined) cloned.fontSize = selection.fontSize;
-  if (selection.horizontalAlignment !== undefined) cloned.horizontalAlignment = selection.horizontalAlignment;
-  if (selection.verticalAlignment !== undefined) cloned.verticalAlignment = selection.verticalAlignment;
+  if (selection.horizontalAlignment !== undefined)
+    cloned.horizontalAlignment = selection.horizontalAlignment;
+  if (selection.verticalAlignment !== undefined)
+    cloned.verticalAlignment = selection.verticalAlignment;
   if (selection.wrapText !== undefined) cloned.wrapText = selection.wrapText;
-  if (selection.columnWidth !== undefined) cloned.columnWidth = selection.columnWidth;
+  if (selection.columnWidth !== undefined)
+    cloned.columnWidth = selection.columnWidth;
   if (selection.rowHeight !== undefined) cloned.rowHeight = selection.rowHeight;
-  if (selection.mergedAreas !== undefined) cloned.mergedAreas = selection.mergedAreas;
+  if (selection.mergedAreas !== undefined)
+    cloned.mergedAreas = selection.mergedAreas;
   if (selection.borderTop !== undefined) cloned.borderTop = selection.borderTop;
-  if (selection.borderBottom !== undefined) cloned.borderBottom = selection.borderBottom;
-  if (selection.borderLeft !== undefined) cloned.borderLeft = selection.borderLeft;
-  if (selection.borderRight !== undefined) cloned.borderRight = selection.borderRight;
-  if (selection.borderInsideHorizontal !== undefined) cloned.borderInsideHorizontal = selection.borderInsideHorizontal;
-  if (selection.borderInsideVertical !== undefined) cloned.borderInsideVertical = selection.borderInsideVertical;
+  if (selection.borderBottom !== undefined)
+    cloned.borderBottom = selection.borderBottom;
+  if (selection.borderLeft !== undefined)
+    cloned.borderLeft = selection.borderLeft;
+  if (selection.borderRight !== undefined)
+    cloned.borderRight = selection.borderRight;
+  if (selection.borderInsideHorizontal !== undefined)
+    cloned.borderInsideHorizontal = selection.borderInsideHorizontal;
+  if (selection.borderInsideVertical !== undefined)
+    cloned.borderInsideVertical = selection.borderInsideVertical;
 
   return cloned;
 }
 
-function cloneRecoveryFormatBorderState(state: RecoveryFormatBorderState): RecoveryFormatBorderState {
+function cloneRecoveryFormatBorderState(
+  state: RecoveryFormatBorderState,
+): RecoveryFormatBorderState {
   const cloned: RecoveryFormatBorderState = {
     style: state.style,
   };
@@ -325,42 +390,61 @@ export function cloneStringGrid(grid: readonly string[][]): string[][] {
   return grid.map((row) => [...row]);
 }
 
-function cloneRecoveryFormatAreaState(area: RecoveryFormatAreaState): RecoveryFormatAreaState {
+function cloneRecoveryFormatAreaState(
+  area: RecoveryFormatAreaState,
+): RecoveryFormatAreaState {
   const cloned: RecoveryFormatAreaState = {
     address: area.address,
     rowCount: area.rowCount,
     columnCount: area.columnCount,
   };
 
-  if (area.numberFormat) cloned.numberFormat = cloneStringGrid(area.numberFormat);
+  if (area.numberFormat)
+    cloned.numberFormat = cloneStringGrid(area.numberFormat);
   if (area.fillColor !== undefined) cloned.fillColor = area.fillColor;
   if (area.fontColor !== undefined) cloned.fontColor = area.fontColor;
   if (area.bold !== undefined) cloned.bold = area.bold;
   if (area.italic !== undefined) cloned.italic = area.italic;
-  if (area.underlineStyle !== undefined) cloned.underlineStyle = area.underlineStyle;
+  if (area.underlineStyle !== undefined)
+    cloned.underlineStyle = area.underlineStyle;
+  if (area.strikethrough !== undefined)
+    cloned.strikethrough = area.strikethrough;
+  if (area.indentLevel !== undefined) cloned.indentLevel = area.indentLevel;
   if (area.fontName !== undefined) cloned.fontName = area.fontName;
   if (area.fontSize !== undefined) cloned.fontSize = area.fontSize;
-  if (area.horizontalAlignment !== undefined) cloned.horizontalAlignment = area.horizontalAlignment;
-  if (area.verticalAlignment !== undefined) cloned.verticalAlignment = area.verticalAlignment;
+  if (area.horizontalAlignment !== undefined)
+    cloned.horizontalAlignment = area.horizontalAlignment;
+  if (area.verticalAlignment !== undefined)
+    cloned.verticalAlignment = area.verticalAlignment;
   if (area.wrapText !== undefined) cloned.wrapText = area.wrapText;
   if (area.columnWidths) cloned.columnWidths = [...area.columnWidths];
   if (area.rowHeights) cloned.rowHeights = [...area.rowHeights];
   if (area.mergedAreas) cloned.mergedAreas = [...area.mergedAreas];
-  if (area.borderTop) cloned.borderTop = cloneRecoveryFormatBorderState(area.borderTop);
-  if (area.borderBottom) cloned.borderBottom = cloneRecoveryFormatBorderState(area.borderBottom);
-  if (area.borderLeft) cloned.borderLeft = cloneRecoveryFormatBorderState(area.borderLeft);
-  if (area.borderRight) cloned.borderRight = cloneRecoveryFormatBorderState(area.borderRight);
+  if (area.borderTop)
+    cloned.borderTop = cloneRecoveryFormatBorderState(area.borderTop);
+  if (area.borderBottom)
+    cloned.borderBottom = cloneRecoveryFormatBorderState(area.borderBottom);
+  if (area.borderLeft)
+    cloned.borderLeft = cloneRecoveryFormatBorderState(area.borderLeft);
+  if (area.borderRight)
+    cloned.borderRight = cloneRecoveryFormatBorderState(area.borderRight);
   if (area.borderInsideHorizontal) {
-    cloned.borderInsideHorizontal = cloneRecoveryFormatBorderState(area.borderInsideHorizontal);
+    cloned.borderInsideHorizontal = cloneRecoveryFormatBorderState(
+      area.borderInsideHorizontal,
+    );
   }
   if (area.borderInsideVertical) {
-    cloned.borderInsideVertical = cloneRecoveryFormatBorderState(area.borderInsideVertical);
+    cloned.borderInsideVertical = cloneRecoveryFormatBorderState(
+      area.borderInsideVertical,
+    );
   }
 
   return cloned;
 }
 
-export function cloneRecoveryFormatRangeState(state: RecoveryFormatRangeState): RecoveryFormatRangeState {
+export function cloneRecoveryFormatRangeState(
+  state: RecoveryFormatRangeState,
+): RecoveryFormatRangeState {
   return {
     selection: cloneRecoveryFormatSelection(state.selection),
     areas: state.areas.map((area) => cloneRecoveryFormatAreaState(area)),

@@ -44,7 +44,7 @@ export interface OfficeCatalogEntry {
 }
 
 /** Increment when entries or schemas change incompatibly. */
-export const CATALOG_VERSION = 1;
+export const CATALOG_VERSION = 3;
 
 /** Office apps we expose tools for (map host → tool prefix). */
 export const HOST_APP_LABEL: Record<OfficeHostApp, string> = {
@@ -107,6 +107,15 @@ const WORD_FONT_PROPS = {
   color: Type.Optional(
     Type.String({ description: 'Font color as #RRGGBB (e.g. "#000000").' }),
   ),
+  highlight: Type.Optional(
+    Type.String({
+      description:
+        'Text highlight (marker) color as #RRGGBB, or "none" to clear. This is what a ' +
+        '"fill"/"background"/"highlight" request on text maps to. Available on Word ' +
+        "desktop and Word for the web (WordApi 1.1); on Word for Windows desktop a value " +
+        "outside the 15 named highlight colors snaps to the nearest one.",
+    }),
+  ),
 };
 
 const WORD_PARAGRAPH_PROPS = {
@@ -132,6 +141,116 @@ const WORD_PARAGRAPH_PROPS = {
   leftIndent: Type.Optional(
     Type.Number({ description: "Left indent, in points." }),
   ),
+  shading: Type.Optional(
+    Type.String({
+      description:
+        'Background fill ("shading") as #RRGGBB. Desktop-only: needs WordApiDesktop 1.3, so it ' +
+        "reports an error on Word for the web. Its span depends on the tool: word_format_range " +
+        "fills only the matched text, while word_insert_text / word_insert_blocks fill the whole " +
+        "paragraph. Use `highlight` instead for a character-level marker that works on every platform.",
+    }),
+  ),
+};
+
+/**
+ * Short human labels for the Word font schema properties, used to generate the
+ * prompt's formatting list.
+ *
+ * Typed as `Record<keyof typeof WORD_FONT_PROPS, string>`, so the compiler
+ * enforces coverage: adding a property to the schema fails typecheck until a
+ * label exists here, and the prompt then picks it up automatically. That is what
+ * stops the prompt from advertising a property the tools do not accept — or
+ * silently omitting one they do.
+ */
+export const WORD_FONT_PROP_LABELS: Readonly<
+  Record<keyof typeof WORD_FONT_PROPS, string>
+> = {
+  bold: "bold",
+  italic: "italic",
+  underline: "underline",
+  size: "font size (points)",
+  name: "font name",
+  color: "color (#RRGGBB)",
+  highlight: 'text highlight/background fill (#RRGGBB, or "none")',
+};
+
+/** Labels for the Word paragraph schema properties (see WORD_FONT_PROP_LABELS). */
+export const WORD_PARAGRAPH_PROP_LABELS: Readonly<
+  Record<keyof typeof WORD_PARAGRAPH_PROPS, string>
+> = {
+  alignment: 'alignment ("Left"/"Centered"/"Right"/"Justified")',
+  style: "style",
+  spaceBefore: "spacing",
+  spaceAfter: "spacing",
+  lineSpacing: "line spacing",
+  firstLineIndent: "indents",
+  leftIndent: "indents",
+  shading: 'background fill ("shading", desktop-only)',
+};
+
+/**
+ * Render the Word formatting properties as a comma-separated list, derived from
+ * the schemas above. Duplicate labels (e.g. two spacing properties) collapse.
+ */
+export function wordFormattingPropertyList(): string {
+  const labels = [
+    ...Object.values(WORD_FONT_PROP_LABELS),
+    ...Object.values(WORD_PARAGRAPH_PROP_LABELS),
+  ];
+  return [...new Set(labels)].join(", ");
+}
+
+/**
+ * PowerPoint underline styles (`PowerPoint.ShapeFontUnderlineStyle`,
+ * PowerPointApi 1.4) — 17 values.
+ */
+export const POWERPOINT_UNDERLINE_STYLES = [
+  "None",
+  "Single",
+  "Double",
+  "Heavy",
+  "Dotted",
+  "DottedHeavy",
+  "Dash",
+  "DashHeavy",
+  "DashLong",
+  "DashLongHeavy",
+  "DotDash",
+  "DotDashHeavy",
+  "DotDotDash",
+  "DotDotDashHeavy",
+  "Wavy",
+  "WavyHeavy",
+  "WavyDouble",
+] as const;
+
+/**
+ * PowerPoint font effects (**PowerPointApi 1.8**) shared by both text tools.
+ * Newer than the 1.4 font properties, so it gets its own gate.
+ */
+const PPT_FONT_EFFECT_PROPS = {
+  strikethrough: Type.Optional(
+    Type.Boolean({
+      description: "Strikethrough the text. Needs PowerPointApi 1.8.",
+    }),
+  ),
+  doubleStrikethrough: Type.Optional(
+    Type.Boolean({
+      description: "Double strikethrough. Needs PowerPointApi 1.8.",
+    }),
+  ),
+  smallCaps: Type.Optional(
+    Type.Boolean({ description: "Small caps. Needs PowerPointApi 1.8." }),
+  ),
+  allCaps: Type.Optional(
+    Type.Boolean({ description: "All caps. Needs PowerPointApi 1.8." }),
+  ),
+  subscript: Type.Optional(
+    Type.Boolean({ description: "Subscript. Needs PowerPointApi 1.8." }),
+  ),
+  superscript: Type.Optional(
+    Type.Boolean({ description: "Superscript. Needs PowerPointApi 1.8." }),
+  ),
 };
 
 const PPT_SLIDE_INDEX = Type.Integer({
@@ -147,7 +266,17 @@ const PPT_TEXT_FORMAT_PROPS = {
     Type.Boolean({ description: "Set italic (true) or unitalicize (false)." }),
   ),
   underline: Type.Optional(
-    Type.Boolean({ description: "Underline the text (single underline)." }),
+    Type.Union(
+      [
+        Type.Boolean(),
+        ...POWERPOINT_UNDERLINE_STYLES.map((style) => Type.Literal(style)),
+      ],
+      {
+        description:
+          'Underline. true = "Single", false = "None"; or name a style directly: ' +
+          '"Double", "Heavy", "Dotted", "Wavy", "DashLong", … Needs PowerPointApi 1.4.',
+      },
+    ),
   ),
   fontSize: Type.Optional(
     Type.Number({ description: "Font size in points (e.g. 24)." }),
@@ -159,11 +288,226 @@ const PPT_TEXT_FORMAT_PROPS = {
     Type.String({ description: 'Font color as #RRGGBB (e.g. "#333333").' }),
   ),
   alignment: Type.Optional(PPT_ALIGNMENT),
+  ...PPT_FONT_EFFECT_PROPS,
+};
+
+/**
+ * Shape fill (**PowerPointApi 1.4**) shared by the text-box and slide tools.
+ */
+const PPT_SHAPE_FILL_PROPS = {
+  fillColor: Type.Optional(
+    Type.String({
+      description:
+        'Solid shape fill color as #RRGGBB (e.g. "#FFFF00"). Needs PowerPointApi 1.4.',
+    }),
+  ),
+  fillTransparency: Type.Optional(
+    Type.Number({
+      minimum: 0,
+      maximum: 1,
+      description:
+        "Fill transparency, 0 (opaque) to 1 (clear). Needs PowerPointApi 1.4.",
+    }),
+  ),
+  fillClear: Type.Optional(
+    Type.Boolean({
+      description: "Remove the shape fill entirely. Needs PowerPointApi 1.4.",
+    }),
+  ),
+};
+
+/** PowerPoint shape line styles (`PowerPoint.ShapeLineStyle`, PowerPointApi 1.4). */
+export const POWERPOINT_LINE_STYLES = [
+  "Single",
+  "ThickBetweenThin",
+  "ThickThin",
+  "ThinThick",
+  "ThinThin",
+] as const;
+
+/**
+ * PowerPoint shape line dash styles (`PowerPoint.ShapeLineDashStyle`,
+ * PowerPointApi 1.4).
+ */
+export const POWERPOINT_LINE_DASH_STYLES = [
+  "Dash",
+  "DashDot",
+  "DashDotDot",
+  "LongDash",
+  "LongDashDot",
+  "RoundDot",
+  "Solid",
+  "SquareDot",
+  "LongDashDotDot",
+  "SystemDash",
+  "SystemDot",
+  "SystemDashDot",
+] as const;
+
+/**
+ * PowerPoint bullet styles (`PowerPoint.BulletStyle`, PowerPointApi 1.10).
+ */
+export const POWERPOINT_BULLET_STYLES = [
+  "AlphabetLowercasePeriod",
+  "AlphabetUppercasePeriod",
+  "ArabicNumeralParenthesisRight",
+  "ArabicNumeralPeriod",
+  "RomanLowercaseParenthesesBoth",
+  "RomanLowercaseParenthesisRight",
+  "RomanLowercasePeriod",
+  "RomanUppercasePeriod",
+  "AlphabetLowercaseParenthesesBoth",
+  "AlphabetLowercaseParenthesisRight",
+  "AlphabetUppercaseParenthesesBoth",
+  "AlphabetUppercaseParenthesisRight",
+  "ArabicNumeralParenthesesBoth",
+  "ArabicNumeralPlain",
+  "RomanUppercaseParenthesesBoth",
+  "RomanUppercaseParenthesisRight",
+  "SimplifiedChinesePlain",
+  "SimplifiedChinesePeriod",
+  "CircleNumberDoubleBytePlain",
+  "CircleNumberWideDoubleByteWhitePlain",
+  "CircleNumberWideDoubleByteBlackPlain",
+  "TraditionalChinesePlain",
+  "TraditionalChinesePeriod",
+  "ArabicAlphabetDash",
+  "ArabicAbjadDash",
+  "HebrewAlphabetDash",
+  "KanjiKoreanPlain",
+  "KanjiKoreanPeriod",
+  "ArabicDoubleBytePlain",
+  "ArabicDoubleBytePeriod",
+  "ThaiAlphabetPeriod",
+  "ThaiAlphabetParenthesisRight",
+  "ThaiAlphabetParenthesesBoth",
+  "ThaiNumeralPeriod",
+  "ThaiNumeralParenthesisRight",
+  "ThaiNumeralParenthesesBoth",
+  "HindiAlphabetPeriod",
+  "HindiNumeralPeriod",
+  "KanjiSimplifiedChineseDoubleBytePeriod",
+  "HindiNumeralParenthesisRight",
+  "HindiAlphabet1Period",
+] as const;
+
+/** PowerPoint bullet types (`PowerPoint.BulletType`, PowerPointApi 1.10). */
+export const POWERPOINT_BULLET_TYPES = [
+  "None",
+  "Numbered",
+  "Unnumbered",
+] as const;
+
+/**
+ * Paragraph/bullet properties shared by both text tools.
+ *
+ * The split matters: `bulletVisible` is PowerPointApi 1.4, while bullet style
+ * and paragraph `indentLevel` are 1.10 — so a 1.4 host still gets bullet
+ * visibility.
+ */
+const PPT_PARAGRAPH_PROPS = {
+  bulletVisible: Type.Optional(
+    Type.Boolean({
+      description:
+        "Show (true) or hide (false) bullets. Needs PowerPointApi 1.4.",
+    }),
+  ),
+  bulletStyle: Type.Optional(
+    catalogEnum(POWERPOINT_BULLET_STYLES, {
+      description:
+        'Numbered bullet style (e.g. "ArabicNumeralPeriod"). Needs PowerPointApi 1.10.',
+    }),
+  ),
+  bulletType: Type.Optional(
+    catalogEnum(POWERPOINT_BULLET_TYPES, {
+      description:
+        'Bullet type: "None", "Numbered" or "Unnumbered". Needs PowerPointApi 1.10.',
+    }),
+  ),
+  indentLevel: Type.Optional(
+    Type.Number({
+      description:
+        "Paragraph indent level (0 = no indent). Needs PowerPointApi 1.10.",
+    }),
+  ),
+};
+
+/**
+ * Shape line formatting (**PowerPointApi 1.4**) shared by both text tools.
+ */
+const PPT_SHAPE_LINE_PROPS = {
+  lineColor: Type.Optional(
+    Type.String({
+      description:
+        'Line color as #RRGGBB (e.g. "#000000"). Needs PowerPointApi 1.4.',
+    }),
+  ),
+  lineWeight: Type.Optional(
+    Type.Number({
+      description: "Line weight in points. Needs PowerPointApi 1.4.",
+    }),
+  ),
+  lineStyle: Type.Optional(
+    catalogEnum(POWERPOINT_LINE_STYLES, {
+      description: 'Line style. Needs PowerPointApi 1.4. Default "Single".',
+    }),
+  ),
+  lineDashStyle: Type.Optional(
+    catalogEnum(POWERPOINT_LINE_DASH_STYLES, {
+      description:
+        'Line dash style (e.g. "Dash", "Solid"). Needs PowerPointApi 1.4.',
+    }),
+  ),
+  lineVisible: Type.Optional(
+    Type.Boolean({
+      description:
+        "Show (true) or hide (false) the shape outline. Needs PowerPointApi 1.4.",
+    }),
+  ),
+  lineTransparency: Type.Optional(
+    Type.Number({
+      minimum: 0,
+      maximum: 1,
+      description:
+        "Line transparency, 0 (opaque) to 1 (clear). Needs PowerPointApi 1.4.",
+    }),
+  ),
+};
+
+/**
+ * Slide background fill (**PowerPointApi 1.10**) — newer than shape fill, so
+ * it is gated separately and only offered by `powerpoint_format_slide`.
+ */
+const PPT_SLIDE_BACKGROUND_PROPS = {
+  slideBackgroundColor: Type.Optional(
+    Type.String({
+      description:
+        "Solid slide background color as #RRGGBB. Needs PowerPointApi 1.10.",
+    }),
+  ),
+  slideBackgroundTransparency: Type.Optional(
+    Type.Number({
+      minimum: 0,
+      maximum: 1,
+      description:
+        "Background transparency, 0 (opaque) to 1 (clear). Needs PowerPointApi 1.10.",
+    }),
+  ),
+  slideBackgroundClear: Type.Optional(
+    Type.Boolean({
+      description:
+        "Reset the slide background to the layout/master default. Needs PowerPointApi 1.10.",
+    }),
+  ),
 };
 
 /* ── Word schemas (imported by the add-in's local Word tools) ────────── */
 
 export const WORD_GET_OVERVIEW_PARAMETERS = Type.Object({});
+
+export const WORD_GET_CAPABILITIES_PARAMETERS = Type.Object({});
+export const EXCEL_GET_CAPABILITIES_PARAMETERS = Type.Object({});
+export const POWERPOINT_GET_CAPABILITIES_PARAMETERS = Type.Object({});
 
 export const WORD_READ_DOCUMENT_PARAMETERS = Type.Object({
   scope: Type.Optional(
@@ -355,51 +699,64 @@ export const POWERPOINT_ADD_TEXT_BOX_PARAMETERS = Type.Object({
     Type.Number({ description: "Height in points (default 60)." }),
   ),
   ...PPT_TEXT_FORMAT_PROPS,
+  ...PPT_PARAGRAPH_PROPS,
+  ...PPT_SHAPE_FILL_PROPS,
+  ...PPT_SHAPE_LINE_PROPS,
 });
 
 export const POWERPOINT_FORMAT_SLIDE_PARAMETERS = Type.Object({
   slideIndex: PPT_SLIDE_INDEX,
   ...PPT_TEXT_FORMAT_PROPS,
+  ...PPT_PARAGRAPH_PROPS,
+  ...PPT_SHAPE_FILL_PROPS,
+  ...PPT_SHAPE_LINE_PROPS,
+  ...PPT_SLIDE_BACKGROUND_PROPS,
 });
 
 /* ── Excel schemas ──────────────────────────────────────────────────── */
 
-const EXCEL_READ_RANGE_PARAMETERS = Type.Object({
+export const EXCEL_READ_RANGE_PARAMETERS = Type.Object({
   range: Type.String({
     description:
-      'Cell range in A1 notation, e.g. "A1:D10" or "Sheet2!A1:B5". ' +
-      "Uses the active sheet when no sheet is specified.",
+      'Cell range in A1 notation, e.g. "A1:D10", "Sheet2!A1:B5". ' +
+      "If no sheet is specified, uses the active sheet.",
   }),
   mode: Type.Optional(
     catalogEnum(["compact", "csv", "detailed"] as const, {
       description:
-        '"compact" (default): markdown table. "csv": raw values. "detailed": with formulas/formats.',
+        '"compact" (default): markdown table of values. "csv": values only as CSV. "detailed": includes formulas and number formats.',
     }),
   ),
 });
 
-const EXCEL_WRITE_CELLS_PARAMETERS = Type.Object({
+export const EXCEL_WRITE_CELLS_PARAMETERS = Type.Object({
   start_cell: Type.String({
-    description: 'Top-left cell to write from, e.g. "A1" or "Sheet2!B3".',
+    description:
+      'Top-left cell to write from, e.g. "A1", "Sheet2!B3". If no sheet is specified, uses the active sheet.',
   }),
   values: Type.Array(Type.Array(Type.Any()), {
-    description: "2D array of cell values (rows × cols).",
+    description:
+      '2D array of values. Each inner array is a row. Strings starting with "=" are formulas. ' +
+      'Example: [["Name", "Total"], ["Alice", "=SUM(B2:B10)"]]',
   }),
   allow_overwrite: Type.Optional(
     Type.Boolean({
       description:
         "Set to true to overwrite existing data. Default: false. " +
-        "If false and the target range contains values or formulas, the write is blocked.",
+        "If false and the target range contains values or formulas, the write is blocked " +
+        "and the existing data is returned so you can ask the user.",
     }),
   ),
 });
 
-const EXCEL_FILL_FORMULA_PARAMETERS = Type.Object({
+export const EXCEL_FILL_FORMULA_PARAMETERS = Type.Object({
   range: Type.String({
-    description: 'Target range, e.g. "B2:B20" or "Sheet1!C3:F20".',
+    description:
+      'Target range to fill, e.g. "B2:B20" or "Sheet1!C3:F20". Single contiguous range only.',
   }),
   formula: Type.String({
-    description: 'Formula starting with "=", e.g. "=SUM(B2:B10)".',
+    description:
+      'Formula to fill, starting with "=", e.g. "=SUM(B2:B10)". Relative refs will adjust.',
   }),
   allow_overwrite: Type.Optional(
     Type.Boolean({
@@ -410,7 +767,7 @@ const EXCEL_FILL_FORMULA_PARAMETERS = Type.Object({
   ),
 });
 
-const EXCEL_SEARCH_WORKBOOK_PARAMETERS = Type.Object({
+export const EXCEL_SEARCH_WORKBOOK_PARAMETERS = Type.Object({
   query: Type.String({
     description:
       'Search term. For formula search, use references like "Sheet1!" to find cross-sheet links.',
@@ -419,7 +776,7 @@ const EXCEL_SEARCH_WORKBOOK_PARAMETERS = Type.Object({
     Type.Boolean({
       description:
         "If true, search in formula text instead of values. " +
-        'Useful for finding cross-sheet references (e.g. query "Inputs!").',
+        'Useful for finding cross-sheet references (e.g. query "Inputs!" to find all cells referencing Inputs sheet).',
     }),
   ),
   use_regex: Type.Optional(
@@ -447,12 +804,13 @@ const EXCEL_SEARCH_WORKBOOK_PARAMETERS = Type.Object({
   context_rows: Type.Optional(
     Type.Number({
       description:
-        "Number of rows above and below each match to include as context. Default: 0 (no context).",
+        "Number of rows above and below each match to include as context. " +
+        "Default: 0 (no context). Use 2-5 when searching for labels to see surrounding structure.",
     }),
   ),
 });
 
-const EXCEL_MODIFY_STRUCTURE_PARAMETERS = Type.Object({
+export const EXCEL_MODIFY_STRUCTURE_PARAMETERS = Type.Object({
   action: catalogEnum(
     [
       "insert_rows",
@@ -496,22 +854,193 @@ const EXCEL_MODIFY_STRUCTURE_PARAMETERS = Type.Object({
   ),
 });
 
-const EXCEL_FORMAT_CELLS_PARAMETERS = Type.Object({
+/**
+ * Excel underline styles (`Excel.RangeUnderlineStyle`, **ExcelApi 1.1** — no gate
+ * needed; the previous boolean was a bridge limitation, not a host one).
+ */
+export const EXCEL_UNDERLINE_STYLES = [
+  "None",
+  "Single",
+  "Double",
+  "SingleAccountant",
+  "DoubleAccountant",
+] as const;
+
+/**
+ * Excel border line styles (`Excel.BorderLineStyle`, **ExcelApi 1.1**).
+ *
+ * Exactly these eight — the earlier audit listed a `Hair` style that does not
+ * exist in the enum.
+ */
+export const EXCEL_BORDER_LINE_STYLES = [
+  "None",
+  "Continuous",
+  "Dash",
+  "DashDot",
+  "DashDotDot",
+  "Dot",
+  "Double",
+  "SlantDashDot",
+] as const;
+
+/** Excel horizontal alignments (`Excel.HorizontalAlignment`, ExcelApi 1.1). */
+export const EXCEL_HORIZONTAL_ALIGNMENTS = [
+  "General",
+  "Left",
+  "Center",
+  "Right",
+  "Fill",
+  "Justify",
+  "CenterAcrossSelection",
+  "Distributed",
+] as const;
+
+/**
+ * Excel conditional-format rule families this tool exposes.
+ *
+ * Every member maps to a real `Excel.ConditionalFormatType` (all **ExcelApi
+ * 1.6**) — `formula` is the friendly name for `custom`. There is deliberately
+ * no above-average or duplicate/unique family: those are `presetCriteria`
+ * criteria, not separate types.
+ */
+export const EXCEL_CONDITIONAL_FORMAT_TYPES = [
+  "formula",
+  "cell_value",
+  "data_bar",
+  "color_scale",
+  "icon_set",
+  "top_bottom",
+  "preset_criteria",
+  "contains_text",
+] as const;
+
+/** Excel data-bar directions (`Excel.ConditionalDataBarDirection`, ExcelApi 1.6). */
+export const EXCEL_DATA_BAR_DIRECTIONS = [
+  "Context",
+  "LeftToRight",
+  "RightToLeft",
+] as const;
+
+/** Excel top/bottom criteria (`Excel.ConditionalTopBottomCriterionType`, ExcelApi 1.6). */
+export const EXCEL_TOP_BOTTOM_CRITERIA = [
+  "TopItems",
+  "TopPercent",
+  "BottomItems",
+  "BottomPercent",
+] as const;
+
+/** Excel text-comparison operators (`Excel.ConditionalTextOperator`, ExcelApi 1.6). */
+export const EXCEL_TEXT_OPERATORS = [
+  "Contains",
+  "NotContains",
+  "BeginsWith",
+  "EndsWith",
+] as const;
+
+/** Excel preset criteria (`Excel.ConditionalFormatPresetCriterion`, ExcelApi 1.6). */
+export const EXCEL_PRESET_CRITERIA = [
+  "Blanks",
+  "NonBlanks",
+  "Errors",
+  "NonErrors",
+  "Yesterday",
+  "Today",
+  "Tomorrow",
+  "LastSevenDays",
+  "LastWeek",
+  "ThisWeek",
+  "NextWeek",
+  "LastMonth",
+  "ThisMonth",
+  "NextMonth",
+  "AboveAverage",
+  "BelowAverage",
+  "EqualOrAboveAverage",
+  "EqualOrBelowAverage",
+  "OneStdDevAboveAverage",
+  "OneStdDevBelowAverage",
+  "TwoStdDevAboveAverage",
+  "TwoStdDevBelowAverage",
+  "ThreeStdDevAboveAverage",
+  "ThreeStdDevBelowAverage",
+  "UniqueValues",
+  "DuplicateValues",
+] as const;
+
+/** Excel icon sets (`Excel.IconSet`, ExcelApi 1.6). */
+export const EXCEL_ICON_SET_STYLES = [
+  "ThreeArrows",
+  "ThreeArrowsGray",
+  "ThreeFlags",
+  "ThreeTrafficLights1",
+  "ThreeTrafficLights2",
+  "ThreeSigns",
+  "ThreeSymbols",
+  "ThreeSymbols2",
+  "FourArrows",
+  "FourArrowsGray",
+  "FourRedToBlack",
+  "FourRating",
+  "FourTrafficLights",
+  "FiveArrows",
+  "FiveArrowsGray",
+  "FiveRating",
+  "FiveQuarters",
+  "ThreeStars",
+  "ThreeTriangles",
+  "FiveBoxes",
+] as const;
+
+/**
+ * Excel color-scale / data-bar / icon criterion basis
+ * (`Excel.ConditionalFormatColorCriterionType`, ExcelApi 1.6).
+ */
+export const EXCEL_COLOR_SCALE_CRITERION_TYPES = [
+  "LowestValue",
+  "HighestValue",
+  "Number",
+  "Percent",
+  "Formula",
+  "Percentile",
+] as const;
+
+export const EXCEL_FORMAT_CELLS_PARAMETERS = Type.Object({
   range: Type.String({
     description:
-      'Range to format, e.g. "A1:D1", "Sheet2!B3:B20". Supports comma/semicolon-separated ranges on the same sheet.',
+      'Range to format, e.g. "A1:D1", "Sheet2!B3:B20". Supports comma/semicolon-separated ranges on the same sheet (e.g. "A1:B2, D1:D2").',
   }),
   style: Type.Optional(
     Type.Union([Type.String(), Type.Array(Type.String())], {
       description:
         "Named style(s) to apply. Compose as array (left-to-right). " +
         'Format: "number", "integer", "currency", "percent", "ratio", "text". ' +
-        'Structural: "header", "total-row", "subtotal", "input", "blank-section".',
+        'Structural: "header", "total-row", "subtotal", "input", "blank-section". ' +
+        'Example: ["currency", "total-row"] = currency format + bold + top border.',
     }),
   ),
   bold: Type.Optional(Type.Boolean({ description: "Set bold." })),
   italic: Type.Optional(Type.Boolean({ description: "Set italic." })),
-  underline: Type.Optional(Type.Boolean({ description: "Set underline." })),
+  underline: Type.Optional(
+    Type.Union(
+      [Type.Boolean(), ...EXCEL_UNDERLINE_STYLES.map((s) => Type.Literal(s))],
+      {
+        description:
+          'Underline. Pass true = "Single", false = "None"; or name a style directly: ' +
+          '"None", "Single", "Double", "SingleAccountant", "DoubleAccountant".',
+      },
+    ),
+  ),
+  strikethrough: Type.Optional(
+    Type.Boolean({
+      description: "Strikethrough the text. Needs ExcelApi 1.9.",
+    }),
+  ),
+  indent_level: Type.Optional(
+    Type.Number({
+      description:
+        "Indent level, 0-250. Needs ExcelApi 1.9; reports an error on older hosts.",
+    }),
+  ),
   font_color: Type.Optional(
     Type.String({ description: 'Font color as hex, e.g. "#0000FF" for blue.' }),
   ),
@@ -545,7 +1074,10 @@ const EXCEL_FORMAT_CELLS_PARAMETERS = Type.Object({
     }),
   ),
   horizontal_alignment: Type.Optional(
-    Type.String({ description: '"Left", "Center", "Right", or "General".' }),
+    catalogEnum(EXCEL_HORIZONTAL_ALIGNMENTS, {
+      description:
+        '"Left", "Center", "Right", "General", "Fill", "Justify", "CenterAcrossSelection", or "Distributed".',
+    }),
   ),
   vertical_alignment: Type.Optional(
     Type.String({ description: '"Top", "Center", "Bottom".' }),
@@ -596,7 +1128,15 @@ const EXCEL_FORMAT_CELLS_PARAMETERS = Type.Object({
   border_color: Type.Optional(
     Type.String({
       description:
-        'Hex color for borders (e.g. "#000000"). Applies to all borders set in this call.',
+        'Hex color for borders (e.g. "#000000"). Applies to all borders set in this call. Default: automatic (black).',
+    }),
+  ),
+  border_style: Type.Optional(
+    catalogEnum(EXCEL_BORDER_LINE_STYLES, {
+      description:
+        'Border line style applied to every border set in this call. Default "Continuous". ' +
+        '"Dash", "DashDot", "DashDotDot", "Dot", "Double" and "SlantDashDot" give the ' +
+        "full Excel line-style set (ExcelApi 1.1).",
     }),
   ),
   merge: Type.Optional(
@@ -604,7 +1144,7 @@ const EXCEL_FORMAT_CELLS_PARAMETERS = Type.Object({
   ),
 });
 
-const EXCEL_CONDITIONAL_FORMAT_PARAMETERS = Type.Object({
+export const EXCEL_CONDITIONAL_FORMAT_PARAMETERS = Type.Object({
   action: Type.Union([Type.Literal("add"), Type.Literal("clear")], {
     description:
       '"add" to create a rule, "clear" to remove all rules in the range.',
@@ -613,13 +1153,17 @@ const EXCEL_CONDITIONAL_FORMAT_PARAMETERS = Type.Object({
     description: 'Target range, e.g. "A1:D10" or "Sheet2!B2:B50".',
   }),
   type: Type.Optional(
-    Type.Union([Type.Literal("formula"), Type.Literal("cell_value")], {
-      description: 'Rule type for "add": "formula" or "cell_value".',
+    catalogEnum(EXCEL_CONDITIONAL_FORMAT_TYPES, {
+      description:
+        'Rule family for "add" (all ExcelApi 1.6). "formula" = custom formula, ' +
+        '"cell_value" = comparison, "data_bar", "color_scale", "icon_set", ' +
+        '"top_bottom", "preset_criteria" (blanks/average/dates/unique), ' +
+        '"contains_text".',
     }),
   ),
   formula: Type.Optional(
     Type.String({
-      description: 'Custom formula for "formula" rules, e.g. "=A1>0".',
+      description: 'Custom formula for type="formula", e.g. "=A1>0".',
     }),
   ),
   operator: Type.Optional(
@@ -648,6 +1192,85 @@ const EXCEL_CONDITIONAL_FORMAT_PARAMETERS = Type.Object({
       description: "Second value for Between/NotBetween operators (optional).",
     }),
   ),
+  text_operator: Type.Optional(
+    catalogEnum(EXCEL_TEXT_OPERATORS, {
+      description:
+        'Text comparison for type="contains_text". Default "Contains".',
+    }),
+  ),
+  text: Type.Optional(
+    Type.String({
+      description: 'Text to match for type="contains_text".',
+    }),
+  ),
+  top_bottom_type: Type.Optional(
+    catalogEnum(EXCEL_TOP_BOTTOM_CRITERIA, {
+      description: 'Rank basis for type="top_bottom". Default "TopItems".',
+    }),
+  ),
+  top_bottom_rank: Type.Optional(
+    Type.Number({
+      description:
+        'Rank for type="top_bottom": 1-1000 for item ranks, 1-100 for percent ranks. Default 10.',
+    }),
+  ),
+  preset_criterion: Type.Optional(
+    catalogEnum(EXCEL_PRESET_CRITERIA, {
+      description:
+        'Preset criterion for type="preset_criteria", e.g. "AboveAverage", "Blanks", "Today", "DuplicateValues".',
+    }),
+  ),
+  data_bar_fill_color: Type.Optional(
+    Type.String({
+      description: 'Positive data-bar fill hex, e.g. "#638EC6".',
+    }),
+  ),
+  data_bar_negative_fill_color: Type.Optional(
+    Type.String({ description: "Negative data-bar fill hex." }),
+  ),
+  data_bar_direction: Type.Optional(
+    catalogEnum(EXCEL_DATA_BAR_DIRECTIONS, {
+      description: 'Data-bar direction. Default "Context".',
+    }),
+  ),
+  data_bar_show_only: Type.Optional(
+    Type.Boolean({
+      description: "Show the data bar only, hiding the cell value.",
+    }),
+  ),
+  data_bar_axis_color: Type.Optional(
+    Type.String({ description: "Data-bar axis color hex." }),
+  ),
+  color_scale_min_color: Type.Optional(
+    Type.String({
+      description: 'Minimum color for type="color_scale". Default "#F8696B".',
+    }),
+  ),
+  color_scale_mid_color: Type.Optional(
+    Type.String({
+      description:
+        'Midpoint color for type="color_scale". Omit for a two-color scale.',
+    }),
+  ),
+  color_scale_max_color: Type.Optional(
+    Type.String({
+      description: 'Maximum color for type="color_scale". Default "#63BE7B".',
+    }),
+  ),
+  icon_set_style: Type.Optional(
+    catalogEnum(EXCEL_ICON_SET_STYLES, {
+      description:
+        'Icon set for type="icon_set". Default "ThreeTrafficLights1".',
+    }),
+  ),
+  icon_set_reverse_order: Type.Optional(
+    Type.Boolean({ description: "Reverse the icon order." }),
+  ),
+  icon_set_show_icon_only: Type.Optional(
+    Type.Boolean({
+      description: "Show only the icon, hiding the cell value.",
+    }),
+  ),
   fill_color: Type.Optional(
     Type.String({ description: 'Fill color hex, e.g. "#FFFDE0".' }),
   ),
@@ -662,7 +1285,7 @@ const EXCEL_CONDITIONAL_FORMAT_PARAMETERS = Type.Object({
   ),
 });
 
-const EXCEL_CHARTS_PARAMETERS = Type.Object({
+export const EXCEL_CHARTS_PARAMETERS = Type.Object({
   action: catalogEnum(
     ["list", "create", "update", "delete", "get_image"] as const,
     {
@@ -711,7 +1334,12 @@ const EXCEL_CHARTS_PARAMETERS = Type.Object({
         "scatter_smooth",
         "radar",
       ] as const,
-      { description: "Chart type (friendly name, e.g. column_stacked)." },
+      {
+        description:
+          "Chart type: column, column_stacked, column_stacked_100, bar, bar_stacked, " +
+          "bar_stacked_100, line, line_markers, area, area_stacked, pie, doughnut, " +
+          "scatter, scatter_lines, scatter_smooth, or radar.",
+      },
     ),
   ),
   series_by: Type.Optional(
@@ -749,7 +1377,7 @@ const EXCEL_CHARTS_PARAMETERS = Type.Object({
   ),
 });
 
-const EXCEL_TRACE_DEPENDENCIES_PARAMETERS = Type.Object({
+export const EXCEL_TRACE_DEPENDENCIES_PARAMETERS = Type.Object({
   cell: Type.String({
     description:
       'Cell to trace, e.g. "D10", "Sheet2!F5". Must be a single cell, not a range.',
@@ -768,7 +1396,7 @@ const EXCEL_TRACE_DEPENDENCIES_PARAMETERS = Type.Object({
   ),
 });
 
-const EXCEL_EXPLAIN_FORMULA_PARAMETERS = Type.Object({
+export const EXCEL_EXPLAIN_FORMULA_PARAMETERS = Type.Object({
   cell: Type.String({
     description: 'Single formula cell to explain, e.g. "D10" or "Sheet2!F5".',
   }),
@@ -780,7 +1408,7 @@ const EXCEL_EXPLAIN_FORMULA_PARAMETERS = Type.Object({
   ),
 });
 
-const EXCEL_VIEW_SETTINGS_PARAMETERS = Type.Object({
+export const EXCEL_VIEW_SETTINGS_PARAMETERS = Type.Object({
   action: catalogEnum(
     [
       "get",
@@ -829,12 +1457,13 @@ const EXCEL_VIEW_SETTINGS_PARAMETERS = Type.Object({
   width: Type.Optional(
     Type.Number({
       description:
-        "Standard (default) column width for the worksheet, in Excel character-width units.",
+        "Standard (default) column width for the worksheet, in Excel character-width units. " +
+        "Required for set_standard_width.",
     }),
   ),
 });
 
-const EXCEL_COMMENTS_PARAMETERS = Type.Object({
+export const EXCEL_COMMENTS_PARAMETERS = Type.Object({
   action: catalogEnum(
     ["read", "add", "update", "reply", "delete", "resolve", "reopen"] as const,
     {
@@ -856,7 +1485,7 @@ const EXCEL_COMMENTS_PARAMETERS = Type.Object({
   ),
 });
 
-const EXCEL_WORKBOOK_HISTORY_PARAMETERS = Type.Object({
+export const EXCEL_WORKBOOK_HISTORY_PARAMETERS = Type.Object({
   action: Type.Optional(
     catalogEnum(["list", "restore", "delete", "clear"] as const, {
       description:
@@ -879,6 +1508,30 @@ const EXCEL_WORKBOOK_HISTORY_PARAMETERS = Type.Object({
   ),
 });
 
+export const EXCEL_GET_OVERVIEW_PARAMETERS = Type.Object({
+  sheet: Type.Optional(
+    Type.String({
+      description:
+        "If provided, return detailed info for this specific sheet " +
+        "(dimensions, headers, tables, named ranges, objects, and a data preview). " +
+        "If omitted, return the workbook-level overview.",
+    }),
+  ),
+});
+
+/**
+ * Capability-calibration rule appended to the Word formatting descriptions.
+ *
+ * These descriptions previously ended with "Formatting is fully supported —
+ * never tell the user it is not". That wording stopped the model *refusing* to
+ * format, but it also licensed it to invent capabilities — e.g. answering that
+ * Word has no text highlight when `font.highlightColor` is WordApi 1.1. Naming
+ * the exposed properties plus this rule prevents both failures.
+ */
+const WORD_FORMAT_CALIBRATION =
+  "Only the formatting properties listed above are exposed — if the user asks " +
+  "for one that is not listed, say it is not available rather than claiming support.";
+
 /* ── Catalog entries ────────────────────────────────────────────────── */
 
 export const OFFICE_CATALOG: readonly OfficeCatalogEntry[] = [
@@ -895,16 +1548,7 @@ export const OFFICE_CATALOG: readonly OfficeCatalogEntry[] = [
     promptGuidelines: [
       "Call office_excel_get_overview before office_excel_read_range to learn the workbook structure.",
     ],
-    parameters: Type.Object({
-      sheet: Type.Optional(
-        Type.String({
-          description:
-            "If provided, return detailed info for this specific sheet " +
-            "(dimensions, headers, tables, named ranges, objects, and a data preview). " +
-            "If omitted, return the workbook-level overview.",
-        }),
-      ),
-    }),
+    parameters: EXCEL_GET_OVERVIEW_PARAMETERS,
     since: 1,
     legacyV1: true,
   },
@@ -1076,6 +1720,24 @@ export const OFFICE_CATALOG: readonly OfficeCatalogEntry[] = [
     since: 1,
   },
 
+  {
+    host: "excel",
+    op: "get_capabilities",
+    name: officeToolName("excel", "get_capabilities"),
+    label: "Excel Capabilities",
+    description:
+      "Report which Excel capabilities the current host actually supports: the platform, and " +
+      "whether each formatting/structure capability is available or gated by a newer ExcelApi " +
+      "version. Read-only — it never changes the workbook. Call this before telling the user a " +
+      "capability is unavailable, so the answer reflects the real host rather than an assumption.",
+    promptSnippet: "Report which Excel capabilities the current host supports",
+    promptGuidelines: [
+      "Call office_excel_get_capabilities before claiming an Excel feature is unavailable.",
+    ],
+    parameters: EXCEL_GET_CAPABILITIES_PARAMETERS,
+    since: 3,
+  },
+
   /* ── Word ──────────────────────────────────────────────────────── */
   {
     host: "word",
@@ -1092,6 +1754,23 @@ export const OFFICE_CATALOG: readonly OfficeCatalogEntry[] = [
     parameters: WORD_GET_OVERVIEW_PARAMETERS,
     since: 1,
     legacyV1: true,
+  },
+  {
+    host: "word",
+    op: "get_capabilities",
+    name: officeToolName("word", "get_capabilities"),
+    label: "Word Capabilities",
+    description:
+      "Report which Word capabilities the current host actually supports: the platform, and " +
+      "whether each formatting/insertion capability is available or desktop-only. Read-only — " +
+      "it never changes the document. Call this before telling the user that a capability is " +
+      "unavailable, so the answer reflects the real host rather than an assumption.",
+    promptSnippet: "Report which Word capabilities the current host supports",
+    promptGuidelines: [
+      "Call office_word_get_capabilities before claiming a Word formatting feature is unavailable.",
+    ],
+    parameters: WORD_GET_CAPABILITIES_PARAMETERS,
+    since: 2,
   },
   {
     host: "word",
@@ -1117,7 +1796,7 @@ export const OFFICE_CATALOG: readonly OfficeCatalogEntry[] = [
       "Optionally format the inserted text in the same call: font (bold, italic, underline, size, name, color), " +
       'paragraph alignment ("Left"/"Centered"/"Right"/"Justified"), style names (e.g. "Heading 1", "Title"), ' +
       'spacing, and indents. Use format: "markdown" to insert a markdown document (headings, bold/italic, bullets). ' +
-      "Formatting is fully supported — never tell the user it is not.",
+      WORD_FORMAT_CALIBRATION,
     promptSnippet: "Insert (and format) text into the attached Word document",
     promptGuidelines: [
       'For a formatted document use office_word_insert_blocks (precise per-block control) or office_word_insert_text with format: "markdown".',
@@ -1149,7 +1828,8 @@ export const OFFICE_CATALOG: readonly OfficeCatalogEntry[] = [
       "Find text by literal content in the attached Word document and apply formatting to every match: " +
       "bold, italic, underline, font size (points), font name, color (#RRGGBB), paragraph alignment, " +
       'paragraph style (e.g. "Heading 1"), spacing, and indents. ' +
-      "Use this to bold/size/center existing content — e.g. format a document title. Formatting is fully supported.",
+      "Use this to bold/size/center existing content — e.g. format a document title. " +
+      WORD_FORMAT_CALIBRATION,
     promptSnippet: "Format existing Word text (bold, size, alignment, style)",
     parameters: WORD_FORMAT_RANGE_PARAMETERS,
     since: 1,
@@ -1291,11 +1971,59 @@ export const OFFICE_CATALOG: readonly OfficeCatalogEntry[] = [
     parameters: POWERPOINT_FORMAT_SLIDE_PARAMETERS,
     since: 1,
   },
+  {
+    host: "powerpoint",
+    op: "get_capabilities",
+    name: officeToolName("powerpoint", "get_capabilities"),
+    label: "PowerPoint Capabilities",
+    description:
+      "Report which PowerPoint capabilities the current host actually supports: the platform, and " +
+      "whether each formatting capability is available or gated by a newer PowerPointApi version. " +
+      "Read-only — it never changes the presentation. Call this before telling the user a capability " +
+      "is unavailable, so the answer reflects the real host rather than an assumption.",
+    promptSnippet:
+      "Report which PowerPoint capabilities the current host supports",
+    promptGuidelines: [
+      "Call office_powerpoint_get_capabilities before claiming a PowerPoint feature is unavailable.",
+    ],
+    parameters: POWERPOINT_GET_CAPABILITIES_PARAMETERS,
+    since: 3,
+  },
 ];
 
 /** Index by "<host>.<op>" for fast lookup. */
 export const OFFICE_CATALOG_BY_OP: ReadonlyMap<string, OfficeCatalogEntry> =
   new Map(OFFICE_CATALOG.map((entry) => [`${entry.host}.${entry.op}`, entry]));
+
+/**
+ * Canonical tool descriptions keyed by "<host>.<op>" — the single source of
+ * truth shared by the bridge catalog entries above and the add-in's local
+ * (browser-only) tool factories.
+ *
+ * Local factories MUST NOT re-declare these strings. Duplicated, hand-maintained
+ * descriptions are what allowed a tool description to drift from — and
+ * overstate — what the implementation actually did.
+ */
+export const OFFICE_TOOL_DESCRIPTIONS: Readonly<Record<string, string>> =
+  Object.fromEntries(
+    OFFICE_CATALOG.map((entry) => [
+      `${entry.host}.${entry.op}`,
+      entry.description,
+    ]),
+  );
+
+/**
+ * Resolve a `<host>.<op>` id to its canonical tool description. Throws for
+ * unknown ids so local tools import the single source of truth and drift is
+ * impossible (mirrors `catalogSchemaFor`).
+ */
+export function officeToolDescription(opId: string): string {
+  const description: string | undefined = OFFICE_TOOL_DESCRIPTIONS[opId];
+  if (description === undefined) {
+    throw new Error(`office catalog: no description for op "${opId}"`);
+  }
+  return description;
+}
 
 /** All Pi tool names in the catalog ("office_<host>_<op>"). */
 export const OFFICE_TOOL_NAMES: readonly string[] = OFFICE_CATALOG.map(

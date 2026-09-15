@@ -11,6 +11,11 @@
  * Run an Office.js Word operation with a typed context.
  * Wraps Word.run() (proxy objects → load() → context.sync()).
  */
+import {
+ capabilityUnsupported,
+ requireCapability,
+} from "../office/capabilities.js";
+
 export async function wordRun<T>(
  fn: (context: Word.RequestContext) => Promise<T>,
 ): Promise<T> {
@@ -39,6 +44,14 @@ export interface WordTextFormat {
  name?: string;
  /** Font color as #RRGGBB. */
  color?: string;
+ /**
+  * Text highlight (marker) color as #RRGGBB, or "none" to clear.
+  *
+  * Maps to `font.highlightColor` (WordApi 1.1 — available on Word desktop and
+  * Word for the web). This is what a "fill"/"background" request means for
+  * text; `shading` is the separate, desktop-only full-box background.
+  */
+ highlight?: string;
  /** Paragraph alignment. Word enum values — note "Centered", not "center". */
  alignment?: "Left" | "Centered" | "Right" | "Justified";
 }
@@ -60,6 +73,15 @@ export interface WordParagraphFormat {
  firstLineIndent?: number;
  /** Left indent, in points. */
  leftIndent?: number;
+ /**
+  * Paragraph background fill ("shading") as #RRGGBB.
+  *
+  * Desktop-only (WordApiDesktop 1.3). Callers must consult
+  * `wordShadingGateMessage()` first and report the gap rather than silently
+  * doing nothing on Word for the web. For a character-level marker that works
+  * on every platform, use `WordTextFormat.highlight` instead.
+  */
+ shading?: string;
 }
 
 /** Union of everything a block can carry (font + paragraph). */
@@ -121,6 +143,14 @@ export function setWordFontProps(
  if (format.size !== undefined) target.font.size = format.size;
  if (format.name !== undefined) target.font.name = format.name;
  if (format.color !== undefined) target.font.color = format.color;
+ if (format.highlight !== undefined) {
+  // SAFETY: `Word.Font.highlightColor` is declared as `string`, but Microsoft
+  // documents `null` as the way to remove a highlight ("To remove highlight
+  // color, set it to null"). The d.ts under-declares the nullability, so this
+  // cast records the documented runtime contract.
+  target.font.highlightColor =
+   format.highlight === "none" ? (null as unknown as string) : format.highlight;
+ }
 }
 
 /** Apply paragraph-level formatting to a Word.Paragraph proxy. */
@@ -139,6 +169,85 @@ export function setWordParagraphProps(
  if (format.firstLineIndent !== undefined)
   paragraph.firstLineIndent = format.firstLineIndent;
  if (format.leftIndent !== undefined) paragraph.leftIndent = format.leftIndent;
+ if (format.shading !== undefined) {
+  paragraph.shading.backgroundPatternColor = format.shading;
+ }
+}
+
+/**
+ * Apply a background fill ("shading") to a Word.Range proxy.
+ *
+ * Range-level shading fills only the matched characters, unlike
+ * `setWordParagraphProps`, whose shading fills the whole paragraph box. The
+ * split is deliberate: `word_format_range` targets matched text, while the
+ * insert paths create whole paragraphs.
+ *
+ * Desktop-only (WordApiDesktop 1.3) — callers must consult
+ * `wordShadingGateMessage()` first and report the gap rather than no-op.
+ */
+export function setWordRangeShading(range: Word.Range, color: string): void {
+ range.shading.backgroundPatternColor = color;
+}
+
+/** Capability ids for Word features that need a guard or a fallback. */
+const WORD_SHADING_CAPABILITY_ID = "word.shading.range";
+const WORD_HYPERLINK_CAPABILITY_ID = "word.hyperlink.native";
+const WORD_TABLE_CAPABILITY_ID = "word.table.insert";
+const WORD_INLINE_IMAGE_CAPABILITY_ID = "word.image.inline";
+const WORD_RANGE_NAVIGATION_CAPABILITY_ID = "word.range.getRange";
+
+/**
+ * Fail-loud guard for `Body.insertTable` (WordApi 1.3).
+ * Returns null when the host may attempt the call.
+ */
+export function wordTableInsertGateMessage(): string | null {
+ return requireCapability(WORD_TABLE_CAPABILITY_ID);
+}
+
+/**
+ * Fail-loud guard for `Body.insertInlinePictureFromBase64` (WordApi 1.2).
+ */
+export function wordInlineImageGateMessage(): string | null {
+ return requireCapability(WORD_INLINE_IMAGE_CAPABILITY_ID);
+}
+
+/**
+ * Fail-loud guard for `Range.getRange` / `Paragraph.getRange` (WordApi 1.3).
+ *
+ * Only the multi-run and multi-block insertion paths call it, so plain
+ * single-run text insertion still works on a WordApi 1.1 host.
+ */
+export function wordRangeNavigationGateMessage(): string | null {
+ return requireCapability(WORD_RANGE_NAVIGATION_CAPABILITY_ID);
+}
+
+/** Throw the range-navigation gap message when the host lacks WordApi 1.3. */
+function requireRangeNavigation(): void {
+ const gap = wordRangeNavigationGateMessage();
+ if (gap !== null) throw new Error(gap);
+}
+
+/**
+ * Fail-loud guard for the desktop-only `shading` property.
+ *
+ * Returns null when the host may attempt shading (supported, or an "unknown"
+ * verdict where the Office.js call surfaces its own error); returns a message
+ * naming the capability, platform and remedy only when the host is known to
+ * lack the set, so callers never silently no-op.
+ */
+export function wordShadingGateMessage(): string | null {
+ return requireCapability(WORD_SHADING_CAPABILITY_ID);
+}
+
+/**
+ * Whether to use the native hyperlink API (`range.hyperlinks.add`).
+ *
+ * That API is WordApiDesktop 1.3 and Word for the web lacks it (the call
+ * throws). When it is unavailable the caller inserts an OOXML `w:fldSimple`
+ * HYPERLINK field via `insertOoxml` (WordApi 1.1), which works on every host.
+ */
+export function wordHyperlinkNativeAvailable(): boolean {
+ return !capabilityUnsupported(WORD_HYPERLINK_CAPABILITY_ID);
 }
 
 /** Resolve a block's runs (defaults to a single run of its text). */
@@ -227,10 +336,14 @@ function createBodyParagraph(
  const paragraph = body.insertParagraph(firstText, insertLocation);
  if (runs[0]) applyRunFont(paragraph, runs[0]);
 
- let range: Word.Range = paragraph.getRange();
- for (const run of runs.slice(1)) {
-  range = range.insertText(run.text, Word.InsertLocation.end);
-  applyRunFont(range, run);
+ // `getRange` is WordApi 1.3 — only the multi-run path needs it.
+ if (runs.length > 1) {
+  requireRangeNavigation();
+  let range: Word.Range = paragraph.getRange();
+  for (const run of runs.slice(1)) {
+   range = range.insertText(run.text, Word.InsertLocation.end);
+   applyRunFont(range, run);
+  }
  }
 
  applyBlockFormatting(paragraph, block);
@@ -270,22 +383,30 @@ export function insertWordBlocks(
    if (isFirst) {
     anchor = anchor.insertText(firstText, Word.InsertLocation.replace);
     if (runs[0]) applyRunFont(anchor, runs[0]);
-    for (const run of runs.slice(1)) {
-     anchor = anchor.insertText(run.text, Word.InsertLocation.end);
-     applyRunFont(anchor, run);
+    if (runs.length > 1) {
+     requireRangeNavigation();
+     for (const run of runs.slice(1)) {
+      anchor = anchor.insertText(run.text, Word.InsertLocation.end);
+      applyRunFont(anchor, run);
+     }
     }
     paragraph = anchor.paragraphs.getFirst();
    } else {
     paragraph = anchor.insertParagraph(firstText, Word.InsertLocation.after);
     if (runs[0]) applyRunFont(paragraph, runs[0]);
-    let range: Word.Range = paragraph.getRange();
-    for (const run of runs.slice(1)) {
-     range = range.insertText(run.text, Word.InsertLocation.end);
-     applyRunFont(range, run);
+    if (runs.length > 1) {
+     requireRangeNavigation();
+     let range: Word.Range = paragraph.getRange();
+     for (const run of runs.slice(1)) {
+      range = range.insertText(run.text, Word.InsertLocation.end);
+      applyRunFont(range, run);
+     }
     }
    }
    applyBlockFormatting(paragraph, block);
    inserted.push(paragraph);
+   // Chaining the next block needs the paragraph range (WordApi 1.3).
+   if (blocks.length > 1) requireRangeNavigation();
    anchor = paragraph.getRange();
    isFirst = false;
   }

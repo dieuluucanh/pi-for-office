@@ -2,35 +2,42 @@
  * explain_formula — provide a concise natural-language explanation for a formula cell.
  */
 
-import { Type, type Static } from "@sinclair/typebox";
+import { EXCEL_EXPLAIN_FORMULA_PARAMETERS } from "@dieulc/pi-office-protocol/office-catalog";
+import type { Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { cellAddress, excelRun, getRange, parseCell, parseRangeRef, qualifiedAddress } from "../excel/helpers.js";
+import {
+  cellAddress,
+  excelRun,
+  getRange,
+  parseCell,
+  parseRangeRef,
+  qualifiedAddress,
+} from "../excel/helpers.js";
 import { getErrorMessage } from "../utils/errors.js";
-import type { ExplainFormulaDetails, ExplainFormulaReferenceDetail } from "./tool-details.js";
+import type {
+  ExplainFormulaDetails,
+  ExplainFormulaReferenceDetail,
+} from "./tool-details.js";
 import {
   buildExplainFormulaNarrative,
   extractFormulaFunctionNames,
   previewCellValue,
 } from "./explain-formula-logic.js";
-import { extractFormulaReferences, type ParsedFormulaReference } from "./trace-dependencies-logic.js";
+import {
+  extractFormulaReferences,
+  type ParsedFormulaReference,
+} from "./trace-dependencies-logic.js";
 
 const DEFAULT_MAX_REFERENCES = 8;
 const MAX_REFERENCES_LIMIT = 20;
 
-const schema = Type.Object({
-  cell: Type.String({
-    description: 'Single formula cell to explain, e.g. "D10" or "Sheet2!F5".',
-  }),
-  max_references: Type.Optional(
-    Type.Number({
-      description: "Max number of direct references to preview. Default: 8. Max: 20.",
-    }),
-  ),
-});
+const schema = EXCEL_EXPLAIN_FORMULA_PARAMETERS;
 
 type Params = Static<typeof schema>;
 
-function toQualifiedReferenceAddress(reference: ParsedFormulaReference): string {
+function toQualifiedReferenceAddress(
+  reference: ParsedFormulaReference,
+): string {
   const start = cellAddress(reference.startCol, reference.startRow);
   const end = cellAddress(reference.endCol, reference.endRow);
   const localAddress = start === end ? start : `${start}:${end}`;
@@ -64,7 +71,10 @@ export function isSingleCellReference(reference: string): boolean {
   }
 }
 
-export function createExplainFormulaTool(): AgentTool<typeof schema, ExplainFormulaDetails> {
+export function createExplainFormulaTool(): AgentTool<
+  typeof schema,
+  ExplainFormulaDetails
+> {
   return {
     name: "explain_formula",
     label: "Explain Formula",
@@ -78,12 +88,18 @@ export function createExplainFormulaTool(): AgentTool<typeof schema, ExplainForm
       try {
         if (!isSingleCellReference(params.cell)) {
           return {
-            content: [{ type: "text", text: "Error: explain_formula expects a single cell, not a range." }],
+            content: [
+              {
+                type: "text",
+                text: "Error: explain_formula expects a single cell, not a range.",
+              },
+            ],
             details: {
               kind: "explain_formula",
               cell: params.cell,
               hasFormula: false,
-              explanation: "The request was rejected because the input is not a single cell.",
+              explanation:
+                "The request was rejected because the input is not a single cell.",
               references: [],
               truncated: false,
             },
@@ -101,9 +117,10 @@ export function createExplainFormulaTool(): AgentTool<typeof schema, ExplainForm
           const resolvedCell = qualifiedAddress(sheet.name, range.address);
           const valuePreview = previewCellValue(range.values[0]?.[0]);
           const rawFormula: DynamicValue = range.formulas[0]?.[0];
-          const formula = typeof rawFormula === "string" && rawFormula.startsWith("=")
-            ? rawFormula
-            : undefined;
+          const formula =
+            typeof rawFormula === "string" && rawFormula.startsWith("=")
+              ? rawFormula
+              : undefined;
 
           if (!formula) {
             return {
@@ -111,13 +128,17 @@ export function createExplainFormulaTool(): AgentTool<typeof schema, ExplainForm
               cell: resolvedCell,
               hasFormula: false,
               valuePreview,
-              explanation: "This cell currently contains a static value, not a formula.",
+              explanation:
+                "This cell currently contains a static value, not a formula.",
               references: [],
               truncated: false,
             } satisfies ExplainFormulaDetails;
           }
 
-          const parsedReferences = extractFormulaReferences(formula, sheet.name);
+          const parsedReferences = extractFormulaReferences(
+            formula,
+            sheet.name,
+          );
           const truncated = parsedReferences.length > maxReferences;
           const referencesToLoad = parsedReferences.slice(0, maxReferences);
 
@@ -128,7 +149,10 @@ export function createExplainFormulaTool(): AgentTool<typeof schema, ExplainForm
 
           for (const reference of referencesToLoad) {
             const address = toQualifiedReferenceAddress(reference);
-            const { range: refRange } = getRange(context, reference.startAddress);
+            const { range: refRange } = getRange(
+              context,
+              reference.startAddress,
+            );
             refRange.load("values,formulas");
             loadedReferences.push({ address, range: refRange });
           }
@@ -137,19 +161,23 @@ export function createExplainFormulaTool(): AgentTool<typeof schema, ExplainForm
             await context.sync();
           }
 
-          const referenceDetails: ExplainFormulaReferenceDetail[] = loadedReferences.map((reference) => {
-            const preview = previewCellValue(reference.range.values[0]?.[0]);
-            const rawRefFormula: DynamicValue = reference.range.formulas[0]?.[0];
-            const formulaPreview = typeof rawRefFormula === "string" && rawRefFormula.startsWith("=")
-              ? rawRefFormula
-              : undefined;
+          const referenceDetails: ExplainFormulaReferenceDetail[] =
+            loadedReferences.map((reference) => {
+              const preview = previewCellValue(reference.range.values[0]?.[0]);
+              const rawRefFormula: DynamicValue =
+                reference.range.formulas[0]?.[0];
+              const formulaPreview =
+                typeof rawRefFormula === "string" &&
+                rawRefFormula.startsWith("=")
+                  ? rawRefFormula
+                  : undefined;
 
-            return {
-              address: reference.address,
-              valuePreview: preview,
-              ...(formulaPreview !== undefined ? { formulaPreview } : {}),
-            };
-          });
+              return {
+                address: reference.address,
+                valuePreview: preview,
+                ...(formulaPreview !== undefined ? { formulaPreview } : {}),
+              };
+            });
 
           const functionNames = extractFormulaFunctionNames(formula);
           const explanation = buildExplainFormulaNarrative({
@@ -173,21 +201,28 @@ export function createExplainFormulaTool(): AgentTool<typeof schema, ExplainForm
 
         if (!details.hasFormula) {
           return {
-            content: [{
-              type: "text",
-              text: `**Formula explanation for ${details.cell}**\n\n${details.explanation}`,
-            }],
+            content: [
+              {
+                type: "text",
+                text: `**Formula explanation for ${details.cell}**\n\n${details.explanation}`,
+              },
+            ],
             details,
           };
         }
 
-        const referenceLines = details.references.length > 0
-          ? details.references.map((reference) => {
-            const preview = reference.valuePreview ? ` → ${reference.valuePreview}` : "";
-            const formulaPreview = reference.formulaPreview ? ` (formula: \`${reference.formulaPreview}\`)` : "";
-            return `- ${reference.address}${preview}${formulaPreview}`;
-          })
-          : ["- (No direct references detected)"];
+        const referenceLines =
+          details.references.length > 0
+            ? details.references.map((reference) => {
+                const preview = reference.valuePreview
+                  ? ` → ${reference.valuePreview}`
+                  : "";
+                const formulaPreview = reference.formulaPreview
+                  ? ` (formula: \`${reference.formulaPreview}\`)`
+                  : "";
+                return `- ${reference.address}${preview}${formulaPreview}`;
+              })
+            : ["- (No direct references detected)"];
 
         const lines = [
           `**Formula explanation for ${details.cell}**`,
@@ -202,7 +237,10 @@ export function createExplainFormulaTool(): AgentTool<typeof schema, ExplainForm
         ];
 
         if (details.truncated) {
-          lines.push("", `_Showing first ${details.references.length} reference(s)._`);
+          lines.push(
+            "",
+            `_Showing first ${details.references.length} reference(s)._`,
+          );
         }
 
         return {
@@ -211,7 +249,12 @@ export function createExplainFormulaTool(): AgentTool<typeof schema, ExplainForm
         };
       } catch (error) {
         return {
-          content: [{ type: "text", text: `Error explaining formula: ${getErrorMessage(error)}` }],
+          content: [
+            {
+              type: "text",
+              text: `Error explaining formula: ${getErrorMessage(error)}`,
+            },
+          ],
           details: {
             kind: "explain_formula",
             cell: params.cell,

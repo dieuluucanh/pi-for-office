@@ -7,12 +7,18 @@
  * - Supports formulas (strings starting with "=")
  */
 
-import { Type, type Static } from "@sinclair/typebox";
+import { EXCEL_WRITE_CELLS_PARAMETERS } from "@dieulc/pi-office-protocol/office-catalog";
+import type { Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { WriteCellsDetails } from "./tool-details.js";
 import {
-  excelRun, getRange, qualifiedAddress, parseCell,
-  colToLetter, computeRangeAddress, padValues,
+  excelRun,
+  getRange,
+  qualifiedAddress,
+  parseCell,
+  colToLetter,
+  computeRangeAddress,
+  padValues,
 } from "../excel/helpers.js";
 import { buildWorkbookCellChangeSummary } from "../audit/cell-diff.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
@@ -28,27 +34,7 @@ import { finalizeMutationOperation } from "./mutation/finalize.js";
 import type { MutationFinalizeDependencies } from "./mutation/types.js";
 import { appendMutationResultNote } from "./mutation/result-note.js";
 
-const schema = Type.Object({
-  start_cell: Type.String({
-    description:
-      'Top-left cell to write from, e.g. "A1", "Sheet2!B3". ' +
-      "If no sheet is specified, uses the active sheet.",
-  }),
-  values: Type.Array(Type.Array(Type.Any()), {
-    description:
-      "2D array of values. Each inner array is a row. " +
-      'Strings starting with "=" are formulas. ' +
-      'Example: [["Name", "Total"], ["Alice", "=SUM(B2:B10)"]]',
-  }),
-  allow_overwrite: Type.Optional(
-    Type.Boolean({
-      description:
-        "Set to true to overwrite existing data. Default: false. " +
-        "If false and the target range contains values or formulas, the write is blocked " +
-        "and the existing data is returned so you can ask the user.",
-    }),
-  ),
-});
+const schema = EXCEL_WRITE_CELLS_PARAMETERS;
 
 type Params = Static<typeof schema>;
 
@@ -60,21 +46,21 @@ interface InvalidFormula {
 
 type WriteCellsResult =
   | {
-    blocked: true;
-    sheetName: string;
-    address: string;
-    existingCount: number;
-    existingValues: DynamicValue[][];
-  }
+      blocked: true;
+      sheetName: string;
+      address: string;
+      existingCount: number;
+      existingValues: DynamicValue[][];
+    }
   | {
-    blocked: false;
-    sheetName: string;
-    address: string;
-    beforeValues: DynamicValue[][];
-    beforeFormulas: DynamicValue[][];
-    readBackValues: DynamicValue[][];
-    readBackFormulas: DynamicValue[][];
-  };
+      blocked: false;
+      sheetName: string;
+      address: string;
+      beforeValues: DynamicValue[][];
+      beforeFormulas: DynamicValue[][];
+      readBackValues: DynamicValue[][];
+      readBackFormulas: DynamicValue[][];
+    };
 
 type BlockedWriteCellsResult = Extract<WriteCellsResult, { blocked: true }>;
 type SuccessWriteCellsResult = Extract<WriteCellsResult, { blocked: false }>;
@@ -83,7 +69,10 @@ const mutationFinalizeDependencies: MutationFinalizeDependencies = {
   appendAuditEntry: (entry) => getWorkbookChangeAuditLog().append(entry),
 };
 
-export function createWriteCellsTool(): AgentTool<typeof schema, WriteCellsDetails> {
+export function createWriteCellsTool(): AgentTool<
+  typeof schema,
+  WriteCellsDetails
+> {
   return {
     name: "write_cells",
     label: "Write Cells",
@@ -109,13 +98,19 @@ export function createWriteCellsTool(): AgentTool<typeof schema, WriteCellsDetai
         const { padded, rows, cols } = padValues(params.values);
 
         const bangIndex = params.start_cell.indexOf("!");
-        const startCellRef = bangIndex >= 0
-          ? params.start_cell.slice(bangIndex + 1)
-          : params.start_cell;
+        const startCellRef =
+          bangIndex >= 0
+            ? params.start_cell.slice(bangIndex + 1)
+            : params.start_cell;
 
         if (startCellRef.includes(":")) {
           return {
-            content: [{ type: "text", text: "Error: start_cell must be a single cell (e.g. \"A1\")." }],
+            content: [
+              {
+                type: "text",
+                text: 'Error: start_cell must be a single cell (e.g. "A1").',
+              },
+            ],
             details: { kind: "write_cells", blocked: false },
           };
         }
@@ -125,7 +120,12 @@ export function createWriteCellsTool(): AgentTool<typeof schema, WriteCellsDetai
           invalidFormulas = findInvalidFormulas(padded, startCellRef);
         } catch {
           return {
-            content: [{ type: "text", text: `Error: invalid start_cell "${params.start_cell}".` }],
+            content: [
+              {
+                type: "text",
+                text: `Error: invalid start_cell "${params.start_cell}".`,
+              },
+            ],
             details: { kind: "write_cells", blocked: false },
           };
         }
@@ -134,7 +134,9 @@ export function createWriteCellsTool(): AgentTool<typeof schema, WriteCellsDetai
           const lines: string[] = [];
           lines.push("⛔ **Write blocked** — invalid formula syntax detected:");
           for (const invalid of invalidFormulas) {
-            lines.push(`- ${invalid.address}: ${invalid.formula} (${invalid.reason})`);
+            lines.push(
+              `- ${invalid.address}: ${invalid.formula} (${invalid.reason})`,
+            );
           }
           lines.push("");
           lines.push("Fix the formulas and retry.");
@@ -158,7 +160,10 @@ export function createWriteCellsTool(): AgentTool<typeof schema, WriteCellsDetai
 
           // Overwrite protection: check if target has existing data (values or formulas)
           if (!params.allow_overwrite) {
-            const occupiedCount = countOccupiedCells(beforeValues, beforeFormulas);
+            const occupiedCount = countOccupiedCells(
+              beforeValues,
+              beforeFormulas,
+            );
             if (occupiedCount > 0) {
               return {
                 blocked: true,
@@ -198,7 +203,9 @@ export function createWriteCellsTool(): AgentTool<typeof schema, WriteCellsDetai
               toolName: "write_cells",
               toolCallId,
               blocked: true,
-              ...(blockedResult.details.address !== undefined ? { outputAddress: blockedResult.details.address } : {}),
+              ...(blockedResult.details.address !== undefined
+                ? { outputAddress: blockedResult.details.address }
+                : {}),
               changedCount: 0,
               changes: [],
             },
@@ -214,20 +221,25 @@ export function createWriteCellsTool(): AgentTool<typeof schema, WriteCellsDetai
             toolName: "write_cells",
             toolCallId,
             blocked: false,
-            ...(successResult.details.address !== undefined ? { outputAddress: successResult.details.address } : {}),
+            ...(successResult.details.address !== undefined
+              ? { outputAddress: successResult.details.address }
+              : {}),
             changedCount: successResult.details.changes?.changedCount ?? 0,
             changes: successResult.details.changes?.sample ?? [],
           },
           recovery: {
             result: successResult,
-            appendRecoverySnapshot: () => getWorkbookRecoveryLog().append({
-              toolName: "write_cells",
-              toolCallId,
-              address: successResult.details.address ?? qualifiedAddress(result.sheetName, result.address),
-              changedCount: successResult.details.changes?.changedCount ?? 0,
-              beforeValues: result.beforeValues,
-              beforeFormulas: result.beforeFormulas,
-            }),
+            appendRecoverySnapshot: () =>
+              getWorkbookRecoveryLog().append({
+                toolName: "write_cells",
+                toolCallId,
+                address:
+                  successResult.details.address ??
+                  qualifiedAddress(result.sheetName, result.address),
+                changedCount: successResult.details.changes?.changedCount ?? 0,
+                beforeValues: result.beforeValues,
+                beforeFormulas: result.beforeFormulas,
+              }),
             appendResultNote: appendMutationResultNote,
             unavailableReason: CHECKPOINT_SKIPPED_REASON,
             unavailableNote: CHECKPOINT_SKIPPED_NOTE,
@@ -245,7 +257,12 @@ export function createWriteCellsTool(): AgentTool<typeof schema, WriteCellsDetai
         return successResult;
       } catch (e) {
         return {
-          content: [{ type: "text", text: `Error writing cells: ${getErrorMessage(e)}` }],
+          content: [
+            {
+              type: "text",
+              text: `Error writing cells: ${getErrorMessage(e)}`,
+            },
+          ],
           details: { kind: "write_cells", blocked: false },
         };
       }
@@ -253,7 +270,10 @@ export function createWriteCellsTool(): AgentTool<typeof schema, WriteCellsDetai
   };
 }
 
-function findInvalidFormulas(values: DynamicValue[][], startCell: string): InvalidFormula[] {
+function findInvalidFormulas(
+  values: DynamicValue[][],
+  startCell: string,
+): InvalidFormula[] {
   const start = parseCell(startCell);
   const invalid: InvalidFormula[] = [];
 
@@ -309,7 +329,10 @@ export function validateFormula(formula: string): string | null {
   return null;
 }
 
-export function countOccupiedCells(values: DynamicValue[][], formulas: DynamicValue[][]): number {
+export function countOccupiedCells(
+  values: DynamicValue[][],
+  formulas: DynamicValue[][],
+): number {
   let count = 0;
   for (let r = 0; r < values.length; r++) {
     const valueRow = values[r] ?? [];
@@ -338,7 +361,9 @@ interface VerifiedValuesPreview {
   truncated: boolean;
 }
 
-function buildVerifiedValuesPreview(values: DynamicValue[][]): VerifiedValuesPreview {
+function buildVerifiedValuesPreview(
+  values: DynamicValue[][],
+): VerifiedValuesPreview {
   const totalRows = values.length;
   const totalCols = values.reduce((max, row) => Math.max(max, row.length), 0);
 
@@ -366,11 +391,15 @@ function buildVerifiedValuesPreview(values: DynamicValue[][]): VerifiedValuesPre
   };
 }
 
-function formatBlocked(result: BlockedWriteCellsResult): AgentToolResult<WriteCellsDetails> {
+function formatBlocked(
+  result: BlockedWriteCellsResult,
+): AgentToolResult<WriteCellsDetails> {
   const fullAddr = qualifiedAddress(result.sheetName, result.address);
   const lines: string[] = [];
 
-  lines.push(`⛔ **Write blocked** — ${fullAddr} contains ${result.existingCount} non-empty cell(s).`);
+  lines.push(
+    `⛔ **Write blocked** — ${fullAddr} contains ${result.existingCount} non-empty cell(s).`,
+  );
   lines.push("");
 
   if (result.existingCount > 0) {
@@ -396,10 +425,15 @@ function formatBlocked(result: BlockedWriteCellsResult): AgentToolResult<WriteCe
   return { content: [{ type: "text", text: lines.join("\n") }], details };
 }
 
-function formatSuccess(result: SuccessWriteCellsResult, rows: number, cols: number): AgentToolResult<WriteCellsDetails> {
+function formatSuccess(
+  result: SuccessWriteCellsResult,
+  rows: number,
+  cols: number,
+): AgentToolResult<WriteCellsDetails> {
   const fullAddr = qualifiedAddress(result.sheetName, result.address);
   const bangIndex = result.address.indexOf("!");
-  const cellPart = bangIndex >= 0 ? result.address.slice(bangIndex + 1) : result.address;
+  const cellPart =
+    bangIndex >= 0 ? result.address.slice(bangIndex + 1) : result.address;
   const colonIndex = cellPart.indexOf(":");
   const startCell = colonIndex >= 0 ? cellPart.slice(0, colonIndex) : cellPart;
 
@@ -416,7 +450,12 @@ function formatSuccess(result: SuccessWriteCellsResult, rows: number, cols: numb
       const r = errCell.row - start.row;
       const c = errCell.col - start.col;
       const formulaRow = result.readBackFormulas[r];
-      if (r >= 0 && c >= 0 && formulaRow !== undefined && c < formulaRow.length) {
+      if (
+        r >= 0 &&
+        c >= 0 &&
+        formulaRow !== undefined &&
+        c < formulaRow.length
+      ) {
         const f = formulaRow[c];
         if (typeof f === "string") {
           err.formula = f;
@@ -427,7 +466,9 @@ function formatSuccess(result: SuccessWriteCellsResult, rows: number, cols: numb
     lines.push("");
     lines.push(`⚠️ **${errors.length} formula error(s):**`);
     for (const e of errors) {
-      lines.push(`- ${e.address}: ${e.error}${e.formula ? ` (formula: ${e.formula})` : ""}`);
+      lines.push(
+        `- ${e.address}: ${e.error}${e.formula ? ` (formula: ${e.formula})` : ""}`,
+      );
     }
     lines.push("");
     lines.push("Review and fix with another write_cells call.");
@@ -447,10 +488,14 @@ function formatSuccess(result: SuccessWriteCellsResult, rows: number, cols: numb
     if (preview.truncated) {
       const omissions: string[] = [];
       if (preview.omittedRows > 0) {
-        omissions.push(`${preview.omittedRows} more row${preview.omittedRows === 1 ? "" : "s"}`);
+        omissions.push(
+          `${preview.omittedRows} more row${preview.omittedRows === 1 ? "" : "s"}`,
+        );
       }
       if (preview.omittedCols > 0) {
-        omissions.push(`${preview.omittedCols} more column${preview.omittedCols === 1 ? "" : "s"}`);
+        omissions.push(
+          `${preview.omittedCols} more column${preview.omittedCols === 1 ? "" : "s"}`,
+        );
       }
 
       lines.push("");
@@ -483,4 +528,3 @@ function formatSuccess(result: SuccessWriteCellsResult, rows: number, cols: numb
 
   return { content: [{ type: "text", text: lines.join("\n") }], details };
 }
-

@@ -5,21 +5,31 @@
  * Handles threaded replies via the Excel CommentReply API.
  */
 
-import { Type, type Static } from "@sinclair/typebox";
+import { EXCEL_COMMENTS_PARAMETERS } from "@dieulc/pi-office-protocol/office-catalog";
+import type { Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { excelRun, getRange, qualifiedAddress, parseCell } from "../excel/helpers.js";
+import {
+  excelRun,
+  getRange,
+  qualifiedAddress,
+  parseCell,
+} from "../excel/helpers.js";
 import {
   getWorkbookChangeAuditLog,
   type AppendWorkbookChangeAuditEntryArgs,
 } from "../audit/workbook-change-audit.js";
 import { dispatchWorkbookSnapshotCreated } from "../workbook/recovery-events.js";
-import { captureCommentThreadState, type RecoveryCommentThreadState } from "../workbook/recovery-states.js";
+import {
+  captureCommentThreadState,
+  type RecoveryCommentThreadState,
+} from "../workbook/recovery-states.js";
 import {
   getWorkbookRecoveryLog,
   type AppendCommentThreadRecoverySnapshotArgs,
   type WorkbookRecoverySnapshot,
 } from "../workbook/recovery-log.js";
 import { getErrorMessage } from "../utils/errors.js";
+import { requireCapability } from "../office/capabilities.js";
 import type { CommentsDetails } from "./tool-details.js";
 import {
   CHECKPOINT_SKIPPED_NOTE,
@@ -31,12 +41,6 @@ import type { MutationFinalizeDependencies } from "./mutation/types.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-function StringEnum<T extends string[]>(values: [...T], opts?: { description?: string }) {
-  return Type.Union(
-    values.map((value) => Type.Literal(value)),
-    opts,
-  );
-}
 /** Check if a cell (already stripped of sheet prefix) falls within a range address. */
 function isCellInRange(cellAddr: string, rangeAddr: string): boolean {
   const bangIndex = rangeAddr.indexOf("!");
@@ -71,27 +75,7 @@ function requireContent(content: string | undefined, action: string): string {
   return content;
 }
 
-const schema = Type.Object({
-  action: StringEnum(
-    ["read", "add", "update", "reply", "delete", "resolve", "reopen"],
-    {
-      description:
-        "Comment operation: read (list comments in range), add (new comment on cell), " +
-        "update (edit existing comment text), reply (add threaded reply), " +
-        "delete (remove comment + replies), resolve/reopen (toggle thread status).",
-    },
-  ),
-  range: Type.String({
-    description:
-      'Target cell or range in A1 notation, e.g. "A1", "B2:D10", "Sheet2!A1". ' +
-      "Range supported for read; other actions require a single cell.",
-  }),
-  content: Type.Optional(
-    Type.String({
-      description: "Comment text. Required for add, update, and reply actions.",
-    }),
-  ),
-});
+const schema = EXCEL_COMMENTS_PARAMETERS;
 
 type Params = Static<typeof schema>;
 type CommentAction = Params["action"];
@@ -120,8 +104,12 @@ interface CommentsDispatchResult {
 
 interface CommentsToolDependencies {
   dispatchAction: (params: Params) => Promise<CommentsDispatchResult>;
-  appendAuditEntry: (entry: AppendWorkbookChangeAuditEntryArgs) => Promise<void>;
-  captureCommentThread: (address: string) => Promise<RecoveryCommentThreadState>;
+  appendAuditEntry: (
+    entry: AppendWorkbookChangeAuditEntryArgs,
+  ) => Promise<void>;
+  captureCommentThread: (
+    address: string,
+  ) => Promise<RecoveryCommentThreadState>;
   appendRecoverySnapshot: (
     args: AppendCommentThreadRecoverySnapshotArgs,
   ) => Promise<WorkbookRecoverySnapshot | null>;
@@ -133,7 +121,11 @@ function isMutatingCommentsAction(action: CommentAction): boolean {
 }
 
 function validateMutatingCommentsParams(params: Params): void {
-  if (params.action === "add" || params.action === "update" || params.action === "reply") {
+  if (
+    params.action === "add" ||
+    params.action === "update" ||
+    params.action === "reply"
+  ) {
     requireContent(params.content, params.action);
   }
 }
@@ -142,7 +134,8 @@ const defaultDependencies: CommentsToolDependencies = {
   dispatchAction,
   appendAuditEntry: (entry) => getWorkbookChangeAuditLog().append(entry),
   captureCommentThread: (address) => captureCommentThreadState(address),
-  appendRecoverySnapshot: (args) => getWorkbookRecoveryLog().appendCommentThread(args),
+  appendRecoverySnapshot: (args) =>
+    getWorkbookRecoveryLog().appendCommentThread(args),
   dispatchSnapshotCreated: (snapshot) => {
     dispatchWorkbookSnapshotCreated({
       snapshotId: snapshot.id,
@@ -159,11 +152,19 @@ export function createCommentsTool(
   dependencies: Partial<CommentsToolDependencies> = {},
 ): AgentTool<typeof schema, CommentsDetails> {
   const resolvedDependencies: CommentsToolDependencies = {
-    dispatchAction: dependencies.dispatchAction ?? defaultDependencies.dispatchAction,
-    appendAuditEntry: dependencies.appendAuditEntry ?? defaultDependencies.appendAuditEntry,
-    captureCommentThread: dependencies.captureCommentThread ?? defaultDependencies.captureCommentThread,
-    appendRecoverySnapshot: dependencies.appendRecoverySnapshot ?? defaultDependencies.appendRecoverySnapshot,
-    dispatchSnapshotCreated: dependencies.dispatchSnapshotCreated ?? defaultDependencies.dispatchSnapshotCreated,
+    dispatchAction:
+      dependencies.dispatchAction ?? defaultDependencies.dispatchAction,
+    appendAuditEntry:
+      dependencies.appendAuditEntry ?? defaultDependencies.appendAuditEntry,
+    captureCommentThread:
+      dependencies.captureCommentThread ??
+      defaultDependencies.captureCommentThread,
+    appendRecoverySnapshot:
+      dependencies.appendRecoverySnapshot ??
+      defaultDependencies.appendRecoverySnapshot,
+    dispatchSnapshotCreated:
+      dependencies.dispatchSnapshotCreated ??
+      defaultDependencies.dispatchSnapshotCreated,
   };
 
   return {
@@ -180,23 +181,28 @@ export function createCommentsTool(
     ): Promise<AgentToolResult<CommentsDetails>> => {
       const isMutation = isMutatingCommentsAction(params.action);
       const mutationFinalizeDependencies: MutationFinalizeDependencies = {
-        appendAuditEntry: (entry) => resolvedDependencies.appendAuditEntry(entry),
+        appendAuditEntry: (entry) =>
+          resolvedDependencies.appendAuditEntry(entry),
       };
 
       try {
         let beforeThreadState: RecoveryCommentThreadState | null = null;
         if (isMutation) {
           validateMutatingCommentsParams(params);
-          beforeThreadState = await resolvedDependencies.captureCommentThread(params.range);
+          beforeThreadState = await resolvedDependencies.captureCommentThread(
+            params.range,
+          );
         }
 
         const result = await resolvedDependencies.dispatchAction(params);
 
         const output: AgentToolResult<CommentsDetails> = {
-          content: [{
-            type: "text",
-            text: result.text,
-          }],
+          content: [
+            {
+              type: "text",
+              text: result.text,
+            },
+          ],
           details: {
             kind: "comments",
             action: params.action,
@@ -213,21 +219,24 @@ export function createCommentsTool(
 
         const recovery = beforeThreadState
           ? {
-            result: output,
-            appendRecoverySnapshot: () => resolvedDependencies.appendRecoverySnapshot({
-              toolName: "comments",
-              toolCallId,
-              address: outputAddress,
-              changedCount,
-              commentThreadState: beforeThreadState,
-            }),
-            appendResultNote: appendMutationResultNote,
-            unavailableReason: CHECKPOINT_SKIPPED_REASON,
-            unavailableNote: CHECKPOINT_SKIPPED_NOTE,
-            dispatchSnapshotCreated: (checkpoint: WorkbookRecoverySnapshot) => {
-              resolvedDependencies.dispatchSnapshotCreated(checkpoint);
-            },
-          }
+              result: output,
+              appendRecoverySnapshot: () =>
+                resolvedDependencies.appendRecoverySnapshot({
+                  toolName: "comments",
+                  toolCallId,
+                  address: outputAddress,
+                  changedCount,
+                  commentThreadState: beforeThreadState,
+                }),
+              appendResultNote: appendMutationResultNote,
+              unavailableReason: CHECKPOINT_SKIPPED_REASON,
+              unavailableNote: CHECKPOINT_SKIPPED_NOTE,
+              dispatchSnapshotCreated: (
+                checkpoint: WorkbookRecoverySnapshot,
+              ) => {
+                resolvedDependencies.dispatchSnapshotCreated(checkpoint);
+              },
+            }
           : undefined;
 
         await finalizeMutationOperation(mutationFinalizeDependencies, {
@@ -262,7 +271,12 @@ export function createCommentsTool(
         }
 
         return {
-          content: [{ type: "text", text: `Error (${params.action} on "${params.range}"): ${message}` }],
+          content: [
+            {
+              type: "text",
+              text: `Error (${params.action} on "${params.range}"): ${message}`,
+            },
+          ],
           details: {
             kind: "comments",
             action: params.action,
@@ -275,15 +289,25 @@ export function createCommentsTool(
 }
 
 async function dispatchAction(params: Params): Promise<CommentsDispatchResult> {
+  // Comments and threaded replies are ExcelApi 1.10.
+  const gap = requireCapability("excel.comments");
+  if (gap !== null) throw new Error(gap);
+
   switch (params.action) {
     case "read":
       return executeRead(params.range);
     case "add":
       return executeAdd(params.range, requireContent(params.content, "add"));
     case "update":
-      return executeUpdate(params.range, requireContent(params.content, "update"));
+      return executeUpdate(
+        params.range,
+        requireContent(params.content, "update"),
+      );
     case "reply":
-      return executeReply(params.range, requireContent(params.content, "reply"));
+      return executeReply(
+        params.range,
+        requireContent(params.content, "reply"),
+      );
     case "delete":
       return executeDelete(params.range);
     case "resolve":
@@ -389,7 +413,10 @@ async function executeRead(ref: string): Promise<CommentsDispatchResult> {
   };
 }
 
-async function executeAdd(ref: string, content: string): Promise<CommentsDispatchResult> {
+async function executeAdd(
+  ref: string,
+  content: string,
+): Promise<CommentsDispatchResult> {
   const result = await excelRun(async (context) => {
     const { sheet, range } = getRange(context, ref);
     sheet.load("name");
@@ -407,7 +434,10 @@ async function executeAdd(ref: string, content: string): Promise<CommentsDispatc
   };
 }
 
-async function executeUpdate(ref: string, content: string): Promise<CommentsDispatchResult> {
+async function executeUpdate(
+  ref: string,
+  content: string,
+): Promise<CommentsDispatchResult> {
   const result = await excelRun(async (context) => {
     const { sheet, range } = getRange(context, ref);
     sheet.load("name");
@@ -426,7 +456,10 @@ async function executeUpdate(ref: string, content: string): Promise<CommentsDisp
   };
 }
 
-async function executeReply(ref: string, content: string): Promise<CommentsDispatchResult> {
+async function executeReply(
+  ref: string,
+  content: string,
+): Promise<CommentsDispatchResult> {
   const result = await excelRun(async (context) => {
     const { sheet, range } = getRange(context, ref);
     sheet.load("name");
@@ -459,7 +492,10 @@ async function executeDelete(ref: string): Promise<CommentsDispatchResult> {
     return { sheetName: sheet.name, address: range.address, replies };
   });
   const fullAddr = qualifiedAddress(result.sheetName, result.address);
-  const replySuffix = result.replies > 0 ? ` (and ${result.replies} ${result.replies === 1 ? "reply" : "replies"})` : "";
+  const replySuffix =
+    result.replies > 0
+      ? ` (and ${result.replies} ${result.replies === 1 ? "reply" : "replies"})`
+      : "";
   return {
     text: `Deleted comment from **${fullAddr}**${replySuffix}.`,
     outputAddress: fullAddr,
@@ -468,7 +504,10 @@ async function executeDelete(ref: string): Promise<CommentsDispatchResult> {
   };
 }
 
-async function executeSetResolved(ref: string, resolved: boolean): Promise<CommentsDispatchResult> {
+async function executeSetResolved(
+  ref: string,
+  resolved: boolean,
+): Promise<CommentsDispatchResult> {
   const result = await excelRun(async (context) => {
     const { sheet, range } = getRange(context, ref);
     sheet.load("name");
@@ -487,4 +526,3 @@ async function executeSetResolved(ref: string, resolved: boolean): Promise<Comme
     summary: `${verb.toLowerCase()} comment thread at ${fullAddr}`,
   };
 }
-

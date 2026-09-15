@@ -10,6 +10,8 @@ export interface FakeParagraph {
   style?: string;
   alignment?: string;
   font: Record<string, DynamicValue>;
+  /** Paragraph background fill (WordApiDesktop-only `shading`). */
+  shading: { backgroundPatternColor?: string };
   spaceBefore?: number;
   spaceAfter?: number;
   lineSpacing?: number;
@@ -23,7 +25,13 @@ export interface FakeParagraph {
 export interface FakeRange {
   text: string;
   font: Record<string, DynamicValue>;
-  paragraphs: { getFirst(): FakeParagraph };
+  /** Range background fill (WordApiDesktop-only `shading`). */
+  shading: { backgroundPatternColor?: string };
+  paragraphs: {
+    items: FakeParagraph[];
+    getFirst(): FakeParagraph;
+    load(_props?: string): void;
+  };
   hyperlinks: { add(range: FakeRange, opts?: Record<string, string>): void };
   calls: string[];
   insertText(text: string, loc: string): FakeRange;
@@ -49,15 +57,22 @@ function makeFont(): Record<string, DynamicValue> {
   return target;
 }
 
-export function makeRange(text = ""): FakeRange {
+export function makeRange(text = "", sharedCalls?: string[]): FakeRange {
   const font = makeFont();
-  const calls: string[] = [];
+  const calls: string[] = sharedCalls ?? [];
   const paragraph = createParagraph(text, calls);
   const range: FakeRange = {
     text,
     font,
+    shading: {},
     calls,
-    paragraphs: { getFirst: () => paragraph },
+    paragraphs: {
+      items: [paragraph],
+      getFirst: () => paragraph,
+      load() {
+        // no-op: fake proxies are plain data.
+      },
+    },
     hyperlinks: {
       add: (_r, opts) => {
         calls.push(`hyperlinks.add(${JSON.stringify(opts ?? {})})`);
@@ -87,10 +102,12 @@ function createParagraph(text: string, sharedCalls: string[]): FakeParagraph {
     style: undefined,
     alignment: undefined,
     font: makeFont(),
+    shading: {},
     calls: sharedCalls,
     getRange() {
       sharedCalls.push("paragraph.getRange()");
-      return makeRange(text);
+      // Share the log so run-level `insertText` calls are observable.
+      return makeRange(text, sharedCalls);
     },
     load() {
       sharedCalls.push("paragraph.load()");
@@ -123,6 +140,13 @@ export interface FakeBody {
   text: string;
   paragraphs: FakeCollection<FakeParagraph>;
   tables: FakeCollection<FakeTable>;
+  /** Ranges returned by `search()` — seed these to exercise match paths. */
+  searchResults: FakeRange[];
+  /** Paragraphs created by `insertParagraph()`, in insertion order. */
+  createdParagraphs: FakeParagraph[];
+  /** Last OOXML string passed to `insertOoxml()`, for assertions. */
+  lastOoxml: string | null;
+  insertOoxml(ooxml: string, loc: string): FakeRange;
   load(_props?: string): void;
   search(find: string, _opts?: Record<string, DynamicValue>): FakeSearchResults;
   insertParagraph(text: string, loc: string): FakeParagraph;
@@ -146,25 +170,39 @@ export interface FakeBody {
 
 export function makeBody(sharedCalls?: string[]): FakeBody {
   const calls: string[] = sharedCalls ?? [];
+  const searchResults: FakeRange[] = [];
+  const createdParagraphs: FakeParagraph[] = [];
   const body: FakeBody = {
     calls,
     text: "",
     paragraphs: makeCollection([]),
     tables: makeCollection([]),
+    searchResults,
+    createdParagraphs,
+    lastOoxml: null,
     load() {
       calls.push("body.load()");
     },
     search(find) {
       calls.push(`search(${JSON.stringify(find)})`);
-      return { items: [], load() {} };
+      return { items: searchResults, load() {} };
     },
     insertParagraph(text, loc) {
       calls.push(`insertParagraph(${JSON.stringify(text)}, ${String(loc)})`);
-      return createParagraph(text, calls);
+      const paragraph = createParagraph(text, calls);
+      createdParagraphs.push(paragraph);
+      return paragraph;
     },
     insertText(text, loc) {
       calls.push(`insertText(${JSON.stringify(text)}, ${String(loc)})`);
-      return makeRange(text);
+      // Share the body's call log so range-level calls (e.g. hyperlinks.add)
+      // are observable from the test.
+      return makeRange(text, calls);
+    },
+    insertOoxml(ooxml, loc) {
+      body.lastOoxml = ooxml;
+      calls.push(`insertOoxml(${ooxml.length} chars, ${String(loc)})`);
+      return makeRange("");
     },
     insertTable(rows, cols, loc, values) {
       calls.push(

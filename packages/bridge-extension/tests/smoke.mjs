@@ -1,5 +1,8 @@
 /** Smoke test: real WebSocket round-trip against the compiled bridge server. */
 import { OfficeBridgeServer } from "../dist/bridge-server.js";
+// Assert against the exported constant rather than a literal, so bumping
+// CATALOG_VERSION cannot silently break this suite (it did: 1→3).
+import { CATALOG_VERSION } from "@dieulc/pi-office-protocol/office-catalog";
 import WebSocket from "ws";
 import { request as httpRequest } from "node:http";
 
@@ -292,8 +295,10 @@ async function main() {
     throw new Error("health pane should default to visible");
   if (healthWithPane.panes[0].windows !== 1)
     throw new Error("health pane windows should be 1");
-  if (healthWithPane.catalogVersion !== 1)
-    throw new Error("health should advertise server catalogVersion=1");
+  if (healthWithPane.catalogVersion !== CATALOG_VERSION)
+    throw new Error(
+      `health should advertise server catalogVersion=${CATALOG_VERSION}, got ${healthWithPane.catalogVersion}`,
+    );
   console.log("[ok] /health lists attached excel pane w/ model+provider");
 
   // --- pane_state can clear focus (visibility reporting path) ---

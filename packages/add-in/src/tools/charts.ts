@@ -2,7 +2,8 @@
  * charts — list, create, update, delete, and capture Excel charts.
  */
 
-import { Type, type Static } from "@sinclair/typebox";
+import { EXCEL_CHARTS_PARAMETERS } from "@dieulc/pi-office-protocol/office-catalog";
+import type { Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { excelRun, parseRangeRef, qualifiedAddress } from "../excel/helpers.js";
 import {
@@ -23,19 +24,16 @@ import {
 } from "../workbook/recovery-states.js";
 import { formatRecoveryChartAddress } from "../workbook/recovery/chart-state.js";
 import { getErrorMessage } from "../utils/errors.js";
+import { requireCapability } from "../office/capabilities.js";
 import type { ChartListItemDetails, ChartsDetails } from "./tool-details.js";
 import { recoveryCheckpointUnavailable } from "./recovery-metadata.js";
 import { finalizeMutationOperation } from "./mutation/finalize.js";
 import { appendMutationResultNote } from "./mutation/result-note.js";
-import type { MutationFinalizeDependencies, MutationRecoveryStep } from "./mutation/types.js";
+import type {
+  MutationFinalizeDependencies,
+  MutationRecoveryStep,
+} from "./mutation/types.js";
 
-function StringEnum<T extends string[]>(values: [...T], opts?: { description?: string }) {
-  return Type.Union(
-    values.map((value) => Type.Literal(value)),
-    opts,
-  );
-}
-const CHART_ACTIONS = ["list", "create", "update", "delete", "get_image"] as const;
 const FRIENDLY_CHART_TYPES = [
   "column",
   "column_stacked",
@@ -54,12 +52,10 @@ const FRIENDLY_CHART_TYPES = [
   "scatter_smooth",
   "radar",
 ] as const;
-const SERIES_BY_VALUES = ["auto", "columns", "rows"] as const;
-const LEGEND_POSITION_VALUES = ["none", "right", "left", "top", "bottom"] as const;
 
 type FriendlyChartType = (typeof FRIENDLY_CHART_TYPES)[number];
-type SeriesByParam = (typeof SERIES_BY_VALUES)[number];
-type LegendPositionParam = (typeof LEGEND_POSITION_VALUES)[number];
+type SeriesByParam = "auto" | "columns" | "rows";
+type LegendPositionParam = "none" | "right" | "left" | "top" | "bottom";
 
 type SupportedExcelChartType =
   | "ColumnClustered"
@@ -107,7 +103,10 @@ const SERIES_BY_MAP: Record<SeriesByParam, SupportedExcelSeriesBy> = {
   rows: "Rows",
 };
 
-const LEGEND_POSITION_MAP: Record<Exclude<LegendPositionParam, "none">, SupportedExcelLegendPosition> = {
+const LEGEND_POSITION_MAP: Record<
+  Exclude<LegendPositionParam, "none">,
+  SupportedExcelLegendPosition
+> = {
   right: "Right",
   left: "Left",
   top: "Top",
@@ -125,56 +124,7 @@ const CHART_DELETE_NO_BACKUP_NOTE =
 const CHART_SOURCE_RANGE_RESTORE_NOTE =
   "ℹ️ Chart property backup only. Excel does not expose the previous source range, so `workbook_history` cannot revert this update's data-source change.";
 
-const schema = Type.Object({
-  action: StringEnum([...CHART_ACTIONS], {
-    description: "Chart operation: list, create, update, delete, or get_image.",
-  }),
-  sheet: Type.Optional(
-    Type.String({
-      description:
-        "Worksheet name. For list, limits output to one sheet. For create/update, defaults to the active sheet or the source range sheet.",
-    }),
-  ),
-  name: Type.Optional(
-    Type.String({
-      description: "Chart name. Required for update, delete, and get_image. Optional assigned name for create.",
-    }),
-  ),
-  new_name: Type.Optional(
-    Type.String({ description: "New chart name for update." }),
-  ),
-  source_range: Type.Optional(
-    Type.String({
-      description:
-        "Source data range for create/update, e.g. `Sheet1!A1:B12` or `A1:B12` relative to sheet.",
-    }),
-  ),
-  chart_type: Type.Optional(
-    StringEnum([...FRIENDLY_CHART_TYPES], {
-      description:
-        "Chart type: column, column_stacked, column_stacked_100, bar, bar_stacked, bar_stacked_100, line, line_markers, area, area_stacked, pie, doughnut, scatter, scatter_lines, scatter_smooth, or radar.",
-    }),
-  ),
-  series_by: Type.Optional(
-    StringEnum([...SERIES_BY_VALUES], {
-      description: "How source rows/columns become series: auto, columns, or rows.",
-    }),
-  ),
-  title: Type.Optional(Type.String({ description: "Chart title. Empty string hides the title." })),
-  legend_position: Type.Optional(
-    StringEnum([...LEGEND_POSITION_VALUES], {
-      description: "Legend position, or none to hide the legend.",
-    }),
-  ),
-  x_axis_title: Type.Optional(Type.String({ description: "Category/X axis title. Empty string hides it." })),
-  y_axis_title: Type.Optional(Type.String({ description: "Value/Y axis title. Empty string hides it." })),
-  position: Type.Optional(
-    Type.String({ description: "Anchor range for chart placement, e.g. `D2:J18`." }),
-  ),
-  width: Type.Optional(
-    Type.Number({ description: "Image width in pixels for get_image. Defaults to 600; capped at 1200." }),
-  ),
-});
+const schema = EXCEL_CHARTS_PARAMETERS;
 
 type Params = Static<typeof schema>;
 type ChartAction = Params["action"];
@@ -205,9 +155,16 @@ interface ChartsExecutionResult {
 
 interface ChartsToolDependencies {
   executeAction: (params: Params) => Promise<ChartsExecutionResult>;
-  captureChartPresent: (name: string, sheetName?: string) => Promise<RecoveryChartPresentState>;
-  appendRecoverySnapshot: (args: AppendChartRecoverySnapshotArgs) => Promise<WorkbookRecoverySnapshot | null>;
-  appendAuditEntry: (entry: AppendWorkbookChangeAuditEntryArgs) => Promise<void>;
+  captureChartPresent: (
+    name: string,
+    sheetName?: string,
+  ) => Promise<RecoveryChartPresentState>;
+  appendRecoverySnapshot: (
+    args: AppendChartRecoverySnapshotArgs,
+  ) => Promise<WorkbookRecoverySnapshot | null>;
+  appendAuditEntry: (
+    entry: AppendWorkbookChangeAuditEntryArgs,
+  ) => Promise<void>;
   dispatchSnapshotCreated: (snapshot: WorkbookRecoverySnapshot) => void;
 }
 
@@ -216,25 +173,34 @@ export function toExcelChartType(chartType: string): SupportedExcelChartType {
     return CHART_TYPE_MAP[chartType];
   }
 
-  throw new Error(`Invalid chart_type "${chartType}". Use one of: ${FRIENDLY_CHART_TYPES.join(", ")}.`);
+  throw new Error(
+    `Invalid chart_type "${chartType}". Use one of: ${FRIENDLY_CHART_TYPES.join(", ")}.`,
+  );
 }
 
 function isFriendlyChartType(value: string): value is FriendlyChartType {
   return FRIENDLY_CHART_TYPES.some((candidate) => candidate === value);
 }
 
-function toExcelSeriesBy(seriesBy: SeriesByParam | undefined): SupportedExcelSeriesBy | undefined {
+function toExcelSeriesBy(
+  seriesBy: SeriesByParam | undefined,
+): SupportedExcelSeriesBy | undefined {
   return seriesBy ? SERIES_BY_MAP[seriesBy] : undefined;
 }
 
 function normalizeImageWidth(width: number | undefined): number {
-  if (typeof width !== "number" || !Number.isFinite(width)) return DEFAULT_IMAGE_WIDTH;
+  if (typeof width !== "number" || !Number.isFinite(width))
+    return DEFAULT_IMAGE_WIDTH;
   const rounded = Math.round(width);
   if (rounded <= 0) return DEFAULT_IMAGE_WIDTH;
   return Math.min(rounded, MAX_IMAGE_WIDTH);
 }
 
-function normalizeImageHeight(width: number, chartWidth: number, chartHeight: number): number {
+function normalizeImageHeight(
+  width: number,
+  chartWidth: number,
+  chartHeight: number,
+): number {
   if (chartWidth > 0 && chartHeight > 0) {
     return Math.max(1, Math.round(width * (chartHeight / chartWidth)));
   }
@@ -285,7 +251,11 @@ function validateParams(params: Params): void {
     requireChartType(params);
   }
 
-  if (params.action === "update" || params.action === "delete" || params.action === "get_image") {
+  if (
+    params.action === "update" ||
+    params.action === "delete" ||
+    params.action === "get_image"
+  ) {
     requireName(params);
   }
 
@@ -302,7 +272,7 @@ function resolveRange(
   const parsed = parseRangeRef(ref);
   const sheet = parsed.sheet
     ? context.workbook.worksheets.getItem(parsed.sheet)
-    : defaultSheet ?? context.workbook.worksheets.getActiveWorksheet();
+    : (defaultSheet ?? context.workbook.worksheets.getActiveWorksheet());
 
   return {
     sheet,
@@ -310,7 +280,10 @@ function resolveRange(
   };
 }
 
-function resolveCreateChartSheet(context: Excel.RequestContext, params: Params): Excel.Worksheet {
+function resolveCreateChartSheet(
+  context: Excel.RequestContext,
+  params: Params,
+): Excel.Worksheet {
   if (params.sheet) {
     return context.workbook.worksheets.getItem(params.sheet);
   }
@@ -326,13 +299,19 @@ function resolveCreateChartSheet(context: Excel.RequestContext, params: Params):
 
 function parsePositionAnchors(position: string): PositionAnchors {
   const parsed = parseRangeRef(position);
-  const parts = parsed.address.split(":").map((part) => part.trim()).filter((part) => part.length > 0);
+  const parts = parsed.address
+    .split(":")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
 
   if (parts.length === 0 || parts.length > 2) {
-    throw new Error(`Invalid chart position "${position}". Use a cell or two-cell range like D2:J18.`);
+    throw new Error(
+      `Invalid chart position "${position}". Use a cell or two-cell range like D2:J18.`,
+    );
   }
 
-  const qualify = (address: string): string => parsed.sheet ? qualifiedAddress(parsed.sheet, address) : address;
+  const qualify = (address: string): string =>
+    parsed.sheet ? qualifiedAddress(parsed.sheet, address) : address;
   const start = parts[0];
   if (!start) {
     throw new Error(`Invalid chart position "${position}".`);
@@ -345,7 +324,10 @@ function parsePositionAnchors(position: string): PositionAnchors {
   };
 }
 
-function setTitle(title: Excel.ChartTitle | Excel.ChartAxisTitle, text: string): void {
+function setTitle(
+  title: Excel.ChartTitle | Excel.ChartAxisTitle,
+  text: string,
+): void {
   title.text = text;
   title.visible = text.trim().length > 0;
 }
@@ -431,7 +413,9 @@ async function findChartByName(
   }
 
   if (matches.length > 1) {
-    throw new Error(`Multiple charts named "${name}" were found. Provide sheet to disambiguate.`);
+    throw new Error(
+      `Multiple charts named "${name}" were found. Provide sheet to disambiguate.`,
+    );
   }
 
   const match = matches[0];
@@ -442,7 +426,9 @@ async function findChartByName(
   return match;
 }
 
-function chartPositionDetails(chart: Excel.Chart): ChartListItemDetails["position"] {
+function chartPositionDetails(
+  chart: Excel.Chart,
+): ChartListItemDetails["position"] {
   return {
     top: typeof chart.top === "number" ? chart.top : 0,
     left: typeof chart.left === "number" ? chart.left : 0,
@@ -451,7 +437,10 @@ function chartPositionDetails(chart: Excel.Chart): ChartListItemDetails["positio
   };
 }
 
-function chartListItem(sheet: Excel.Worksheet, chart: Excel.Chart): ChartListItemDetails {
+function chartListItem(
+  sheet: Excel.Worksheet,
+  chart: Excel.Chart,
+): ChartListItemDetails {
   return {
     name: chart.name,
     chartType: String(chart.chartType),
@@ -465,9 +454,14 @@ function formatRect(position: ChartListItemDetails["position"]): string {
   return `top ${position.top}, left ${position.left}, width ${position.width}, height ${position.height}`;
 }
 
-function formatChartList(items: ChartListItemDetails[], sheetName: string | undefined): string {
+function formatChartList(
+  items: ChartListItemDetails[],
+  sheetName: string | undefined,
+): string {
   if (items.length === 0) {
-    return sheetName ? `No charts found on "${sheetName}".` : "No charts found in this workbook.";
+    return sheetName
+      ? `No charts found on "${sheetName}".`
+      : "No charts found in this workbook.";
   }
 
   const lines: string[] = [
@@ -479,7 +473,9 @@ function formatChartList(items: ChartListItemDetails[], sheetName: string | unde
 
   for (const item of items) {
     const title = item.title || "(none)";
-    lines.push(`| ${item.worksheet} | ${item.name} | ${item.chartType} | ${title} | ${formatRect(item.position)} |`);
+    lines.push(
+      `| ${item.worksheet} | ${item.name} | ${item.chartType} | ${title} | ${formatRect(item.position)} |`,
+    );
   }
 
   return lines.join("\n");
@@ -502,7 +498,9 @@ async function executeList(params: Params): Promise<ChartsExecutionResult> {
     }
 
     for (const sheet of sheets) {
-      sheet.charts.load("items/name,items/chartType,items/top,items/left,items/width,items/height");
+      sheet.charts.load(
+        "items/name,items/chartType,items/top,items/left,items/width,items/height",
+      );
     }
     await context.sync();
 
@@ -513,11 +511,15 @@ async function executeList(params: Params): Promise<ChartsExecutionResult> {
     }
     await context.sync();
 
-    const charts = sheets.flatMap((sheet) => sheet.charts.items.map((chart) => chartListItem(sheet, chart)));
+    const charts = sheets.flatMap((sheet) =>
+      sheet.charts.items.map((chart) => chartListItem(sheet, chart)),
+    );
 
     return {
       result: {
-        content: [{ type: "text", text: formatChartList(charts, params.sheet) }],
+        content: [
+          { type: "text", text: formatChartList(charts, params.sheet) },
+        ],
         details: {
           kind: "charts",
           action: "list",
@@ -532,7 +534,11 @@ async function executeList(params: Params): Promise<ChartsExecutionResult> {
 async function executeCreate(params: Params): Promise<ChartsExecutionResult> {
   return excelRun(async (context) => {
     const chartSheet = resolveCreateChartSheet(context, params);
-    const source = resolveRange(context, requireSourceRange(params), chartSheet);
+    const source = resolveRange(
+      context,
+      requireSourceRange(params),
+      chartSheet,
+    );
     const chartType = toExcelChartType(requireChartType(params));
     const seriesBy = toExcelSeriesBy(params.series_by);
 
@@ -556,12 +562,18 @@ async function executeCreate(params: Params): Promise<ChartsExecutionResult> {
     try {
       chart.load("id");
       await context.sync();
-      chartId = typeof chart.id === "string" && chart.id.length > 0 ? chart.id : undefined;
+      chartId =
+        typeof chart.id === "string" && chart.id.length > 0
+          ? chart.id
+          : undefined;
     } catch {
       chartId = undefined;
     }
 
-    const sourceAddress = qualifiedAddress(source.sheet.name, source.range.address);
+    const sourceAddress = qualifiedAddress(
+      source.sheet.name,
+      source.range.address,
+    );
     const address = chartDetailsAddress(chartSheet.name, chart.name);
     const recoveryState: RecoveryChartAbsentState = {
       kind: "chart_absent",
@@ -572,7 +584,12 @@ async function executeCreate(params: Params): Promise<ChartsExecutionResult> {
 
     return {
       result: {
-        content: [{ type: "text", text: `Chart '${chart.name}' created — ${sourceAddress}` }],
+        content: [
+          {
+            type: "text",
+            text: `Chart '${chart.name}' created — ${sourceAddress}`,
+          },
+        ],
         details: {
           kind: "charts",
           action: "create",
@@ -591,7 +608,11 @@ async function executeCreate(params: Params): Promise<ChartsExecutionResult> {
 
 async function executeUpdate(params: Params): Promise<ChartsExecutionResult> {
   return excelRun(async (context) => {
-    const target = await findChartByName(context, requireName(params), params.sheet);
+    const target = await findChartByName(
+      context,
+      requireName(params),
+      params.sheet,
+    );
     const chart = target.chart;
     let sourceForAddress: ResolvedRange | null = null;
 
@@ -615,19 +636,29 @@ async function executeUpdate(params: Params): Promise<ChartsExecutionResult> {
 
     const address = chartDetailsAddress(target.sheet.name, chart.name);
     const sourceAddress = sourceForAddress
-      ? qualifiedAddress(sourceForAddress.sheet.name, sourceForAddress.range.address)
+      ? qualifiedAddress(
+          sourceForAddress.sheet.name,
+          sourceForAddress.range.address,
+        )
       : undefined;
     const sourceSuffix = sourceAddress ? ` — source ${sourceAddress}` : "";
 
     return {
       result: {
-        content: [{ type: "text", text: `Chart '${chart.name}' updated${sourceSuffix}.` }],
+        content: [
+          {
+            type: "text",
+            text: `Chart '${chart.name}' updated${sourceSuffix}.`,
+          },
+        ],
         details: {
           kind: "charts",
           action: "update",
           name: chart.name,
           address,
-          ...(sourceAddress !== undefined ? { sourceRange: sourceAddress } : {}),
+          ...(sourceAddress !== undefined
+            ? { sourceRange: sourceAddress }
+            : {}),
         },
       },
       outputAddress: address,
@@ -640,7 +671,11 @@ async function executeUpdate(params: Params): Promise<ChartsExecutionResult> {
 
 async function executeDelete(params: Params): Promise<ChartsExecutionResult> {
   return excelRun(async (context) => {
-    const target = await findChartByName(context, requireName(params), params.sheet);
+    const target = await findChartByName(
+      context,
+      requireName(params),
+      params.sheet,
+    );
     target.sheet.load("name");
     target.chart.load("name");
     await context.sync();
@@ -658,7 +693,9 @@ async function executeDelete(params: Params): Promise<ChartsExecutionResult> {
           action: "delete",
           name: chartName,
           address,
-          recovery: recoveryCheckpointUnavailable(CHART_DELETE_NO_BACKUP_REASON),
+          recovery: recoveryCheckpointUnavailable(
+            CHART_DELETE_NO_BACKUP_REASON,
+          ),
         },
       },
       outputAddress: address,
@@ -669,15 +706,25 @@ async function executeDelete(params: Params): Promise<ChartsExecutionResult> {
 }
 
 async function executeGetImage(params: Params): Promise<ChartsExecutionResult> {
+  // `Chart.getImage` is ExcelApi 1.7 — fail loud on an older host.
+  const gap = requireCapability("excel.range.image");
+  if (gap !== null) throw new Error(gap);
+
   return excelRun(async (context) => {
-    const target = await findChartByName(context, requireName(params), params.sheet);
+    const target = await findChartByName(
+      context,
+      requireName(params),
+      params.sheet,
+    );
     target.sheet.load("name");
     target.chart.load("name,width,height");
     await context.sync();
 
     const width = normalizeImageWidth(params.width);
-    const chartWidth = typeof target.chart.width === "number" ? target.chart.width : 0;
-    const chartHeight = typeof target.chart.height === "number" ? target.chart.height : 0;
+    const chartWidth =
+      typeof target.chart.width === "number" ? target.chart.width : 0;
+    const chartHeight =
+      typeof target.chart.height === "number" ? target.chart.height : 0;
     const height = normalizeImageHeight(width, chartWidth, chartHeight);
     const image = target.chart.getImage(width, height, "Fit");
     await context.sync();
@@ -687,7 +734,10 @@ async function executeGetImage(params: Params): Promise<ChartsExecutionResult> {
     return {
       result: {
         content: [
-          { type: "text", text: `Captured chart '${target.chart.name}' (${width}×${height} px).` },
+          {
+            type: "text",
+            text: `Captured chart '${target.chart.name}' (${width}×${height} px).`,
+          },
           { type: "image", data: image.value, mimeType: "image/png" },
         ],
         details: {
@@ -707,7 +757,9 @@ async function executeGetImage(params: Params): Promise<ChartsExecutionResult> {
   });
 }
 
-export async function executeChartsAction(params: Params): Promise<ChartsExecutionResult> {
+export async function executeChartsAction(
+  params: Params,
+): Promise<ChartsExecutionResult> {
   switch (params.action) {
     case "list":
       return executeList(params);
@@ -724,7 +776,8 @@ export async function executeChartsAction(params: Params): Promise<ChartsExecuti
 
 const defaultDependencies: ChartsToolDependencies = {
   executeAction: executeChartsAction,
-  captureChartPresent: (name, sheetName) => captureChartPresentState(name, sheetName),
+  captureChartPresent: (name, sheetName) =>
+    captureChartPresentState(name, sheetName),
   appendRecoverySnapshot: (args) => getWorkbookRecoveryLog().appendChart(args),
   appendAuditEntry: (entry) => getWorkbookChangeAuditLog().append(entry),
   dispatchSnapshotCreated: (snapshot) => {
@@ -762,7 +815,7 @@ function buildRecoveryStep(
         appendRecoverySnapshot: () => Promise.resolve(null),
         appendResultNote: appendMutationResultNote,
         unavailableReason: captureError ?? "Chart backup capture was skipped.",
-        unavailableNote: "ℹ️ Backup not created for this chart update.",
+        unavailableNote: backupUnavailableNote(captureError),
       };
     }
 
@@ -773,29 +826,52 @@ function buildRecoveryStep(
 
   return {
     result: output,
-    appendRecoverySnapshot: () => dependencies.appendRecoverySnapshot({
-      toolName: "charts",
-      toolCallId,
-      address: result.outputAddress ?? output.details.address ?? "chart",
-      changedCount: result.changedCount ?? 1,
-      chartState,
-    }),
+    appendRecoverySnapshot: () =>
+      dependencies.appendRecoverySnapshot({
+        toolName: "charts",
+        toolCallId,
+        address: result.outputAddress ?? output.details.address ?? "chart",
+        changedCount: result.changedCount ?? 1,
+        chartState,
+      }),
     appendResultNote: appendMutationResultNote,
     unavailableReason: captureError ?? "Chart backup capture was skipped.",
-    unavailableNote: "ℹ️ Backup not created for this chart mutation.",
-    dispatchSnapshotCreated: (snapshot) => dependencies.dispatchSnapshotCreated(snapshot),
+    unavailableNote: backupUnavailableNote(captureError),
+    dispatchSnapshotCreated: (snapshot) =>
+      dependencies.dispatchSnapshotCreated(snapshot),
   };
+}
+
+/**
+ * User-visible note for a missing chart backup.
+ *
+ * A capture *failure* must name itself in the result text — the structured
+ * `details.recovery.reason` is not enough for the model to act on, and a
+ * generic "backup not created" note hides a real error.
+ */
+function backupUnavailableNote(captureError: string | null): string {
+  return captureError === null
+    ? "ℹ️ Backup not created for this chart mutation."
+    : `⚠️ ${captureError}. The chart change was applied without a restore point.`;
 }
 
 export function createChartsTool(
   dependencies: Partial<ChartsToolDependencies> = {},
 ): AgentTool<typeof schema, ChartsDetails> {
   const resolvedDependencies: ChartsToolDependencies = {
-    executeAction: dependencies.executeAction ?? defaultDependencies.executeAction,
-    captureChartPresent: dependencies.captureChartPresent ?? defaultDependencies.captureChartPresent,
-    appendRecoverySnapshot: dependencies.appendRecoverySnapshot ?? defaultDependencies.appendRecoverySnapshot,
-    appendAuditEntry: dependencies.appendAuditEntry ?? defaultDependencies.appendAuditEntry,
-    dispatchSnapshotCreated: dependencies.dispatchSnapshotCreated ?? defaultDependencies.dispatchSnapshotCreated,
+    executeAction:
+      dependencies.executeAction ?? defaultDependencies.executeAction,
+    captureChartPresent:
+      dependencies.captureChartPresent ??
+      defaultDependencies.captureChartPresent,
+    appendRecoverySnapshot:
+      dependencies.appendRecoverySnapshot ??
+      defaultDependencies.appendRecoverySnapshot,
+    appendAuditEntry:
+      dependencies.appendAuditEntry ?? defaultDependencies.appendAuditEntry,
+    dispatchSnapshotCreated:
+      dependencies.dispatchSnapshotCreated ??
+      defaultDependencies.dispatchSnapshotCreated,
   };
 
   return {
@@ -805,10 +881,14 @@ export function createChartsTool(
       "Manage workbook charts: list charts, create charts from ranges, update chart properties/source data, " +
       "delete charts, and capture chart images for visual verification.",
     parameters: schema,
-    execute: async (toolCallId: string, params: Params): Promise<AgentToolResult<ChartsDetails>> => {
+    execute: async (
+      toolCallId: string,
+      params: Params,
+    ): Promise<AgentToolResult<ChartsDetails>> => {
       const isMutation = isMutatingChartsAction(params.action);
       const mutationFinalizeDependencies: MutationFinalizeDependencies = {
-        appendAuditEntry: (entry) => resolvedDependencies.appendAuditEntry(entry),
+        appendAuditEntry: (entry) =>
+          resolvedDependencies.appendAuditEntry(entry),
       };
 
       try {
@@ -818,7 +898,10 @@ export function createChartsTool(
         let captureError: string | null = null;
         if (params.action === "update") {
           try {
-            beforeChartState = await resolvedDependencies.captureChartPresent(requireName(params), params.sheet);
+            beforeChartState = await resolvedDependencies.captureChartPresent(
+              requireName(params),
+              params.sheet,
+            );
           } catch (error) {
             captureError = `Chart backup capture failed: ${getErrorMessage(error)}`;
           }
@@ -833,7 +916,8 @@ export function createChartsTool(
           return result.result;
         }
 
-        const outputAddress = result.outputAddress ?? result.result.details.address;
+        const outputAddress =
+          result.outputAddress ?? result.result.details.address;
         const recovery = buildRecoveryStep(
           resolvedDependencies,
           toolCallId,
@@ -855,7 +939,10 @@ export function createChartsTool(
         });
 
         if (result.sourceRangeChanged) {
-          appendMutationResultNote(result.result, CHART_SOURCE_RANGE_RESTORE_NOTE);
+          appendMutationResultNote(
+            result.result,
+            CHART_SOURCE_RANGE_RESTORE_NOTE,
+          );
         }
 
         return result.result;
@@ -863,7 +950,8 @@ export function createChartsTool(
         const message = getErrorMessage(error);
 
         if (isMutation) {
-          const outputAddress = params.name ?? params.source_range ?? params.sheet;
+          const outputAddress =
+            params.name ?? params.source_range ?? params.sheet;
           await finalizeMutationOperation(mutationFinalizeDependencies, {
             auditEntry: {
               toolName: "charts",
@@ -878,12 +966,16 @@ export function createChartsTool(
         }
 
         return {
-          content: [{ type: "text", text: `Error (${params.action}): ${message}` }],
+          content: [
+            { type: "text", text: `Error (${params.action}): ${message}` },
+          ],
           details: {
             kind: "charts",
             action: params.action,
             ...(params.name !== undefined ? { name: params.name } : {}),
-            ...(params.source_range !== undefined ? { sourceRange: params.source_range } : {}),
+            ...(params.source_range !== undefined
+              ? { sourceRange: params.source_range }
+              : {}),
           },
         };
       }

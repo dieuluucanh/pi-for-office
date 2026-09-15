@@ -6,10 +6,35 @@
  * ".js" specifiers as ".ts" so node --test can resolve source modules.
  *
  * It also supports Vite-style `?raw` text imports for local markdown files used
- * by bundled docs/skills catalogs.
+ * by bundled docs/skills catalogs, and stubs Vite asset imports (images) that
+ * the bundler would otherwise turn into hashed URLs — Node has no loader for a
+ * `.png` and would abort the whole test file with ERR_UNKNOWN_FILE_EXTENSION.
  */
 
 import { readFile } from "node:fs/promises";
+
+/** Extensions Vite resolves to an asset URL instead of executing. */
+const ASSET_EXTENSIONS = [
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".svg",
+  ".webp",
+  ".bmp",
+  ".ico",
+  ".avif",
+];
+
+function assetStub(url) {
+  const withoutQuery = url.split("?")[0].split("#")[0];
+  const extension = ASSET_EXTENSIONS.find((candidate) =>
+    withoutQuery.toLowerCase().endsWith(candidate),
+  );
+  if (extension === undefined) return null;
+  // Mirrors what the bundler hands the module graph: a URL string.
+  return `export default ${JSON.stringify(withoutQuery)};\n`;
+}
 
 function hasCode(error) {
   return typeof error === "object" && error !== null && "code" in error;
@@ -26,8 +51,10 @@ export async function resolve(specifier, context, defaultResolve) {
   try {
     return await defaultResolve(specifier, context, defaultResolve);
   } catch (error) {
-    const isModuleNotFound = hasCode(error) && error.code === "ERR_MODULE_NOT_FOUND";
-    const isRelative = specifier.startsWith("./") || specifier.startsWith("../");
+    const isModuleNotFound =
+      hasCode(error) && error.code === "ERR_MODULE_NOT_FOUND";
+    const isRelative =
+      specifier.startsWith("./") || specifier.startsWith("../");
 
     if (!isModuleNotFound || !isRelative) {
       throw error;
@@ -53,6 +80,15 @@ export async function load(url, context, defaultLoad) {
       format: "module",
       shortCircuit: true,
       source,
+    };
+  }
+
+  const assetSource = assetStub(url);
+  if (assetSource !== null) {
+    return {
+      format: "module",
+      shortCircuit: true,
+      source: assetSource,
     };
   }
 

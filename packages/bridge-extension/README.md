@@ -186,15 +186,31 @@ execute. The server validates them against its own catalog (entries that don't
 belong to the pane's host, or that the server doesn't know, are dropped and
 counted). `callOfficeTool` then rejects any op the pane did not advertise with
 an actionable message, so a mismatched add-in/bridge pair fails loudly instead
-of silently.
+of silently. That op list — together with `opsIgnoredCount` — is the real
+enforcement: `catalogVersion` is informational only (reported in `/health` and
+the `/office` summary), so bumping it never silently changes what a pane may
+execute.
 
 - `/office` shows each attached pane's host, op count, catalog version, and any
   ignored-op count.
 - `/office-tools` lists every registered tool + catalog version.
 - `GET /health` exposes `catalogVersion` and per-pane `ops` / `catalogVersion`.
 - `before_agent_start` appends a pane-context block (attached host, "the
-  office_* tools edit the live document; formatting is fully supported; never
-  emit HTML for Word") so the agent uses the tools directly.
+  office_* tools edit the live document", "never emit HTML for Word") so the
+  agent uses the tools directly. It deliberately does **not** claim formatting is
+  universally supported: each tool's schema lists exactly the properties it
+  accepts, and the block instructs the agent to say a property is not available
+  rather than assert support — consulting `office_word_get_capabilities` when a
+  request depends on a Word feature it is unsure about.
+
+Tools never silently degrade: when a requested feature needs an Office.js
+requirement set the host lacks, the call returns a message naming the capability,
+the set + version, the platform, and the remedy. Two CI guards keep the surface
+honest — every advertised formatting property must have a real assignment in the
+implementation that applies it, and every declared capability must either be
+consumed by a caller or be explicitly probe-only. The panes and this extension
+both read the *same* catalog parameter objects (no per-side schema copies), so a
+new parameter cannot drift between the two agents.
 
 The pane-side executors are thin delegates to the same local tool factories the
 browser-only path uses (see `packages/add-in/src/bridge/`), and a parity test

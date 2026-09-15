@@ -8,6 +8,7 @@ import { createPowerPointReadSlideTool } from "../tools/powerpoint/read-slide.js
 import { createPowerPointAddSlideTool } from "../tools/powerpoint/add-slide.js";
 import { createPowerPointAddTextBoxTool } from "../tools/powerpoint/add-text-box.js";
 import { createPowerPointFormatSlideTool } from "../tools/powerpoint/format-slide.js";
+import { createPowerPointGetCapabilitiesTool } from "../tools/powerpoint/get-capabilities.js";
 import { guardExecutor, type OfficeOpExecutor } from "./ops.js";
 import { delegateTool } from "./delegate.js";
 
@@ -34,5 +35,9 @@ export const POWERPOINT_OPS: ReadonlyMap<string, OfficeOpExecutor> = new Map<
  [
   "powerpoint.format_slide",
   guardExecutor(delegateTool(createPowerPointFormatSlideTool())),
+ ],
+ [
+  "powerpoint.get_capabilities",
+  guardExecutor(delegateTool(createPowerPointGetCapabilitiesTool())),
  ],
 ]);

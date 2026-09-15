@@ -8,12 +8,16 @@
  * (headings, bold/italic, bullets, page-break rules).
  */
 
-import { WORD_INSERT_TEXT_PARAMETERS } from "@dieulc/pi-office-protocol/office-catalog";
+import {
+  WORD_INSERT_TEXT_PARAMETERS,
+  officeToolDescription,
+} from "@dieulc/pi-office-protocol/office-catalog";
 import type { Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import {
   insertWordBlocks,
   wordRun,
+  wordShadingGateMessage,
   type WordInsertBlock,
   type WordInsertLocation,
 } from "../../word/helpers.js";
@@ -37,14 +41,7 @@ export function createWordInsertTextTool(): AgentTool<typeof schema> {
   return {
     name: "word_insert_text",
     label: t("tools.wordInsertText"),
-    description:
-      "Insert text into the live Word document — at the start, at the end (default), " +
-      "or replacing the current selection. Multi-line text becomes separate paragraphs. " +
-      "Optionally format the inserted text in the same call: bold, italic, underline, size (points), " +
-      'font name, color (#RRGGBB), alignment ("Left"/"Centered"/"Right"/"Justified"), style names ' +
-      '(e.g. "Heading 1", "Title"), spacing, and indents. Pass format: "markdown" to insert a markdown ' +
-      "document (headings, bold/italic, bullets, page-break rules). " +
-      "Use this to add new content to the opened document.",
+    description: officeToolDescription("word.insert_text"),
     parameters: schema,
     execute: async (
       _toolCallId: string,
@@ -60,6 +57,17 @@ export function createWordInsertTextTool(): AgentTool<typeof schema> {
           content: [{ type: "text", text: "Nothing to insert (empty text)." }],
           details: undefined,
         };
+      }
+
+      // `shading` is desktop-only: report the gap instead of silently not filling.
+      if (params.shading !== undefined) {
+        const gap = wordShadingGateMessage();
+        if (gap !== null) {
+          return {
+            content: [{ type: "text", text: gap }],
+            details: undefined,
+          };
+        }
       }
 
       try {
@@ -78,6 +86,9 @@ export function createWordInsertTextTool(): AgentTool<typeof schema> {
           ...(params.size === undefined ? {} : { size: params.size }),
           ...(params.name === undefined ? {} : { name: params.name }),
           ...(params.color === undefined ? {} : { color: params.color }),
+          ...(params.highlight === undefined
+            ? {}
+            : { highlight: params.highlight }),
         };
         const paragraphFormat = {
           ...(params.style === undefined ? {} : { style: params.style }),
@@ -99,6 +110,7 @@ export function createWordInsertTextTool(): AgentTool<typeof schema> {
           ...(params.leftIndent === undefined
             ? {}
             : { leftIndent: params.leftIndent }),
+          ...(params.shading === undefined ? {} : { shading: params.shading }),
         };
 
         const hasFont = Object.keys(fontFormat).length > 0;

@@ -14,8 +14,14 @@ import {
   parsePersistedSnapshots,
 } from "../src/workbook/recovery/log-codec.ts";
 import type { ChartsDetails } from "../src/tools/tool-details.ts";
-import { getToolContextImpact, getToolExecutionMode } from "../src/tools/execution-policy.ts";
-import { WorkbookRecoveryLog, type WorkbookRecoverySnapshot } from "../src/workbook/recovery-log.ts";
+import {
+  getToolContextImpact,
+  getToolExecutionMode,
+} from "../src/tools/execution-policy.ts";
+import {
+  WorkbookRecoveryLog,
+  type WorkbookRecoverySnapshot,
+} from "../src/workbook/recovery-log.ts";
 import type { WorkbookContext } from "../src/workbook/context.ts";
 import type { AppendWorkbookChangeAuditEntryArgs } from "../src/audit/workbook-change-audit.ts";
 import type {
@@ -38,7 +44,10 @@ function firstText(result: AgentToolResult<ChartsDetails>): string {
   return first.text;
 }
 
-function imageBlock(result: AgentToolResult<ChartsDetails>): { data: string; mimeType: string } {
+function imageBlock(result: AgentToolResult<ChartsDetails>): {
+  data: string;
+  mimeType: string;
+} {
   const block = result.content.find((item) => item.type === "image");
   if (!block || block.type !== "image") {
     throw new Error("Expected image content block.");
@@ -105,13 +114,21 @@ class FakeChart extends FakeLoadable {
   positionStart = "";
   positionEnd: string | undefined;
   imageBase64 = "iVBORw0KGgo=";
-  imageRequest: { width?: number; height?: number; fittingMode?: string } | null = null;
+  imageRequest: {
+    width?: number;
+    height?: number;
+    fittingMode?: string;
+  } | null = null;
 
   name: string;
   chartType: string;
   private readonly collection: FakeChartCollection;
 
-  constructor(name: string, chartType: string, collection: FakeChartCollection) {
+  constructor(
+    name: string,
+    chartType: string,
+    collection: FakeChartCollection,
+  ) {
     super();
     this.name = name;
     this.chartType = chartType;
@@ -133,7 +150,11 @@ class FakeChart extends FakeLoadable {
     this.collection.remove(this);
   }
 
-  getImage(width?: number, height?: number, fittingMode?: string): { value: string } {
+  getImage(
+    width?: number,
+    height?: number,
+    fittingMode?: string,
+  ): { value: string } {
     this.imageRequest = { width, height, fittingMode };
     return { value: this.imageBase64 };
   }
@@ -152,11 +173,17 @@ class FakeChartCollection extends FakeLoadable {
 
     for (const segment of propertyNames.split(",")) {
       const trimmed = segment.trim();
-      if (trimmed === "items" || trimmed === "count" || trimmed.startsWith("items/")) {
+      if (
+        trimmed === "items" ||
+        trimmed === "count" ||
+        trimmed.startsWith("items/")
+      ) {
         continue;
       }
 
-      throw new Error(`Invalid ChartCollection load path segment: "${trimmed}"`);
+      throw new Error(
+        `Invalid ChartCollection load path segment: "${trimmed}"`,
+      );
     }
   }
 
@@ -165,7 +192,11 @@ class FakeChartCollection extends FakeLoadable {
   }
 
   add(chartType: string, sourceRange: FakeRange, seriesBy?: string): FakeChart {
-    const chart = new FakeChart(`Chart ${this.items.length + 1}`, chartType, this);
+    const chart = new FakeChart(
+      `Chart ${this.items.length + 1}`,
+      chartType,
+      this,
+    );
     chart.sourceAddress = sourceRange.address;
     chart.seriesBy = seriesBy ?? "";
     this.items.push(chart);
@@ -241,11 +272,16 @@ class FakeContext {
   }
 }
 
-async function withFakeExcel<T>(context: FakeContext, fn: () => Promise<T>): Promise<T> {
+async function withFakeExcel<T>(
+  context: FakeContext,
+  fn: () => Promise<T>,
+): Promise<T> {
   const hadExcel = Reflect.has(globalThis, "Excel");
   const previousExcel = Reflect.get(globalThis, "Excel");
   const fakeExcel = {
-    run: <TResult>(callback: (ctx: FakeContext) => Promise<TResult>): Promise<TResult> => callback(context),
+    run: <TResult>(
+      callback: (ctx: FakeContext) => Promise<TResult>,
+    ): Promise<TResult> => callback(context),
   };
 
   Reflect.set(globalThis, "Excel", fakeExcel);
@@ -297,11 +333,15 @@ void test("validates action-specific required params", async () => {
     appendAuditEntry: () => Promise.resolve(),
   });
 
-  const createResult = await tool.execute("tc-invalid-create", { action: "create" });
+  const createResult = await tool.execute("tc-invalid-create", {
+    action: "create",
+  });
   assert.match(firstText(createResult), /source_range is required/u);
   assert.equal(executeCalled, false);
 
-  const imageResult = await tool.execute("tc-invalid-image", { action: "get_image" });
+  const imageResult = await tool.execute("tc-invalid-image", {
+    action: "get_image",
+  });
   assert.match(firstText(imageResult), /name is required/u);
 });
 
@@ -309,18 +349,20 @@ void test("creates charts from a mocked worksheet range", async () => {
   const sheet = new FakeWorksheet("Sheet1");
   const context = new FakeContext([sheet]);
 
-  const result = await withFakeExcel(context, () => executeChartsAction({
-    action: "create",
-    source_range: "A1:B12",
-    chart_type: "column",
-    series_by: "columns",
-    name: "Sales",
-    title: "Sales by month",
-    legend_position: "right",
-    x_axis_title: "Month",
-    y_axis_title: "Revenue",
-    position: "D2:J18",
-  }));
+  const result = await withFakeExcel(context, () =>
+    executeChartsAction({
+      action: "create",
+      source_range: "A1:B12",
+      chart_type: "column",
+      series_by: "columns",
+      name: "Sales",
+      title: "Sales by month",
+      legend_position: "right",
+      x_axis_title: "Month",
+      y_axis_title: "Revenue",
+      position: "D2:J18",
+    }),
+  );
 
   const chart = sheet.charts.items[0];
   assert.ok(chart);
@@ -335,7 +377,10 @@ void test("creates charts from a mocked worksheet range", async () => {
   assert.equal(chart.axes.valueAxis.title.text, "Revenue");
   assert.equal(chart.positionStart, "D2");
   assert.equal(chart.positionEnd, "J18");
-  assert.match(firstText(result.result), /Chart 'Sales' created — Sheet1!A1:B12/u);
+  assert.match(
+    firstText(result.result),
+    /Chart 'Sales' created — Sheet1!A1:B12/u,
+  );
   assert.deepEqual(withoutUndefined(result.recoveryState), {
     kind: "chart_absent",
     sheetName: "Sheet1",
@@ -347,7 +392,11 @@ void test("creates charts from a mocked worksheet range", async () => {
 void test("lists charts across mocked worksheets", async () => {
   const sheet1 = new FakeWorksheet("Sheet1");
   const sheet2 = new FakeWorksheet("Dash");
-  const chart1 = sheet1.charts.add("ColumnClustered", sheet1.getRange("A1:B12"), "Columns");
+  const chart1 = sheet1.charts.add(
+    "ColumnClustered",
+    sheet1.getRange("A1:B12"),
+    "Columns",
+  );
   chart1.name = "Sales";
   chart1.title.text = "Sales by month";
   chart1.title.visible = true;
@@ -355,31 +404,42 @@ void test("lists charts across mocked worksheets", async () => {
   chart2.name = "Margin";
   const context = new FakeContext([sheet1, sheet2]);
 
-  const result = await withFakeExcel(context, () => executeChartsAction({ action: "list" }));
+  const result = await withFakeExcel(context, () =>
+    executeChartsAction({ action: "list" }),
+  );
 
   assert.match(firstText(result.result), /Charts \(2\)/u);
   assert.equal(result.result.details.action, "list");
   assert.equal(result.result.details.count, 2);
-  assert.deepEqual(result.result.details.charts?.map((chart) => chart.name), ["Sales", "Margin"]);
+  assert.deepEqual(
+    result.result.details.charts?.map((chart) => chart.name),
+    ["Sales", "Margin"],
+  );
   assert.equal(context.syncCount, 3);
 });
 
 void test("updates chart properties and source data through mocked Office objects", async () => {
   const sheet = new FakeWorksheet("Sheet1");
-  const chart = sheet.charts.add("ColumnClustered", sheet.getRange("A1:B12"), "Columns");
+  const chart = sheet.charts.add(
+    "ColumnClustered",
+    sheet.getRange("A1:B12"),
+    "Columns",
+  );
   chart.name = "Sales";
   const context = new FakeContext([sheet]);
 
-  const result = await withFakeExcel(context, () => executeChartsAction({
-    action: "update",
-    name: "Sales",
-    new_name: "Sales Chart",
-    source_range: "B1:C12",
-    series_by: "rows",
-    chart_type: "line",
-    title: "Updated sales",
-    legend_position: "bottom",
-  }));
+  const result = await withFakeExcel(context, () =>
+    executeChartsAction({
+      action: "update",
+      name: "Sales",
+      new_name: "Sales Chart",
+      source_range: "B1:C12",
+      series_by: "rows",
+      chart_type: "line",
+      title: "Updated sales",
+      legend_position: "bottom",
+    }),
+  );
 
   assert.equal(chart.name, "Sales Chart");
   assert.equal(chart.chartType, "Line");
@@ -388,19 +448,28 @@ void test("updates chart properties and source data through mocked Office object
   assert.equal(chart.title.text, "Updated sales");
   assert.equal(chart.legend.position, "Bottom");
   assert.equal(result.sourceRangeChanged, true);
-  assert.match(firstText(result.result), /Chart 'Sales Chart' updated — source Sheet1!B1:C12/u);
+  assert.match(
+    firstText(result.result),
+    /Chart 'Sales Chart' updated — source Sheet1!B1:C12/u,
+  );
 });
 
 void test("deletes a chart through mocked Office objects", async () => {
   const sheet = new FakeWorksheet("Sheet1");
-  const chart = sheet.charts.add("ColumnClustered", sheet.getRange("A1:B12"), "Columns");
+  const chart = sheet.charts.add(
+    "ColumnClustered",
+    sheet.getRange("A1:B12"),
+    "Columns",
+  );
   chart.name = "Sales";
   const context = new FakeContext([sheet]);
 
-  const result = await withFakeExcel(context, () => executeChartsAction({
-    action: "delete",
-    name: "Sales",
-  }));
+  const result = await withFakeExcel(context, () =>
+    executeChartsAction({
+      action: "delete",
+      name: "Sales",
+    }),
+  );
 
   assert.equal(chart.deleted, true);
   assert.equal(sheet.charts.items.length, 0);
@@ -409,18 +478,24 @@ void test("deletes a chart through mocked Office objects", async () => {
 
 void test("get_image returns text plus image content and structured PNG details", async () => {
   const sheet = new FakeWorksheet("Sheet1");
-  const chart = sheet.charts.add("ColumnClustered", sheet.getRange("A1:B12"), "Columns");
+  const chart = sheet.charts.add(
+    "ColumnClustered",
+    sheet.getRange("A1:B12"),
+    "Columns",
+  );
   chart.name = "Sales";
   chart.width = 500;
   chart.height = 300;
   chart.imageBase64 = "base64-png";
   const context = new FakeContext([sheet]);
 
-  const result = await withFakeExcel(context, () => executeChartsAction({
-    action: "get_image",
-    name: "Sales",
-    width: 1_600,
-  }));
+  const result = await withFakeExcel(context, () =>
+    executeChartsAction({
+      action: "get_image",
+      name: "Sales",
+      width: 1_600,
+    }),
+  );
 
   const text = firstText(result.result);
   assert.match(text, /Captured chart 'Sales' \(1200×720 px\)/u);
@@ -450,13 +525,19 @@ void test("classifies charts actions by execution policy and context impact", ()
   assert.equal(getToolContextImpact("charts", { action: "get_image" }), "none");
 
   assert.equal(getToolExecutionMode("charts", { action: "create" }), "mutate");
-  assert.equal(getToolContextImpact("charts", { action: "create" }), "structure");
+  assert.equal(
+    getToolContextImpact("charts", { action: "create" }),
+    "structure",
+  );
 
   assert.equal(getToolExecutionMode("charts", { action: "update" }), "mutate");
   assert.equal(getToolContextImpact("charts", { action: "update" }), "content");
 
   assert.equal(getToolExecutionMode("charts", { action: "delete" }), "mutate");
-  assert.equal(getToolContextImpact("charts", { action: "delete" }), "structure");
+  assert.equal(
+    getToolContextImpact("charts", { action: "delete" }),
+    "structure",
+  );
 });
 
 void test("update captures a chart checkpoint and appends audit metadata", async () => {
@@ -467,21 +548,22 @@ void test("update captures a chart checkpoint and appends audit metadata", async
 
   const tool = createChartsTool({
     captureChartPresent: () => Promise.resolve(beforeState),
-    executeAction: () => Promise.resolve({
-      result: {
-        content: [{ type: "text", text: "Chart 'Sales' updated." }],
-        details: {
-          kind: "charts",
-          action: "update",
-          name: "Sales",
-          address: "Sheet1!Sales",
+    executeAction: () =>
+      Promise.resolve({
+        result: {
+          content: [{ type: "text", text: "Chart 'Sales' updated." }],
+          details: {
+            kind: "charts",
+            action: "update",
+            name: "Sales",
+            address: "Sheet1!Sales",
+          },
         },
-      },
-      outputAddress: "Sheet1!Sales",
-      changedCount: 1,
-      auditSummary: "updated chart Sales",
-      sourceRangeChanged: true,
-    }),
+        outputAddress: "Sheet1!Sales",
+        changedCount: 1,
+        auditSummary: "updated chart Sales",
+        sourceRangeChanged: true,
+      }),
     appendRecoverySnapshot: (args) => {
       appendedState = args.chartState;
       const snapshot: WorkbookRecoverySnapshot = {
@@ -529,20 +611,21 @@ void test("delete explicitly signals no backup and does not append a recovery sn
   let appendRecoveryCalls = 0;
 
   const tool = createChartsTool({
-    executeAction: () => Promise.resolve({
-      result: {
-        content: [{ type: "text", text: "Chart 'Sales' deleted." }],
-        details: {
-          kind: "charts",
-          action: "delete",
-          name: "Sales",
-          address: "Sheet1!Sales",
+    executeAction: () =>
+      Promise.resolve({
+        result: {
+          content: [{ type: "text", text: "Chart 'Sales' deleted." }],
+          details: {
+            kind: "charts",
+            action: "delete",
+            name: "Sales",
+            address: "Sheet1!Sales",
+          },
         },
-      },
-      outputAddress: "Sheet1!Sales",
-      changedCount: 1,
-      auditSummary: "deleted chart Sales",
-    }),
+        outputAddress: "Sheet1!Sales",
+        changedCount: 1,
+        auditSummary: "deleted chart Sales",
+      }),
     appendRecoverySnapshot: () => {
       appendRecoveryCalls += 1;
       return Promise.resolve(null);
@@ -591,7 +674,10 @@ void test("workbook recovery log persists and restores chart checkpoints", async
       appliedState = state;
       // Simulate a restore that renamed the chart: the post-restore identity
       // differs from the checkpoint address.
-      return Promise.resolve({ state: currentState, address: "Sheet1!Sales (restored)" });
+      return Promise.resolve({
+        state: currentState,
+        address: "Sheet1!Sales (restored)",
+      });
     },
   });
 
@@ -609,7 +695,10 @@ void test("workbook recovery log persists and restores chart checkpoints", async
   assert.equal(restored.restoredSnapshotId, appended.id);
   assert.equal(restored.inverseSnapshotId, "snap-chart-2");
   assert.equal(appliedAddress, "Sheet1!Sales");
-  assert.deepEqual(withoutUndefined(appliedState), withoutUndefined(restoredState));
+  assert.deepEqual(
+    withoutUndefined(appliedState),
+    withoutUndefined(restoredState),
+  );
 
   const snapshots = await log.listForCurrentWorkbook(10);
   const inverse = restored.inverseSnapshotId
@@ -618,7 +707,10 @@ void test("workbook recovery log persists and restores chart checkpoints", async
 
   assert.ok(inverse);
   assert.equal(inverse.snapshotKind, "chart_state");
-  assert.deepEqual(withoutUndefined(inverse.chartState), withoutUndefined(currentState));
+  assert.deepEqual(
+    withoutUndefined(inverse.chartState),
+    withoutUndefined(currentState),
+  );
   // The inverse must live at the post-restore identity so that restoring the
   // rollback can find the chart after a rename-restore.
   assert.equal(inverse.address, "Sheet1!Sales (restored)");
@@ -644,7 +736,8 @@ void test("chart_absent restore can skip inverse snapshot when recreation would 
     now: () => 1700000000200,
     createId: () => "snap-create-chart",
     applySnapshot: () => Promise.resolve({ values: [[1]], formulas: [[1]] }),
-    applyChartSnapshot: () => Promise.resolve({ state: null, address: "Sheet1!New Chart" }),
+    applyChartSnapshot: () =>
+      Promise.resolve({ state: null, address: "Sheet1!New Chart" }),
   });
 
   const appended = await log.appendChart({
@@ -670,7 +763,9 @@ void test("chart rename restore round-trips through the inverse address", async 
   const targetState = createChartState("Sales");
 
   // Restore the pre-rename checkpoint: chart goes back to "Sales".
-  const applied = await withFakeExcel(context, () => applyChartState("Sheet1!Sales Chart", targetState));
+  const applied = await withFakeExcel(context, () =>
+    applyChartState("Sheet1!Sales Chart", targetState),
+  );
 
   assert.equal(chart.name, "Sales");
   assert.ok(applied.state);
@@ -681,7 +776,9 @@ void test("chart rename restore round-trips through the inverse address", async 
 
   // Restoring the rollback backup at its recorded address must find the chart
   // and rename it forward again.
-  const rolledBack = await withFakeExcel(context, () => applyChartState(applied.address, applied.state as RecoveryChartState));
+  const rolledBack = await withFakeExcel(context, () =>
+    applyChartState(applied.address, applied.state as RecoveryChartState),
+  );
 
   assert.equal(chart.name, "Sales Chart");
   assert.equal(rolledBack.address, "Sheet1!Sales Chart");
@@ -705,12 +802,25 @@ void test("chart_absent restore deletes by stable id, surviving rename and name 
   const impostor = sheet.charts.add("Pie", new FakeRange("D1:E4"));
   impostor.name = "New Chart";
 
-  const applied = await withFakeExcel(context, () => applyChartState("Sheet1!New Chart", checkpoint));
+  const applied = await withFakeExcel(context, () =>
+    applyChartState("Sheet1!New Chart", checkpoint),
+  );
 
   assert.equal(applied.state, null);
-  assert.equal(created.deleted, true, "the originally created chart should be deleted");
-  assert.equal(impostor.deleted, false, "the unrelated chart reusing the name must survive");
-  assert.deepEqual(sheet.charts.items.map((item) => item.name), ["New Chart"]);
+  assert.equal(
+    created.deleted,
+    true,
+    "the originally created chart should be deleted",
+  );
+  assert.equal(
+    impostor.deleted,
+    false,
+    "the unrelated chart reusing the name must survive",
+  );
+  assert.deepEqual(
+    sheet.charts.items.map((item) => item.name),
+    ["New Chart"],
+  );
 });
 
 void test("chart_absent restore fails safely when a stored id cannot be verified", async () => {
@@ -736,11 +846,18 @@ void test("chart_absent restore fails safely when a stored id cannot be verified
   Object.defineProperty(sheet.charts, "load", { value: brokenLoad });
 
   await assert.rejects(
-    () => withFakeExcel(context, () => applyChartState("Sheet1!New Chart", checkpoint)),
+    () =>
+      withFakeExcel(context, () =>
+        applyChartState("Sheet1!New Chart", checkpoint),
+      ),
     /Could not verify the created chart's identity/u,
   );
 
-  assert.equal(survivor.deleted, false, "never degrade to name-based deletion when the id cannot be verified");
+  assert.equal(
+    survivor.deleted,
+    false,
+    "never degrade to name-based deletion when the id cannot be verified",
+  );
   assert.equal(sheet.charts.items.length, 1);
 });
 
@@ -758,10 +875,16 @@ void test("chart_absent restore with a missing id deletes nothing", async () => 
     chartId: "fake-chart-id-does-not-exist",
   };
 
-  const applied = await withFakeExcel(context, () => applyChartState("Sheet1!New Chart", checkpoint));
+  const applied = await withFakeExcel(context, () =>
+    applyChartState("Sheet1!New Chart", checkpoint),
+  );
 
   assert.equal(applied.state, null);
-  assert.equal(survivor.deleted, false, "a different chart holding the name must not be deleted");
+  assert.equal(
+    survivor.deleted,
+    false,
+    "a different chart holding the name must not be deleted",
+  );
   assert.equal(sheet.charts.items.length, 1);
 });
 
@@ -797,9 +920,14 @@ void test("persisted chart_state snapshots omit range grids so older codecs drop
     workbookLabel: "Charts.xlsx",
   };
 
-  const payload = createPersistedWorkbookRecoveryPayload([chartSnapshot, rangeSnapshot]);
+  const payload = createPersistedWorkbookRecoveryPayload([
+    chartSnapshot,
+    rangeSnapshot,
+  ]);
 
-  const persistedChart = payload.snapshots.find((item) => item.id === "snap-chart-persist");
+  const persistedChart = payload.snapshots.find(
+    (item) => item.id === "snap-chart-persist",
+  );
   assert.ok(persistedChart);
   // Older codecs default unknown snapshot kinds to range_values and then
   // require grids; omitting them makes downgraded readers drop the entry
@@ -807,7 +935,9 @@ void test("persisted chart_state snapshots omit range grids so older codecs drop
   assert.equal("beforeValues" in persistedChart, false);
   assert.equal("beforeFormulas" in persistedChart, false);
 
-  const persistedRange = payload.snapshots.find((item) => item.id === "snap-range-persist");
+  const persistedRange = payload.snapshots.find(
+    (item) => item.id === "snap-range-persist",
+  );
   assert.ok(persistedRange);
   assert.deepEqual(persistedRange.beforeValues, [[1]]);
   assert.deepEqual(persistedRange.beforeFormulas, [["=A1"]]);
@@ -817,5 +947,46 @@ void test("persisted chart_state snapshots omit range grids so older codecs drop
   const chartAgain = findSnapshotById(reparsed, "snap-chart-persist");
   assert.ok(chartAgain);
   assert.equal(chartAgain.snapshotKind, "chart_state");
-  assert.deepEqual(withoutUndefined(chartAgain.chartState), withoutUndefined(createChartState("Sales")));
+  assert.deepEqual(
+    withoutUndefined(chartAgain.chartState),
+    withoutUndefined(createChartState("Sales")),
+  );
+});
+
+void test("a failed chart backup is surfaced in the result text, not swallowed", async () => {
+  const tool = createChartsTool({
+    captureChartPresent: () =>
+      Promise.reject(new Error("workbook identity unavailable")),
+    executeAction: () =>
+      Promise.resolve({
+        result: {
+          content: [{ type: "text", text: "Chart 'Sales' updated." }],
+          details: {
+            kind: "charts",
+            action: "update",
+            name: "Sales",
+            address: "Sheet1!Sales",
+          },
+        },
+        outputAddress: "Sheet1!Sales",
+        changedCount: 1,
+        auditSummary: "updated chart Sales",
+      }),
+    appendRecoverySnapshot: () => Promise.resolve(null),
+    appendAuditEntry: () => Promise.resolve(),
+    dispatchSnapshotCreated: () => {},
+  });
+
+  const result = await tool.execute("tc-chart-capture-fail", {
+    action: "update",
+    name: "Sales",
+    title: "New title",
+  });
+
+  const text = firstText(result);
+  // The failure reason must be visible, not just present in `details`.
+  assert.match(text, /Chart backup capture failed/);
+  assert.match(text, /workbook identity unavailable/);
+  assert.match(text, /without a restore point/);
+  assert.equal(result.details.recovery?.status, "not_available");
 });

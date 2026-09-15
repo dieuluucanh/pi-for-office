@@ -24,6 +24,7 @@ import { createWordReadDocumentTool } from "./word/read-document.js";
 import { createWordInsertTextTool } from "./word/insert-text.js";
 import { createWordReplaceTextTool } from "./word/replace-text.js";
 import { createWordGetOverviewTool } from "./word/get-overview.js";
+import { createWordGetCapabilitiesTool } from "./word/get-capabilities.js";
 import { createWordFormatRangeTool } from "./word/format-range.js";
 import { createWordInsertBlocksTool } from "./word/insert-blocks.js";
 import { createWordInsertTableTool } from "./word/insert-table.js";
@@ -35,6 +36,8 @@ import { createPowerPointAddSlideTool } from "./powerpoint/add-slide.js";
 import { createPowerPointAddTextBoxTool } from "./powerpoint/add-text-box.js";
 import { createPowerPointGetOverviewTool } from "./powerpoint/get-overview.js";
 import { createPowerPointFormatSlideTool } from "./powerpoint/format-slide.js";
+import { createPowerPointGetCapabilitiesTool } from "./powerpoint/get-capabilities.js";
+import { createExcelGetCapabilitiesTool } from "./get-capabilities.js";
 
 export interface CreateAllToolsOptions {
   hostKind?: SpreadsheetHostKind;
@@ -110,6 +113,7 @@ export function createAllTools(
     ...(hostApp === "word"
       ? [
           createWordGetOverviewTool(),
+          createWordGetCapabilitiesTool(),
           createWordReadDocumentTool(),
           createWordInsertTextTool(),
           createWordReplaceTextTool(),
@@ -124,11 +128,15 @@ export function createAllTools(
     ...(hostApp === "powerpoint"
       ? [
           createPowerPointGetOverviewTool(),
+          createPowerPointGetCapabilitiesTool(),
           createPowerPointReadSlideTool(),
           createPowerPointAddSlideTool(),
           createPowerPointAddTextBoxTool(),
           createPowerPointFormatSlideTool(),
         ]
       : []),
+    // Excel capability probe — read-only and host-level, so it is not a core
+    // tool (core tools all operate on the workbook).
+    ...(isExcelHost ? [createExcelGetCapabilitiesTool()] : []),
   ];
 }

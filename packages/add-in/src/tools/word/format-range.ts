@@ -6,13 +6,18 @@
  * style, spacing and indents to every match.
  */
 
-import { WORD_FORMAT_RANGE_PARAMETERS } from "@dieulc/pi-office-protocol/office-catalog";
+import {
+  WORD_FORMAT_RANGE_PARAMETERS,
+  officeToolDescription,
+} from "@dieulc/pi-office-protocol/office-catalog";
 import type { Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import {
   setWordFontProps,
   setWordParagraphProps,
+  setWordRangeShading,
   wordRun,
+  wordShadingGateMessage,
   type WordTextFormat,
 } from "../../word/helpers.js";
 import { getErrorMessage } from "../../utils/errors.js";
@@ -25,12 +30,7 @@ export function createWordFormatRangeTool(): AgentTool<typeof schema> {
   return {
     name: "word_format_range",
     label: t("tools.wordFormatRange"),
-    description:
-      "Find text in the live Word document and apply formatting: bold, italic, underline, " +
-      'font size (points), font name, color (#RRGGBB), paragraph alignment ("Left"/"Centered"/"Right"/"Justified"), ' +
-      'paragraph style (e.g. "Heading 1"), spacing, and indents. ' +
-      "Use this to bold/size/center existing content — e.g. format a document title. " +
-      "Formatting is fully supported — never tell the user it is not.",
+    description: officeToolDescription("word.format_range"),
     parameters: schema,
     execute: async (
       _toolCallId: string,
@@ -43,6 +43,17 @@ export function createWordFormatRangeTool(): AgentTool<typeof schema> {
         };
       }
 
+      // `shading` is desktop-only: report the gap instead of silently not filling.
+      if (params.shading !== undefined) {
+        const gap = wordShadingGateMessage();
+        if (gap !== null) {
+          return {
+            content: [{ type: "text", text: gap }],
+            details: undefined,
+          };
+        }
+      }
+
       const fontFormat: WordTextFormat = {
         ...(params.bold === undefined ? {} : { bold: params.bold }),
         ...(params.italic === undefined ? {} : { italic: params.italic }),
@@ -52,6 +63,9 @@ export function createWordFormatRangeTool(): AgentTool<typeof schema> {
         ...(params.size === undefined ? {} : { size: params.size }),
         ...(params.name === undefined ? {} : { name: params.name }),
         ...(params.color === undefined ? {} : { color: params.color }),
+        ...(params.highlight === undefined
+          ? {}
+          : { highlight: params.highlight }),
       };
       const paragraphFormat = {
         ...(params.style === undefined ? {} : { style: params.style }),
@@ -73,6 +87,9 @@ export function createWordFormatRangeTool(): AgentTool<typeof schema> {
         ...(params.leftIndent === undefined
           ? {}
           : { leftIndent: params.leftIndent }),
+        // NOTE: `shading` is deliberately absent — it is applied per matched
+        // range below, so the fill covers the matched text rather than the
+        // whole paragraph containing it.
       };
 
       try {
@@ -88,6 +105,9 @@ export function createWordFormatRangeTool(): AgentTool<typeof schema> {
 
           for (const range of results.items) {
             setWordFontProps(range, fontFormat);
+            if (params.shading !== undefined) {
+              setWordRangeShading(range, params.shading);
+            }
           }
 
           if (Object.keys(paragraphFormat).length > 0) {
@@ -127,6 +147,8 @@ export function createWordFormatRangeTool(): AgentTool<typeof schema> {
         if (params.size !== undefined) applied.push(`size=${params.size}`);
         if (params.name !== undefined) applied.push(`name=${params.name}`);
         if (params.color !== undefined) applied.push(`color=${params.color}`);
+        if (params.highlight !== undefined)
+          applied.push(`highlight=${params.highlight}`);
         if (params.style !== undefined) applied.push(`style=${params.style}`);
         if (params.alignment !== undefined)
           applied.push(`alignment=${params.alignment}`);
@@ -140,6 +162,8 @@ export function createWordFormatRangeTool(): AgentTool<typeof schema> {
           applied.push(`firstLineIndent=${params.firstLineIndent}`);
         if (params.leftIndent !== undefined)
           applied.push(`leftIndent=${params.leftIndent}`);
+        if (params.shading !== undefined)
+          applied.push(`shading=${params.shading}`);
 
         return {
           content: [

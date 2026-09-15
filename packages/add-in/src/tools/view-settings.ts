@@ -4,7 +4,8 @@
  * Scope: on-screen worksheet view/navigation only (not print/page layout).
  */
 
-import { Type, type Static } from "@sinclair/typebox";
+import { EXCEL_VIEW_SETTINGS_PARAMETERS } from "@dieulc/pi-office-protocol/office-catalog";
+import type { Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { excelRun, parseCell, qualifiedAddress } from "../excel/helpers.js";
 import {
@@ -12,6 +13,7 @@ import {
   type AppendWorkbookChangeAuditEntryArgs,
 } from "../audit/workbook-change-audit.js";
 import { getErrorMessage } from "../utils/errors.js";
+import { requireCapability } from "../office/capabilities.js";
 import {
   NON_CHECKPOINTED_MUTATION_NOTE,
   NON_CHECKPOINTED_MUTATION_REASON,
@@ -22,65 +24,7 @@ import { appendMutationResultNote } from "./mutation/result-note.js";
 import type { MutationFinalizeDependencies } from "./mutation/types.js";
 import type { ViewSettingsDetails } from "./tool-details.js";
 
-function StringEnum<T extends string[]>(values: [...T], opts?: { description?: string }) {
-  return Type.Union(
-    values.map((value) => Type.Literal(value)),
-    opts,
-  );
-}
-const schema = Type.Object({
-  action: StringEnum(
-    [
-      "get",
-      "show_gridlines",
-      "hide_gridlines",
-      "show_headings",
-      "hide_headings",
-      "freeze_rows",
-      "freeze_columns",
-      "freeze_at",
-      "unfreeze",
-      "set_tab_color",
-      "hide_sheet",
-      "show_sheet",
-      "very_hide_sheet",
-      "set_standard_width",
-      "activate",
-    ],
-    { description: "The view setting to read or change." },
-  ),
-  sheet: Type.Optional(
-    Type.String({
-      description:
-        "Target sheet name. Defaults to the active sheet for most actions. " +
-        "Required for hide/show/very_hide and activate.",
-    }),
-  ),
-  count: Type.Optional(
-    Type.Number({
-      description: "Number of rows or columns to freeze. Required for freeze_rows/freeze_columns.",
-    }),
-  ),
-  range: Type.Optional(
-    Type.String({
-      description:
-        "Cell range for freeze_at (e.g. \"B3\"). Everything above and to the left of " +
-        "this cell will be frozen.",
-    }),
-  ),
-  color: Type.Optional(
-    Type.String({
-      description: "Tab color in #RRGGBB format (e.g. \"#FF6600\"). Use \"\" to clear.",
-    }),
-  ),
-  width: Type.Optional(
-    Type.Number({
-      description:
-        "Standard (default) column width for the worksheet, in Excel character-width units. " +
-        "Required for set_standard_width.",
-    }),
-  ),
-});
+const schema = EXCEL_VIEW_SETTINGS_PARAMETERS;
 
 type Params = Static<typeof schema>;
 type ViewSettingsAction = Params["action"];
@@ -94,7 +38,9 @@ interface ViewSettingsActionResult {
 
 interface ViewSettingsToolDependencies {
   executeAction: (params: Params) => Promise<ViewSettingsActionResult>;
-  appendAuditEntry: (entry: AppendWorkbookChangeAuditEntryArgs) => Promise<void>;
+  appendAuditEntry: (
+    entry: AppendWorkbookChangeAuditEntryArgs,
+  ) => Promise<void>;
 }
 
 function requireSheetName(action: string, sheet: string | undefined): string {
@@ -107,6 +53,21 @@ function requireSheetName(action: string, sheet: string | undefined): string {
 function isMutatingViewSettingsAction(action: ViewSettingsAction): boolean {
   return action !== "get";
 }
+
+/** Actions backed by `Worksheet.showGridlines` / `showHeadings` (ExcelApi 1.8). */
+const GRIDLINE_VISIBILITY_ACTIONS: ReadonlySet<ViewSettingsAction> = new Set([
+  "show_gridlines",
+  "hide_gridlines",
+  "show_headings",
+  "hide_headings",
+]);
+
+/** Actions backed by the `Worksheet.visibility` setter (ExcelApi 1.2). */
+const SHEET_VISIBILITY_ACTIONS: ReadonlySet<ViewSettingsAction> = new Set([
+  "hide_sheet",
+  "show_sheet",
+  "very_hide_sheet",
+]);
 
 function buildMutationDetails(args: {
   action: ViewSettingsAction;
@@ -129,8 +90,10 @@ export function createViewSettingsTool(
   dependencies: Partial<ViewSettingsToolDependencies> = {},
 ): AgentTool<typeof schema> {
   const resolvedDependencies: ViewSettingsToolDependencies = {
-    executeAction: dependencies.executeAction ?? defaultDependencies.executeAction,
-    appendAuditEntry: dependencies.appendAuditEntry ?? defaultDependencies.appendAuditEntry,
+    executeAction:
+      dependencies.executeAction ?? defaultDependencies.executeAction,
+    appendAuditEntry:
+      dependencies.appendAuditEntry ?? defaultDependencies.appendAuditEntry,
   };
 
   return {
@@ -139,7 +102,7 @@ export function createViewSettingsTool(
     description:
       "Read or change worksheet view/navigation settings: gridlines, row/column headings, " +
       "freeze panes, tab color, sheet visibility, sheet activation, and standard width. " +
-      "Use \"get\" to inspect the current state first.",
+      'Use "get" to inspect the current state first.',
     parameters: schema,
     execute: async (
       toolCallId: string,
@@ -147,12 +110,14 @@ export function createViewSettingsTool(
     ): Promise<AgentToolResult<ViewSettingsDetails | undefined>> => {
       const isMutation = isMutatingViewSettingsAction(params.action);
       const mutationFinalizeDependencies: MutationFinalizeDependencies = {
-        appendAuditEntry: (entry) => resolvedDependencies.appendAuditEntry(entry),
+        appendAuditEntry: (entry) =>
+          resolvedDependencies.appendAuditEntry(entry),
       };
 
       try {
         const result = await resolvedDependencies.executeAction(params);
-        const outputAddress = result.outputAddress ?? params.range ?? params.sheet;
+        const outputAddress =
+          result.outputAddress ?? params.range ?? params.sheet;
 
         if (!isMutation) {
           return {
@@ -233,7 +198,21 @@ export function createViewSettingsTool(
   };
 }
 
-async function executeViewSettingsAction(params: Params): Promise<ViewSettingsActionResult> {
+async function executeViewSettingsAction(
+  params: Params,
+): Promise<ViewSettingsActionResult> {
+  // Gridline/heading visibility is ExcelApi 1.8; the worksheet visibility
+  // setter is ExcelApi 1.2. Fail loud rather than letting the host throw an
+  // opaque error mid-batch.
+  if (GRIDLINE_VISIBILITY_ACTIONS.has(params.action)) {
+    const gap = requireCapability("excel.view.gridlines");
+    if (gap !== null) throw new Error(gap);
+  }
+  if (SHEET_VISIBILITY_ACTIONS.has(params.action)) {
+    const gap = requireCapability("excel.sheet.visibility");
+    if (gap !== null) throw new Error(gap);
+  }
+
   return excelRun(async (context) => {
     const sheet = params.sheet
       ? context.workbook.worksheets.getItem(params.sheet)
@@ -241,7 +220,9 @@ async function executeViewSettingsAction(params: Params): Promise<ViewSettingsAc
 
     switch (params.action) {
       case "get": {
-        sheet.load("name, showGridlines, showHeadings, tabColor, visibility, standardWidth");
+        sheet.load(
+          "name, showGridlines, showHeadings, tabColor, visibility, standardWidth",
+        );
         const frozen = sheet.freezePanes.getLocationOrNullObject();
         frozen.load("address");
         await context.sync();
@@ -311,7 +292,8 @@ async function executeViewSettingsAction(params: Params): Promise<ViewSettingsAc
       }
 
       case "freeze_rows": {
-        if (params.count === undefined) throw new Error("count is required for freeze_rows");
+        if (params.count === undefined)
+          throw new Error("count is required for freeze_rows");
         sheet.freezePanes.freezeRows(params.count);
         await context.sync();
         sheet.load("name");
@@ -325,7 +307,8 @@ async function executeViewSettingsAction(params: Params): Promise<ViewSettingsAc
       }
 
       case "freeze_columns": {
-        if (params.count === undefined) throw new Error("count is required for freeze_columns");
+        if (params.count === undefined)
+          throw new Error("count is required for freeze_columns");
         sheet.freezePanes.freezeColumns(params.count);
         await context.sync();
         sheet.load("name");
@@ -370,7 +353,12 @@ async function executeViewSettingsAction(params: Params): Promise<ViewSettingsAc
         } else {
           // Build the frozen pane content range: A1 up to (but not
           // including) the anchor cell.
-          const paneRange = sheet.getRangeByIndexes(0, 0, frozenRows, frozenCols);
+          const paneRange = sheet.getRangeByIndexes(
+            0,
+            0,
+            frozenRows,
+            frozenCols,
+          );
           sheet.freezePanes.freezeAt(paneRange);
         }
 
@@ -401,7 +389,8 @@ async function executeViewSettingsAction(params: Params): Promise<ViewSettingsAc
       }
 
       case "set_tab_color": {
-        if (params.color === undefined) throw new Error("color is required for set_tab_color");
+        if (params.color === undefined)
+          throw new Error("color is required for set_tab_color");
         sheet.tabColor = params.color;
         await context.sync();
         sheet.load("name");

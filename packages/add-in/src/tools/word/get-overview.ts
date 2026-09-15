@@ -5,7 +5,10 @@
  * (bounded), so the agent sees both the skeleton and where content lives.
  */
 
-import { WORD_GET_OVERVIEW_PARAMETERS } from "@dieulc/pi-office-protocol/office-catalog";
+import {
+  WORD_GET_OVERVIEW_PARAMETERS,
+  officeToolDescription,
+} from "@dieulc/pi-office-protocol/office-catalog";
 import type { Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { wordCount, wordRun } from "../../word/helpers.js";
@@ -21,10 +24,7 @@ export function createWordGetOverviewTool(): AgentTool<typeof schema> {
   return {
     name: "word_get_overview",
     label: t("tools.wordGetOverview"),
-    description:
-      "Get a structural overview of the live Word document: paragraph/table counts, " +
-      "word count, and the heading outline WITH heading text. Call this before editing " +
-      "to learn the document structure and find where sections live.",
+    description: officeToolDescription("word.get_overview"),
     parameters: schema,
     execute: async (
       _toolCallId: string,

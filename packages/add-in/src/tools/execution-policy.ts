@@ -30,9 +30,13 @@ const ALWAYS_READ_TOOLS = new Set<string>([
  "extensions_manager",
  // Local Word/PowerPoint read tools — no workbook mutation.
  "word_get_overview",
+ "word_get_capabilities",
  "word_read_document",
  "powerpoint_get_overview",
+ "powerpoint_get_capabilities",
  "powerpoint_read_slide",
+ // Capability probes are read-only on every host.
+ "excel_get_capabilities",
 ]);
 
 const ALWAYS_MUTATE_TOOLS = new Set<string>([

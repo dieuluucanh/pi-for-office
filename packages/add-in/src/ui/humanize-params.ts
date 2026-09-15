@@ -553,6 +553,41 @@ function humanizeConditionalFormat(p: DynamicObject): ParamItem[] {
     const val = p.value !== undefined ? " " + str(p.value) : "";
     const val2 = p.value2 !== undefined ? " and " + str(p.value2) : "";
     items.push({ label: l("Rule"), value: op + val + val2 });
+  } else if (p.type === "data_bar") {
+    const parts: Array<TemplateResult | string> = ["data bar"];
+    if (p.data_bar_direction) parts.push(str(p.data_bar_direction));
+    if (p.data_bar_fill_color)
+      parts.push(colorChip(str(p.data_bar_fill_color)));
+    if (p.data_bar_show_only === true) parts.push("value hidden");
+    items.push({ label: l("Rule"), value: joinParts(parts) });
+  } else if (p.type === "color_scale") {
+    const parts: Array<TemplateResult | string> = ["color scale"];
+    if (p.color_scale_min_color)
+      parts.push(colorChip(str(p.color_scale_min_color)));
+    if (p.color_scale_mid_color)
+      parts.push(colorChip(str(p.color_scale_mid_color)));
+    if (p.color_scale_max_color)
+      parts.push(colorChip(str(p.color_scale_max_color)));
+    items.push({ label: l("Rule"), value: joinParts(parts) });
+  } else if (p.type === "icon_set") {
+    const style = p.icon_set_style
+      ? str(p.icon_set_style)
+      : "ThreeTrafficLights1";
+    items.push({ label: l("Rule"), value: "icon set " + style });
+  } else if (p.type === "top_bottom") {
+    const kind = p.top_bottom_type ? str(p.top_bottom_type) : "TopItems";
+    const rank =
+      p.top_bottom_rank !== undefined ? " " + str(p.top_bottom_rank) : "";
+    items.push({ label: l("Rule"), value: kind + rank });
+  } else if (p.type === "preset_criteria") {
+    const criterion = p.preset_criterion
+      ? str(p.preset_criterion)
+      : "AboveAverage";
+    items.push({ label: l("Rule"), value: criterion });
+  } else if (p.type === "contains_text") {
+    const op = p.text_operator ? str(p.text_operator) : "Contains";
+    const needle = p.text !== undefined ? ` "${str(p.text)}"` : "";
+    items.push({ label: l("Rule"), value: op + needle });
   }
 
   // Format
@@ -1270,6 +1305,9 @@ const EXTRA_HUMANIZERS = {
   execute_office_js: humanizeExecuteOfficeJs,
   execute_wps_js: humanizeExecuteWpsJs,
   word_get_overview: humanizeHostDocumentTool,
+  word_get_capabilities: humanizeHostDocumentTool,
+  powerpoint_get_capabilities: humanizeHostDocumentTool,
+  excel_get_capabilities: humanizeHostDocumentTool,
   word_read_document: humanizeHostDocumentTool,
   word_insert_text: humanizeHostDocumentTool,
   word_replace_text: humanizeHostDocumentTool,

@@ -4,10 +4,13 @@
  * and alignment.
  */
 
-import { WORD_INSERT_IMAGE_PARAMETERS } from "@dieulc/pi-office-protocol/office-catalog";
+import {
+  WORD_INSERT_IMAGE_PARAMETERS,
+  officeToolDescription,
+} from "@dieulc/pi-office-protocol/office-catalog";
 import type { Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { wordRun } from "../../word/helpers.js";
+import { wordRun, wordInlineImageGateMessage } from "../../word/helpers.js";
 import { getErrorMessage } from "../../utils/errors.js";
 import { t } from "../../language/index.js";
 
@@ -45,11 +48,7 @@ export function createWordInsertImageTool(): AgentTool<typeof schema> {
   return {
     name: "word_insert_image",
     label: t("tools.wordInsertImage"),
-    description:
-      "Insert an inline image into the live Word document from a base64 string (or a data URL). " +
-      "Max decoded size ~5 MB. To embed a local file, encode it first: on macOS/Linux run `base64 -w0 <file>` " +
-      "in bash and pass the output; on Windows run `certutil -encode <file> tmp.b64` and read the file. " +
-      "Optionally set width/height in points and paragraph alignment.",
+    description: officeToolDescription("word.insert_image"),
     parameters: schema,
     execute: async (
       _toolCallId: string,
@@ -64,6 +63,10 @@ export function createWordInsertImageTool(): AgentTool<typeof schema> {
       }
 
       try {
+        // `Body.insertInlinePictureFromBase64` is WordApi 1.2.
+        const gap = wordInlineImageGateMessage();
+        if (gap !== null) throw new Error(gap);
+
         const location = params.location === "start" ? "Start" : "End";
         await wordRun(async (context) => {
           const picture = context.document.body.insertInlinePictureFromBase64(

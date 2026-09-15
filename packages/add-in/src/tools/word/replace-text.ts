@@ -2,26 +2,17 @@
  * word_replace_text — Find and replace literal text in the live Word document.
  */
 
-import { Type, type Static } from "@sinclair/typebox";
+import {
+  officeToolDescription,
+  WORD_REPLACE_TEXT_PARAMETERS,
+} from "@dieulc/pi-office-protocol/office-catalog";
+import type { Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { wordRun } from "../../word/helpers.js";
 import { getErrorMessage } from "../../utils/errors.js";
 import { t } from "../../language/index.js";
 
-const schema = Type.Object({
-  find: Type.String({
-    description:
-      "Literal text to search for. Case-sensitive only when matchCase is true.",
-  }),
-  replace: Type.String({
-    description: "Replacement text.",
-  }),
-  matchCase: Type.Optional(
-    Type.Boolean({
-      description: "Case-sensitive matching (default false).",
-    }),
-  ),
-});
+const schema = WORD_REPLACE_TEXT_PARAMETERS;
 
 type Params = Static<typeof schema>;
 
@@ -29,9 +20,7 @@ export function createWordReplaceTextTool(): AgentTool<typeof schema> {
   return {
     name: "word_replace_text",
     label: t("tools.wordReplaceText"),
-    description:
-      "Find and replace literal text across the live Word document. " +
-      "Prefer this for targeted corrections; use word_insert_text for additions.",
+    description: officeToolDescription("word.replace_text"),
     parameters: schema,
     execute: async (
       _toolCallId: string,

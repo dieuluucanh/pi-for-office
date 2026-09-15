@@ -2,7 +2,108 @@
 
 Concise record of recent tool behavior choices to avoid regressions. Update this as we tweak tooling.
 
-## WPS registry seam and Phase 2 overrides (NEXSELL-370)
+## Word text fill: `highlight` vs `shading`
+
+- **`highlight` is the primary, portable fill.** It maps to `Word.Font.highlightColor` (**WordApi 1.1**),
+  so it works on Word desktop *and* Word for the web. `"none"` clears it — `highlightColor` is typed
+  `string`, but Microsoft documents `null` as the clear operation, so that assignment carries one
+  commented cast.
+- **`shading` is a separate, opt-in true background fill** (`backgroundPatternColor`), which is
+  **WordApiDesktop 1.3** — desktop only.
+- **Shading span varies by tool, deliberately.** `word_format_range` applies it per matched **range**, so
+  the fill covers the matched characters only; `word_insert_text` / `word_insert_blocks` apply it to the
+  created **paragraph**, because those operations produce whole paragraphs. The `shading` parameter
+  description states this difference.
+- **The original bug was a correct statement about the tool surface** ("Word formatting doesn't expose a
+  fill option via these tools"), so the fix was to add the capability — not to reword the answer.
+
+## Fail-loud capability contract
+
+- **Never silently degrade.** When a tool needs a requirement set the host lacks, it returns a message
+  naming the capability, the set + version, the actual platform, and the remedy (`requireCapability()` /
+  `capabilityGapMessage()` in `src/office/capabilities.ts`).
+- **`"unknown"` verdicts attempt the call.** Hosts with no requirements API (WPS, older Office.js builds)
+  report `"unknown"`; the operation is attempted so the host's real error surfaces instead of being
+  pre-empted by a wrong guess. `capabilityUnsupported()` likewise returns `false` for `"unknown"`.
+- **Prefer a portable fallback over a refusal.** `word_insert_hyperlink` uses `range.hyperlinks.add()`
+  when WordApiDesktop 1.3 is available, and otherwise inserts a self-contained OOXML `w:fldSimple`
+  HYPERLINK field via `insertOoxml` (WordApi 1.1) — so the tool works on Word for the web rather than
+  throwing. The result text reports which path ran.
+- **Tools must not claim universal support.** Descriptions are single-sourced from the catalog
+  (`officeToolDescription()`), and a catalog test fails CI if any description contains "fully supported"
+  or "never tell the user". The prompt tells the agent to say a property is unavailable when it is absent
+  from the schema, and to call `office_word_get_capabilities` when unsure.
+
+## Capability rollout (2026-09-15 remaining-work plan)
+
+### Requirement sets are verified, never guessed
+
+Every gate is checked against the installed `@types/office-js` before it lands. Two facts in the plan that
+produced this work were wrong and were corrected in code:
+
+- **`Range.insertText` and `Paragraph.alignment` are WordApi 1.1**, not 1.3. Gating them would have been a
+  pure regression. The 1.3 calls actually used by the insert engine are `Paragraph.getRange()` /
+  `Range.getRange()` — those are gated, and only the multi-run / multi-block paths call them, so plain
+  single-run insertion still works on a WordApi 1.1 host.
+- **PowerPoint slide background fill is PowerPointApi 1.10** (`slide.background.fill.setSolidFill`), not 1.4.
+  Shape fill (`shape.fill.setSolidColor/clear/transparency`) is 1.4. They are gated separately
+  (`powerpoint.slide.background` vs `powerpoint.shape.fill`), so a 1.4 host still gets shape fill.
+
+### Excel: `conditional_format` families (ExcelApi 1.6)
+
+- All eight `Excel.ConditionalFormatType` families are exposed: `formula` (custom), `cell_value`,
+  `data_bar`, `color_scale`, `icon_set`, `top_bottom`, `preset_criteria`, `contains_text`.
+- **One gate, not six:** `ConditionalFormatCollection.add` and `clearAll` are both ExcelApi 1.6, so the whole
+  tool is gated on `excel.conditionalFormat.types`.
+- **No above-average / duplicate-unique families:** those are `presetCriteria` *criteria*, not separate
+  conditional-format types.
+
+### PowerPoint: formatting surface and the bullet set split
+
+- Shape fill (1.4), shape line colour/weight/style/dash/visibility/transparency (1.4), font underline
+  *styles* (1.4, 17 values, `true`/`false` kept as the legacy alias), font effects (strikethrough,
+  double-strikethrough, small caps, all caps, sub/superscript — **1.8**), slide background fill (**1.10**).
+- **Bullets are split by set:** `bulletVisible` is **1.4**; `bulletStyle` / `bulletType` and paragraph
+  `indentLevel` are **1.10**. A single gate would have withheld bullet visibility from capable 1.4 hosts.
+- **`powerpoint_add_slide`:** `setSelectedSlides` is 1.5. On a host known to lack it the slide is still
+  added and the result says the navigation was skipped; an `"unknown"` verdict still attempts the call.
+- `powerpoint.shapes` (1.3) gates every tool that touches `slide.shapes`.
+
+### Excel: remaining gates
+
+`showGridlines`/`showHeadings` 1.8, worksheet `visibility` setter 1.2, `RangeAreas` (multi-range
+`format_cells`) 1.9, comments 1.10, `sheet.shapes` 1.9, `Chart.getImage` 1.7, `Range.autoFill` 1.9.
+`merge`/`unmerge` and tables/charts need **no** gate — they are ExcelApi 1.1–1.2, so their restrictions
+were bridge limitations, not host ones.
+
+### Silent omissions removed
+
+- `get_workbook_overview` no longer reports `0 shapes` as fact when `sheet.shapes` fails or the host lacks
+  ExcelApi 1.9 — it says the shape count is unavailable and why.
+- `charts` no longer swallows a failed backup capture into `details.recovery` only; the failure text is
+  appended to the visible result ("… applied without a restore point").
+
+### One definition per schema
+
+- Every catalog-backed tool now uses the catalog's parameter object directly (`const schema =
+  EXCEL_*_PARAMETERS`) instead of keeping a private copy. The catalog is the single source for names,
+  descriptions, enums, and optionality, so the in-browser agent and the bridge agent see byte-identical
+  metadata.
+- Catalog descriptions were brought up to the richer tool wording where the two had drifted, so nothing was
+  lost in the collapse.
+
+### Guards (CI)
+
+- **`tests/schema-implementation-parity.test.ts`** — for each of Word / PowerPoint / Excel, every property
+  the schema advertises must have a real read/assignment in the implementation file that applies it. The
+  check strips comments (a JSDoc mention of `WordTextFormat.highlight` used to satisfy it) and reads the
+  same source the runtime imports. This is the guard that catches the original `highlight` bug: deleting the
+  `format.highlight` assignment fails it.
+- **`tests/capability-schema-consistency.test.ts`** — every id in `*_CAPABILITIES` must be named by a caller
+  outside `src/office/capabilities.ts`, or be listed in `PROBE_ONLY_CAPABILITY_IDS` (the WordApi 1.1 specs
+  that exist so the capability report can answer truthfully even though no parameter needs a gate).
+- **`CATALOG_VERSION` was not bumped:** the changes add *optional* parameters to existing ops. No op was
+  added or removed and no previously-valid call became invalid, so connected panes stay compatible.
 
 - **Tool list:** keep `CORE_TOOL_NAMES` as the single ordered source of truth and keep core tool schemas/metadata stable across hosts.
 - **WPS Phase 2 override mechanism:** `host-selection.ts` owns `WPS_CORE_TOOL_EXECUTE_OVERRIDES`, a narrow execute-only map for WPS-backed core tools. Supported WPS tools are composed as `{ ...officeTool, execute: wpsExecute }`, so `name`/`label`/`description`/`parameters` remain byte-for-byte identical to the Office tool object for prompt-cache stability.
@@ -28,8 +129,10 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Accepted values:** canonical `thin | medium | thick | none` (weight, not style).
 - **Input normalization:** `borders` / `border_*` values are normalized case-insensitively and accept `Border*`/`Borders*` prefixes (`None`, `BordersNone`, etc.) before applying.
 - **Implementation:**
-  - `none` → `border.style = "None"`
-  - others → `border.style = "Continuous"` + `border.weight = Thin|Medium|Thick`
+  - `none` → `border.style = "None"` (a requested `border_style` is ignored in this case, so "no border" stays "no border")
+  - others → `border.style = border_style ?? "Continuous"` + `border.weight = Thin|Medium|Thick`
+- **`border_style`:** one of the eight `Excel.BorderLineStyle` values (`None`, `Continuous`, `Dash`, `DashDot`, `DashDotDot`, `Dot`, `Double`, `SlantDashDot`) — **ExcelApi 1.1**, so no gate. There is no `Hair` member (an earlier audit invented it).
+- **`underline`:** `true`/`false` remain the legacy alias for `"Single"`/`"None"`; a named `Excel.RangeUnderlineStyle` also works. An unknown string resolves to `"None"` rather than being cast onto the font.
 - **Rationale:** Office.js `BorderLineStyle` does not include Thin/Medium/Thick; those are weights.
 
 ## Multi-range formatting (`format_cells.range`)

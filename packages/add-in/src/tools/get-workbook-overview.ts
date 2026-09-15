@@ -9,23 +9,29 @@
  */
 
 import { t } from "../language/index.js";
-import { Type, type Static } from "@sinclair/typebox";
+import { EXCEL_GET_OVERVIEW_PARAMETERS } from "@dieulc/pi-office-protocol/office-catalog";
+import type { Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { excelRun, colToLetter } from "../excel/helpers.js";
+import { capabilityUnsupported } from "../office/capabilities.js";
 import { getErrorMessage } from "../utils/errors.js";
 
-const schema = Type.Object({
-  sheet: Type.Optional(
-    Type.String({
-      description:
-        "If provided, return detailed info for this specific sheet " +
-        "(dimensions, headers, tables, named ranges, objects, and a data preview). " +
-        "If omitted, return the workbook-level overview.",
-    }),
-  ),
-});
+const schema = EXCEL_GET_OVERVIEW_PARAMETERS;
 
 type Params = Static<typeof schema>;
+
+/**
+ * Why `sheet.shapes` cannot be read, or null when it can.
+ *
+ * `Worksheet.shapes` is ExcelApi 1.9. An "unknown" verdict (no requirements
+ * API, e.g. WPS) returns null so the call is attempted and its real error is
+ * reported, rather than being pre-empted.
+ */
+function shapesAccessUnavailableReason(): string | null {
+  return capabilityUnsupported("excel.shape")
+    ? "unavailable (needs ExcelApi 1.9)"
+    : null;
+}
 
 export function createGetWorkbookOverviewTool(): AgentTool<typeof schema> {
   return {
@@ -52,7 +58,12 @@ export function createGetWorkbookOverviewTool(): AgentTool<typeof schema> {
         };
       } catch (e) {
         return {
-          content: [{ type: "text", text: `Error getting workbook overview: ${getErrorMessage(e)}` }],
+          content: [
+            {
+              type: "text",
+              text: `Error getting workbook overview: ${getErrorMessage(e)}`,
+            },
+          ],
           details: undefined,
         };
       }
@@ -99,11 +110,17 @@ export async function buildOverview(): Promise<string> {
       const pivotCount = pivotTables.getCount();
 
       let shapes: Excel.ShapeCollection | null = null;
-      try {
-        shapes = sheet.shapes;
-        shapes.load("items");
-      } catch {
-        shapes = null;
+      let shapesUnavailableReason: string | null =
+        shapesAccessUnavailableReason();
+      if (shapesUnavailableReason === null) {
+        try {
+          shapes = sheet.shapes;
+          shapes.load("items");
+        } catch (error) {
+          // Never report "0 shapes" as fact: say the count is unavailable.
+          shapes = null;
+          shapesUnavailableReason = `unavailable on this host (${getErrorMessage(error)})`;
+        }
       }
 
       await context.sync();
@@ -112,27 +129,34 @@ export async function buildOverview(): Promise<string> {
         ? "empty"
         : `${used.rowCount} rows × ${used.columnCount} cols`;
 
-      const visibility = sheet.visibility === "Visible" ? "" : ` (${sheet.visibility})`;
+      const visibility =
+        sheet.visibility === "Visible" ? "" : ` (${sheet.visibility})`;
 
       const headers = headerRange.isNullObject
         ? []
-        : (headerRange.values[0] ?? []).filter((v) => v !== null && v !== undefined && v !== "");
+        : (headerRange.values[0] ?? []).filter(
+            (v) => v !== null && v !== undefined && v !== "",
+          );
 
       lines.push(
         `${sheet.position + 1}. **${sheet.name}**${visibility} — ${dims}`,
       );
 
       if (headers.length > 0) {
-        const display = headers.length > 8
-          ? headers.slice(0, 8).join(", ") + `, … (+${headers.length - 8} more)`
-          : headers.join(", ");
+        const display =
+          headers.length > 8
+            ? headers.slice(0, 8).join(", ") +
+              `, … (+${headers.length - 8} more)`
+            : headers.join(", ");
         lines.push(`   Headers: ${display}`);
       }
 
       // List tables
       if (tables.items.length > 0) {
         for (const table of tables.items) {
-          lines.push(`   Table: "${table.name}" (${table.rows.count} rows × ${table.columns.count} cols)`);
+          lines.push(
+            `   Table: "${table.name}" (${table.rows.count} rows × ${table.columns.count} cols)`,
+          );
         }
       }
 
@@ -140,10 +164,14 @@ export async function buildOverview(): Promise<string> {
       const pivotTotal = pivotCount.value || 0;
       const shapeCount = shapes ? shapes.items.length : 0;
       const objectTotal = chartCount + pivotTotal + shapeCount;
+      const shapeText =
+        shapesUnavailableReason === null
+          ? `${shapeCount} shape(s)`
+          : `shape count ${shapesUnavailableReason}`;
 
-      if (objectTotal > 0) {
+      if (objectTotal > 0 || shapesUnavailableReason !== null) {
         lines.push(
-          `   Objects: ${chartCount} chart(s), ${pivotTotal} pivot table(s), ${shapeCount} shape(s)`,
+          `   Objects: ${chartCount} chart(s), ${pivotTotal} pivot table(s), ${shapeText}`,
         );
       }
     }
@@ -196,11 +224,17 @@ async function buildSheetDetail(sheetName: string): Promise<string> {
     const pivotCount = pivotTables.getCount();
 
     let shapes: Excel.ShapeCollection | null = null;
-    try {
-      shapes = sheet.shapes;
-      shapes.load("items/name");
-    } catch {
-      shapes = null;
+    let shapesUnavailableReason: string | null =
+      shapesAccessUnavailableReason();
+    if (shapesUnavailableReason === null) {
+      try {
+        shapes = sheet.shapes;
+        shapes.load("items/name");
+      } catch (error) {
+        // Never report an empty shape list as fact.
+        shapes = null;
+        shapesUnavailableReason = `unavailable on this host (${getErrorMessage(error)})`;
+      }
     }
 
     await context.sync();
@@ -208,7 +242,8 @@ async function buildSheetDetail(sheetName: string): Promise<string> {
     const lines: string[] = [];
 
     // ── Header ──
-    const visibility = sheet.visibility === "Visible" ? "" : ` (${sheet.visibility})`;
+    const visibility =
+      sheet.visibility === "Visible" ? "" : ` (${sheet.visibility})`;
     const dims = used.isNullObject
       ? "empty"
       : `${used.rowCount} rows × ${used.columnCount} cols`;
@@ -257,9 +292,10 @@ async function buildSheetDetail(sheetName: string): Promise<string> {
     const chartNames = charts.items.map((c) => c.name);
     const pivotNames = pivotTables.items.map((p) => p.name);
     const shapeNames = shapes ? shapes.items.map((s) => s.name) : [];
-    const objectTotal = chartNames.length + pivotNames.length + shapeNames.length;
+    const objectTotal =
+      chartNames.length + pivotNames.length + shapeNames.length;
 
-    if (objectTotal > 0) {
+    if (objectTotal > 0 || shapesUnavailableReason !== null) {
       lines.push("");
       lines.push("### Objects");
       lines.push(
@@ -269,7 +305,9 @@ async function buildSheetDetail(sheetName: string): Promise<string> {
         `- Pivot tables (${pivotCount.value}): ${pivotNames.length > 0 ? pivotNames.join(", ") : "(none)"}`,
       );
       lines.push(
-        `- Shapes (${shapeNames.length}): ${shapeNames.length > 0 ? shapeNames.join(", ") : "(none)"}`,
+        shapesUnavailableReason === null
+          ? `- Shapes (${shapeNames.length}): ${shapeNames.length > 0 ? shapeNames.join(", ") : "(none)"}`
+          : `- Shapes: count ${shapesUnavailableReason}`,
       );
     }
 
@@ -281,7 +319,9 @@ async function buildSheetDetail(sheetName: string): Promise<string> {
       const colCount = used.columnCount;
 
       // Column letters as header
-      const colLetters = Array.from({ length: colCount }, (_, i) => colToLetter(i));
+      const colLetters = Array.from({ length: colCount }, (_, i) =>
+        colToLetter(i),
+      );
       const headerRow = `| | ${colLetters.join(" | ")} |`;
       const separator = `|---|${colLetters.map(() => "---").join("|")}|`;
 
@@ -292,7 +332,13 @@ async function buildSheetDetail(sheetName: string): Promise<string> {
       for (let r = 0; r < previewRows.length; r++) {
         const row = previewRows[r] ?? [];
         const cells = row.map((v) =>
-          v === null || v === undefined || v === "" ? "" : typeof v === "string" ? v : typeof v === "number" || typeof v === "boolean" ? String(v) : JSON.stringify(v),
+          v === null || v === undefined || v === ""
+            ? ""
+            : typeof v === "string"
+              ? v
+              : typeof v === "number" || typeof v === "boolean"
+                ? String(v)
+                : JSON.stringify(v),
         );
         lines.push(`| ${r + 1} | ${cells.join(" | ")} |`);
       }

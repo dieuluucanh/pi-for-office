@@ -21,6 +21,7 @@ import { createExplainFormulaTool } from "../tools/explain-formula.js";
 import { createViewSettingsTool } from "../tools/view-settings.js";
 import { createCommentsTool } from "../tools/comments.js";
 import { createWorkbookHistoryTool } from "../tools/workbook-history.js";
+import { createExcelGetCapabilitiesTool } from "../tools/get-capabilities.js";
 import { guardExecutor, type OfficeOpExecutor } from "./ops.js";
 import { delegateTool } from "./delegate.js";
 
@@ -62,6 +63,10 @@ export const EXCEL_OPS: ReadonlyMap<string, OfficeOpExecutor> = new Map<
  [
   "excel.workbook_history",
   guardExecutor(delegateTool(createWorkbookHistoryTool())),
+ ],
+ [
+  "excel.get_capabilities",
+  guardExecutor(delegateTool(createExcelGetCapabilitiesTool())),
  ],
 ]);
 

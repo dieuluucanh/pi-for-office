@@ -3,10 +3,13 @@
  * document, with optional header-row bolding, table style and alignment.
  */
 
-import { WORD_INSERT_TABLE_PARAMETERS } from "@dieulc/pi-office-protocol/office-catalog";
+import {
+  WORD_INSERT_TABLE_PARAMETERS,
+  officeToolDescription,
+} from "@dieulc/pi-office-protocol/office-catalog";
 import type { Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { wordRun } from "../../word/helpers.js";
+import { wordRun, wordTableInsertGateMessage } from "../../word/helpers.js";
 import { getErrorMessage } from "../../utils/errors.js";
 import { t } from "../../language/index.js";
 
@@ -19,9 +22,7 @@ export function createWordInsertTableTool(): AgentTool<typeof schema> {
   return {
     name: "word_insert_table",
     label: t("tools.wordInsertTable"),
-    description:
-      "Insert a table into the live Word document with values[row][col]. " +
-      "Optionally bold the header row, apply a table style name, and align the table.",
+    description: officeToolDescription("word.insert_table"),
     parameters: schema,
     execute: async (
       _toolCallId: string,
@@ -63,6 +64,10 @@ export function createWordInsertTableTool(): AgentTool<typeof schema> {
       }
 
       try {
+        // `Body.insertTable` is WordApi 1.3 — fail loud on an older host.
+        const gap = wordTableInsertGateMessage();
+        if (gap !== null) throw new Error(gap);
+
         const location = params.location === "start" ? "Start" : "End";
         await wordRun(async (context) => {
           const body = context.document.body;

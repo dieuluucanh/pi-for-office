@@ -1,92 +1,36 @@
 /**
  * powerpoint_add_text_box — Add a text box with content to a slide.
  *
- * Optional formatting (bold/italic/underline/fontSize/fontName/fontColor/
- * alignment) is applied to the inserted text in the same batch.
+ * Optional formatting (text props plus shape fill) is applied to the inserted
+ * shape in the same batch. Shape fill needs PowerPointApi 1.4 and fails loudly
+ * on an older host.
  */
 
-import { Type, type Static } from "@sinclair/typebox";
+import {
+  POWERPOINT_ADD_TEXT_BOX_PARAMETERS,
+  officeToolDescription,
+} from "@dieulc/pi-office-protocol/office-catalog";
+import type { Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import {
+  hasPowerPointShapeFill,
+  hasPowerPointShapeLine,
+  hasPowerPointTextFormat,
   powerPointRun,
+  powerPointShapesGateMessage,
+  powerPointTextFormatGap,
+  setPowerPointShapeFill,
+  setPowerPointShapeLine,
   setPowerPointTextFormat,
+  type PowerPointShapeFill,
+  type PowerPointShapeLine,
   type PowerPointTextFormat,
 } from "../../powerpoint/helpers.js";
+import { requireCapability } from "../../office/capabilities.js";
 import { getErrorMessage } from "../../utils/errors.js";
 import { t } from "../../language/index.js";
 
-const schema = Type.Object({
-  slideIndex: Type.Number({
-    description: "1-based slide number to add the text box to.",
-  }),
-  text: Type.String({
-    description: "Text content for the text box.",
-  }),
-  x: Type.Optional(
-    Type.Number({
-      description: "Left edge in points (default 72).",
-    }),
-  ),
-  y: Type.Optional(
-    Type.Number({
-      description: "Top edge in points (default 72).",
-    }),
-  ),
-  width: Type.Optional(
-    Type.Number({
-      description: "Width in points (default 400).",
-    }),
-  ),
-  height: Type.Optional(
-    Type.Number({
-      description: "Height in points (default 60).",
-    }),
-  ),
-  bold: Type.Optional(
-    Type.Boolean({
-      description: "Make the text bold.",
-    }),
-  ),
-  italic: Type.Optional(
-    Type.Boolean({
-      description: "Make the text italic.",
-    }),
-  ),
-  underline: Type.Optional(
-    Type.Boolean({
-      description: "Underline the text (single underline).",
-    }),
-  ),
-  fontSize: Type.Optional(
-    Type.Number({
-      description: "Font size in points (e.g. 24 for titles).",
-    }),
-  ),
-  fontName: Type.Optional(
-    Type.String({
-      description: 'Font name (e.g. "Arial").',
-    }),
-  ),
-  fontColor: Type.Optional(
-    Type.String({
-      description: 'Font color as #RRGGBB (e.g. "#333333").',
-    }),
-  ),
-  alignment: Type.Optional(
-    Type.Union(
-      [
-        Type.Literal("Left"),
-        Type.Literal("Center"),
-        Type.Literal("Right"),
-        Type.Literal("Justify"),
-      ],
-      {
-        description:
-          'Horizontal alignment for the text. PowerPoint values: "Left", "Center", "Right", "Justify".',
-      },
-    ),
-  ),
-});
+const schema = POWERPOINT_ADD_TEXT_BOX_PARAMETERS;
 
 type Params = Static<typeof schema>;
 
@@ -94,11 +38,7 @@ export function createPowerPointAddTextBoxTool(): AgentTool<typeof schema> {
   return {
     name: "powerpoint_add_text_box",
     label: t("tools.powerPointAddTextBox"),
-    description:
-      "Add a text box with the given text to a slide of the live PowerPoint presentation. " +
-      "Coordinates and geometry are in points. Optionally format the text in the same call " +
-      '(bold, italic, underline, fontSize/fontName/fontColor, alignment "Left"/"Center"/"Right"/"Justify") — ' +
-      "use formatting to produce well-styled slides instead of plain unformatted text.",
+    description: officeToolDescription("powerpoint.add_text_box"),
     parameters: schema,
     execute: async (
       _toolCallId: string,
@@ -124,15 +64,29 @@ export function createPowerPointAddTextBoxTool(): AgentTool<typeof schema> {
       }
 
       try {
+        // `slide.shapes` is PowerPointApi 1.3.
+        const shapesGap = powerPointShapesGateMessage();
+        if (shapesGap !== null) throw new Error(shapesGap);
+
         const format: PowerPointTextFormat = params;
-        const hasFormatting =
-          params.bold !== undefined ||
-          params.italic !== undefined ||
-          params.underline !== undefined ||
-          params.fontSize !== undefined ||
-          params.fontName !== undefined ||
-          params.fontColor !== undefined ||
-          params.alignment !== undefined;
+        const fill: PowerPointShapeFill = params;
+        const line: PowerPointShapeLine = params;
+        const hasFormatting = hasPowerPointTextFormat(format);
+        const hasFill = hasPowerPointShapeFill(fill);
+        const hasLine = hasPowerPointShapeLine(line);
+
+        if (hasFormatting) {
+          const gap = powerPointTextFormatGap(format);
+          if (gap !== null) throw new Error(gap);
+        }
+        if (hasFill) {
+          const gap = requireCapability("powerpoint.shape.fill");
+          if (gap !== null) throw new Error(gap);
+        }
+        if (hasLine) {
+          const gap = requireCapability("powerpoint.shape.line");
+          if (gap !== null) throw new Error(gap);
+        }
 
         const out = await powerPointRun(async (context) => {
           const slides = context.presentation.slides;
@@ -159,6 +113,12 @@ export function createPowerPointAddTextBoxTool(): AgentTool<typeof schema> {
           if (hasFormatting) {
             setPowerPointTextFormat(shape.textFrame.textRange, format);
           }
+          if (hasFill) {
+            setPowerPointShapeFill(shape, fill);
+          }
+          if (hasLine) {
+            setPowerPointShapeLine(shape, line);
+          }
           shape.load("id");
           await context.sync();
           return { id: shape.id };
@@ -170,7 +130,8 @@ export function createPowerPointAddTextBoxTool(): AgentTool<typeof schema> {
             details: undefined,
           };
         }
-        const formatNote = hasFormatting ? " (formatted)" : "";
+        const formatNote =
+          hasFormatting || hasFill || hasLine ? " (formatted)" : "";
         return {
           content: [
             {

@@ -7,7 +7,10 @@
  * mark heading/list paragraphs so structure survives round-trips.
  */
 
-import { WORD_READ_DOCUMENT_PARAMETERS } from "@dieulc/pi-office-protocol/office-catalog";
+import {
+  WORD_READ_DOCUMENT_PARAMETERS,
+  officeToolDescription,
+} from "@dieulc/pi-office-protocol/office-catalog";
 import type { Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { wordRun } from "../../word/helpers.js";
@@ -35,10 +38,7 @@ export function createWordReadDocumentTool(): AgentTool<typeof schema> {
   return {
     name: "word_read_document",
     label: t("tools.wordReadDocument"),
-    description:
-      "Read text from the live Word document: the whole body by default, or just the current selection. " +
-      "Paragraphs are preserved one per line; headings are prefixed with # and list items indented. " +
-      "Always read before modifying — never guess what's in the document.",
+    description: officeToolDescription("word.read_document"),
     parameters: schema,
     execute: async (
       _toolCallId: string,

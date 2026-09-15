@@ -2,17 +2,20 @@
  * powerpoint_read_slide — Read all text on a slide of the live presentation.
  */
 
-import { Type, type Static } from "@sinclair/typebox";
+import {
+  officeToolDescription,
+  POWERPOINT_READ_SLIDE_PARAMETERS,
+} from "@dieulc/pi-office-protocol/office-catalog";
+import type { Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { powerPointRun } from "../../powerpoint/helpers.js";
+import {
+  powerPointRun,
+  powerPointShapesGateMessage,
+} from "../../powerpoint/helpers.js";
 import { getErrorMessage } from "../../utils/errors.js";
 import { t } from "../../language/index.js";
 
-const schema = Type.Object({
-  slideIndex: Type.Number({
-    description: "1-based slide number to read.",
-  }),
-});
+const schema = POWERPOINT_READ_SLIDE_PARAMETERS;
 
 type Params = Static<typeof schema>;
 
@@ -26,6 +29,9 @@ interface SlideTextEntry {
 async function readSlideTexts(
   slide: PowerPoint.Slide,
 ): Promise<SlideTextEntry[]> {
+  // `slide.shapes` is PowerPointApi 1.3.
+  const gap = powerPointShapesGateMessage();
+  if (gap !== null) throw new Error(gap);
   // Phase 1: shape proxies + which ones carry text.
   const shapes = slide.shapes;
   shapes.load("items/type/name");
@@ -59,9 +65,7 @@ export function createPowerPointReadSlideTool(): AgentTool<typeof schema> {
   return {
     name: "powerpoint_read_slide",
     label: t("tools.powerPointReadSlide"),
-    description:
-      "Read all text content on one slide of the live PowerPoint presentation " +
-      "(shapes, text frames, notes). Call powerpoint_get_overview first to learn the structure.",
+    description: officeToolDescription("powerpoint.read_slide"),
     parameters: schema,
     execute: async (
       _toolCallId: string,

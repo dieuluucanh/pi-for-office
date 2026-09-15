@@ -4,7 +4,8 @@
  * This avoids constructing large 2D formula arrays. References adjust automatically.
  */
 
-import { Type, type Static } from "@sinclair/typebox";
+import { EXCEL_FILL_FORMULA_PARAMETERS } from "@dieulc/pi-office-protocol/office-catalog";
+import type { Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { FillFormulaDetails } from "./tool-details.js";
 import { excelRun, getRange, qualifiedAddress } from "../excel/helpers.js";
@@ -15,6 +16,7 @@ import { getWorkbookRecoveryLog } from "../workbook/recovery-log.js";
 import { countOccupiedCells, validateFormula } from "./write-cells.js";
 import { findErrors } from "../utils/format.js";
 import { getErrorMessage } from "../utils/errors.js";
+import { requireCapability } from "../office/capabilities.js";
 import {
   CHECKPOINT_SKIPPED_NOTE,
   CHECKPOINT_SKIPPED_REASON,
@@ -23,49 +25,38 @@ import { finalizeMutationOperation } from "./mutation/finalize.js";
 import type { MutationFinalizeDependencies } from "./mutation/types.js";
 import { appendMutationResultNote } from "./mutation/result-note.js";
 
-const schema = Type.Object({
-  range: Type.String({
-    description: 'Target range to fill, e.g. "B2:B20" or "Sheet1!C3:F20". Single contiguous range only.',
-  }),
-  formula: Type.String({
-    description: 'Formula to fill, starting with "=", e.g. "=SUM(B2:B10)". Relative refs will adjust.',
-  }),
-  allow_overwrite: Type.Optional(
-    Type.Boolean({
-      description:
-        "Set to true to overwrite existing data. Default: false. " +
-        "If false and the target range contains data, the fill is blocked.",
-    }),
-  ),
-});
+const schema = EXCEL_FILL_FORMULA_PARAMETERS;
 
 type Params = Static<typeof schema>;
 
 type FillFormulaResult =
   | {
-    blocked: true;
-    sheetName: string;
-    address: string;
-    existingCount: number;
-    existingValues: DynamicValue[][];
-  }
+      blocked: true;
+      sheetName: string;
+      address: string;
+      existingCount: number;
+      existingValues: DynamicValue[][];
+    }
   | {
-    blocked: false;
-    sheetName: string;
-    address: string;
-    rowCount: number;
-    columnCount: number;
-    beforeValues: DynamicValue[][];
-    beforeFormulas: DynamicValue[][];
-    readBackValues: DynamicValue[][];
-    readBackFormulas: DynamicValue[][];
-  };
+      blocked: false;
+      sheetName: string;
+      address: string;
+      rowCount: number;
+      columnCount: number;
+      beforeValues: DynamicValue[][];
+      beforeFormulas: DynamicValue[][];
+      readBackValues: DynamicValue[][];
+      readBackFormulas: DynamicValue[][];
+    };
 
 const mutationFinalizeDependencies: MutationFinalizeDependencies = {
   appendAuditEntry: (entry) => getWorkbookChangeAuditLog().append(entry),
 };
 
-export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDetails> {
+export function createFillFormulaTool(): AgentTool<
+  typeof schema,
+  FillFormulaDetails
+> {
   return {
     name: "fill_formula",
     label: "Fill Formula",
@@ -73,11 +64,16 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
       "Fill a single formula across a range using Excel's AutoFill. " +
       "Relative references adjust automatically. Use this instead of building large formula arrays.",
     parameters: schema,
-    execute: async (toolCallId: string, params: Params): Promise<AgentToolResult<FillFormulaDetails>> => {
+    execute: async (
+      toolCallId: string,
+      params: Params,
+    ): Promise<AgentToolResult<FillFormulaDetails>> => {
       try {
         if (!params.formula.startsWith("=")) {
           return {
-            content: [{ type: "text", text: "Error: formula must start with '='." }],
+            content: [
+              { type: "text", text: "Error: formula must start with '='." },
+            ],
             details: { kind: "fill_formula", blocked: false },
           };
         }
@@ -85,17 +81,28 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
         const invalid = validateFormula(params.formula);
         if (invalid) {
           return {
-            content: [{ type: "text", text: `Error: invalid formula (${invalid}).` }],
+            content: [
+              { type: "text", text: `Error: invalid formula (${invalid}).` },
+            ],
             details: { kind: "fill_formula", blocked: false },
           };
         }
 
         if (/[;,]/.test(params.range)) {
           return {
-            content: [{ type: "text", text: "Error: fill_formula only supports a single contiguous range." }],
+            content: [
+              {
+                type: "text",
+                text: "Error: fill_formula only supports a single contiguous range.",
+              },
+            ],
             details: { kind: "fill_formula", blocked: false },
           };
         }
+
+        // `Range.autoFill` is ExcelApi 1.9 — fail loud on an older host.
+        const gap = requireCapability("excel.autoFill");
+        if (gap !== null) throw new Error(gap);
 
         const result = await excelRun<FillFormulaResult>(async (context) => {
           const { sheet, range } = getRange(context, params.range);
@@ -107,7 +114,10 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
           const beforeFormulas = range.formulas;
 
           if (!params.allow_overwrite) {
-            const occupiedCount = countOccupiedCells(beforeValues, beforeFormulas);
+            const occupiedCount = countOccupiedCells(
+              beforeValues,
+              beforeFormulas,
+            );
             if (occupiedCount > 0) {
               return {
                 blocked: true,
@@ -174,21 +184,41 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
 
         const fullAddr = qualifiedAddress(result.sheetName, result.address);
         const lines: string[] = [];
-        lines.push(`Filled formula across **${fullAddr}** (${result.rowCount}×${result.columnCount})`);
+        lines.push(
+          `Filled formula across **${fullAddr}** (${result.rowCount}×${result.columnCount})`,
+        );
         lines.push(`**Formula pattern:** \`${params.formula}\``);
 
-        const topLeftRaw: DynamicValue = result.readBackFormulas?.[0]?.[0] ?? "";
-        const bottomRightRaw: DynamicValue = result.readBackFormulas?.[result.rowCount - 1]?.[result.columnCount - 1] ?? "";
-        const topLeft = typeof topLeftRaw === "string" ? topLeftRaw : JSON.stringify(topLeftRaw);
-        const bottomRight = typeof bottomRightRaw === "string" ? bottomRightRaw : JSON.stringify(bottomRightRaw);
-        if (topLeft && bottomRight && (result.rowCount > 1 || result.columnCount > 1)) {
-          lines.push(`**Example formulas:** top-left \`${topLeft}\`, bottom-right \`${bottomRight}\``);
+        const topLeftRaw: DynamicValue =
+          result.readBackFormulas?.[0]?.[0] ?? "";
+        const bottomRightRaw: DynamicValue =
+          result.readBackFormulas?.[result.rowCount - 1]?.[
+            result.columnCount - 1
+          ] ?? "";
+        const topLeft =
+          typeof topLeftRaw === "string"
+            ? topLeftRaw
+            : JSON.stringify(topLeftRaw);
+        const bottomRight =
+          typeof bottomRightRaw === "string"
+            ? bottomRightRaw
+            : JSON.stringify(bottomRightRaw);
+        if (
+          topLeft &&
+          bottomRight &&
+          (result.rowCount > 1 || result.columnCount > 1)
+        ) {
+          lines.push(
+            `**Example formulas:** top-left \`${topLeft}\`, bottom-right \`${bottomRight}\``,
+          );
         }
 
         const bangIndex = result.address.indexOf("!");
-        const cellPart = bangIndex >= 0 ? result.address.slice(bangIndex + 1) : result.address;
+        const cellPart =
+          bangIndex >= 0 ? result.address.slice(bangIndex + 1) : result.address;
         const colonIndex = cellPart.indexOf(":");
-        const startCell = colonIndex >= 0 ? cellPart.slice(0, colonIndex) : cellPart;
+        const startCell =
+          colonIndex >= 0 ? cellPart.slice(0, colonIndex) : cellPart;
         const errors = findErrors(result.readBackValues, startCell);
         if (errors.length > 0) {
           lines.push("");
@@ -236,14 +266,15 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
           },
           recovery: {
             result: toolResult,
-            appendRecoverySnapshot: () => getWorkbookRecoveryLog().append({
-              toolName: "fill_formula",
-              toolCallId,
-              address: fullAddr,
-              changedCount: changes.changedCount,
-              beforeValues: result.beforeValues,
-              beforeFormulas: result.beforeFormulas,
-            }),
+            appendRecoverySnapshot: () =>
+              getWorkbookRecoveryLog().append({
+                toolName: "fill_formula",
+                toolCallId,
+                address: fullAddr,
+                changedCount: changes.changedCount,
+                beforeValues: result.beforeValues,
+                beforeFormulas: result.beforeFormulas,
+              }),
             appendResultNote: appendMutationResultNote,
             unavailableReason: CHECKPOINT_SKIPPED_REASON,
             unavailableNote: CHECKPOINT_SKIPPED_NOTE,
@@ -261,7 +292,12 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
         return toolResult;
       } catch (e) {
         return {
-          content: [{ type: "text", text: `Error filling formula: ${getErrorMessage(e)}` }],
+          content: [
+            {
+              type: "text",
+              text: `Error filling formula: ${getErrorMessage(e)}`,
+            },
+          ],
           details: { kind: "fill_formula", blocked: false },
         };
       }

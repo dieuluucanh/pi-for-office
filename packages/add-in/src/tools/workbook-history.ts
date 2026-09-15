@@ -2,7 +2,8 @@
  * workbook_history — list / restore workbook backups.
  */
 
-import { Type, type Static } from "@sinclair/typebox";
+import { EXCEL_WORKBOOK_HISTORY_PARAMETERS } from "@dieulc/pi-office-protocol/office-catalog";
+import type { Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 
 import {
@@ -18,32 +19,7 @@ import { finalizeMutationOperation } from "./mutation/finalize.js";
 import type { MutationFinalizeDependencies } from "./mutation/types.js";
 import type { WorkbookHistoryDetails } from "./tool-details.js";
 
-const schema = Type.Object({
-  action: Type.Optional(
-    Type.Union([
-      Type.Literal("list"),
-      Type.Literal("restore"),
-      Type.Literal("delete"),
-      Type.Literal("clear"),
-    ], {
-      description:
-        "Operation to run. list (default): show recent backups; " +
-        "restore: revert one backup; delete: remove one backup; clear: remove all backups for current workbook.",
-    }),
-  ),
-  snapshot_id: Type.Optional(
-    Type.String({
-      description: "Backup id for restore/delete. If omitted, the latest backup is used.",
-    }),
-  ),
-  limit: Type.Optional(
-    Type.Integer({
-      minimum: 1,
-      maximum: 50,
-      description: "Max backups to list (list action only). Default: 10.",
-    }),
-  ),
-});
+const schema = EXCEL_WORKBOOK_HISTORY_PARAMETERS;
 
 type Params = Static<typeof schema>;
 
@@ -63,7 +39,9 @@ interface WorkbookHistoryRecoveryLogLike {
 
 interface WorkbookHistoryToolDependencies {
   getRecoveryLog: () => WorkbookHistoryRecoveryLogLike;
-  appendAuditEntry: (entry: AppendWorkbookChangeAuditEntryArgs) => Promise<void>;
+  appendAuditEntry: (
+    entry: AppendWorkbookChangeAuditEntryArgs,
+  ) => Promise<void>;
 }
 
 const defaultDependencies: WorkbookHistoryToolDependencies = {
@@ -92,12 +70,17 @@ function buildListMarkdown(snapshots: WorkbookRecoverySnapshot[]): string {
 
   for (const snapshot of snapshots) {
     const changed = snapshot.changedCount.toLocaleString();
-    const toolLabel = snapshot.toolName === "restore_snapshot" ? "restore" : snapshot.toolName;
-    lines.push(`| \`${snapshot.id}\` | ${formatTimestamp(snapshot.at)} | ${toolLabel} | ${snapshot.address} | ${changed} |`);
+    const toolLabel =
+      snapshot.toolName === "restore_snapshot" ? "restore" : snapshot.toolName;
+    lines.push(
+      `| \`${snapshot.id}\` | ${formatTimestamp(snapshot.at)} | ${toolLabel} | ${snapshot.address} | ${changed} |`,
+    );
   }
 
   lines.push("");
-  lines.push("Use `workbook_history` with `action: \"restore\"` and `snapshot_id` to revert a specific backup.");
+  lines.push(
+    'Use `workbook_history` with `action: "restore"` and `snapshot_id` to revert a specific backup.',
+  );
   return lines.join("\n");
 }
 
@@ -116,8 +99,10 @@ export function createWorkbookHistoryTool(
   dependencies: Partial<WorkbookHistoryToolDependencies> = {},
 ): AgentTool<typeof schema, WorkbookHistoryDetails> {
   const resolvedDependencies: WorkbookHistoryToolDependencies = {
-    getRecoveryLog: dependencies.getRecoveryLog ?? defaultDependencies.getRecoveryLog,
-    appendAuditEntry: dependencies.appendAuditEntry ?? defaultDependencies.appendAuditEntry,
+    getRecoveryLog:
+      dependencies.getRecoveryLog ?? defaultDependencies.getRecoveryLog,
+    appendAuditEntry:
+      dependencies.appendAuditEntry ?? defaultDependencies.appendAuditEntry,
   };
   const mutationFinalizeDependencies: MutationFinalizeDependencies = {
     appendAuditEntry: (entry) => resolvedDependencies.appendAuditEntry(entry),
@@ -129,7 +114,10 @@ export function createWorkbookHistoryTool(
     description:
       "List, restore, and manage automatic workbook backups created before Pi edits.",
     parameters: schema,
-    execute: async (toolCallId: string, params: Params): Promise<AgentToolResult<WorkbookHistoryDetails>> => {
+    execute: async (
+      toolCallId: string,
+      params: Params,
+    ): Promise<AgentToolResult<WorkbookHistoryDetails>> => {
       const action = params.action ?? "list";
       const log = resolvedDependencies.getRecoveryLog();
 
@@ -140,7 +128,9 @@ export function createWorkbookHistoryTool(
 
           if (snapshots.length === 0) {
             return {
-              content: [{ type: "text", text: "No backups for this workbook yet." }],
+              content: [
+                { type: "text", text: "No backups for this workbook yet." },
+              ],
               details: {
                 kind: "workbook_history",
                 action: "list",
@@ -171,14 +161,17 @@ export function createWorkbookHistoryTool(
         if (action === "restore") {
           const snapshotId = await resolveSnapshotId(log, params);
           if (!snapshotId) {
-            const restoreUnavailableResult: AgentToolResult<WorkbookHistoryDetails> = {
-              content: [{ type: "text", text: "No backups available to restore." }],
-              details: {
-                kind: "workbook_history",
-                action: "restore",
-                error: "missing_snapshot",
-              },
-            };
+            const restoreUnavailableResult: AgentToolResult<WorkbookHistoryDetails> =
+              {
+                content: [
+                  { type: "text", text: "No backups available to restore." },
+                ],
+                details: {
+                  kind: "workbook_history",
+                  action: "restore",
+                  error: "missing_snapshot",
+                },
+              };
 
             await finalizeMutationOperation(mutationFinalizeDependencies, {
               auditEntry: {
@@ -196,11 +189,17 @@ export function createWorkbookHistoryTool(
 
           const restored = await log.restore(snapshotId);
           const lines: string[] = [];
-          lines.push(`✅ Restored backup \`${shortId(restored.restoredSnapshotId)}\` at **${restored.address}**.`);
-          lines.push(`Changed item(s): ${restored.changedCount.toLocaleString()}.`);
+          lines.push(
+            `✅ Restored backup \`${shortId(restored.restoredSnapshotId)}\` at **${restored.address}**.`,
+          );
+          lines.push(
+            `Changed item(s): ${restored.changedCount.toLocaleString()}.`,
+          );
 
           if (restored.inverseSnapshotId) {
-            lines.push(`Rollback backup created: \`${shortId(restored.inverseSnapshotId)}\`.`);
+            lines.push(
+              `Rollback backup created: \`${shortId(restored.inverseSnapshotId)}\`.`,
+            );
           }
 
           await finalizeMutationOperation(mutationFinalizeDependencies, {
@@ -222,7 +221,9 @@ export function createWorkbookHistoryTool(
               action: "restore",
               snapshotId,
               restoredSnapshotId: restored.restoredSnapshotId,
-              ...(typeof restored.inverseSnapshotId === "string" ? { inverseSnapshotId: restored.inverseSnapshotId } : {}),
+              ...(typeof restored.inverseSnapshotId === "string"
+                ? { inverseSnapshotId: restored.inverseSnapshotId }
+                : {}),
               address: restored.address,
               changedCount: restored.changedCount,
             },
@@ -233,7 +234,9 @@ export function createWorkbookHistoryTool(
           const snapshotId = await resolveSnapshotId(log, params);
           if (!snapshotId) {
             return {
-              content: [{ type: "text", text: "No backups available to delete." }],
+              content: [
+                { type: "text", text: "No backups available to delete." },
+              ],
               details: {
                 kind: "workbook_history",
                 action: "delete",
@@ -256,7 +259,12 @@ export function createWorkbookHistoryTool(
           }
 
           return {
-            content: [{ type: "text", text: `Deleted backup \`${shortId(snapshotId)}\`.` }],
+            content: [
+              {
+                type: "text",
+                text: `Deleted backup \`${shortId(snapshotId)}\`.`,
+              },
+            ],
             details: {
               kind: "workbook_history",
               action: "delete",
@@ -268,7 +276,12 @@ export function createWorkbookHistoryTool(
 
         const removed = await log.clearForCurrentWorkbook();
         return {
-          content: [{ type: "text", text: `Cleared ${removed} backup${removed === 1 ? "" : "s"} for this workbook.` }],
+          content: [
+            {
+              type: "text",
+              text: `Cleared ${removed} backup${removed === 1 ? "" : "s"} for this workbook.`,
+            },
+          ],
           details: {
             kind: "workbook_history",
             action: "clear",

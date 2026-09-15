@@ -1,8 +1,13 @@
 /** Format-selection helpers for recovery snapshots. */
 
-import type { RecoveryFormatAreaShape, RecoveryFormatSelection } from "./types.js";
+import type {
+  RecoveryFormatAreaShape,
+  RecoveryFormatSelection,
+} from "../recovery-states.js";
 
-export function hasSelectedFormatProperty(selection: RecoveryFormatSelection): boolean {
+export function hasSelectedFormatProperty(
+  selection: RecoveryFormatSelection,
+): boolean {
   return (
     selection.numberFormat === true ||
     selection.fillColor === true ||
@@ -10,6 +15,8 @@ export function hasSelectedFormatProperty(selection: RecoveryFormatSelection): b
     selection.bold === true ||
     selection.italic === true ||
     selection.underlineStyle === true ||
+    selection.strikethrough === true ||
+    selection.indentLevel === true ||
     selection.fontName === true ||
     selection.fontSize === true ||
     selection.horizontalAlignment === true ||
@@ -34,6 +41,8 @@ function hasAreaScalarSelection(selection: RecoveryFormatSelection): boolean {
     selection.bold === true ||
     selection.italic === true ||
     selection.underlineStyle === true ||
+    selection.strikethrough === true ||
+    selection.indentLevel === true ||
     selection.fontName === true ||
     selection.fontSize === true ||
     selection.horizontalAlignment === true ||

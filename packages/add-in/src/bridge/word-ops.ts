@@ -7,6 +7,7 @@
  */
 
 import { createWordGetOverviewTool } from "../tools/word/get-overview.js";
+import { createWordGetCapabilitiesTool } from "../tools/word/get-capabilities.js";
 import { createWordReadDocumentTool } from "../tools/word/read-document.js";
 import { createWordInsertTextTool } from "../tools/word/insert-text.js";
 import { createWordReplaceTextTool } from "../tools/word/replace-text.js";
@@ -26,6 +27,10 @@ export const WORD_OPS: ReadonlyMap<string, OfficeOpExecutor> = new Map<
  [
   "word.get_overview",
   guardExecutor(delegateTool(createWordGetOverviewTool())),
+ ],
+ [
+  "word.get_capabilities",
+  guardExecutor(delegateTool(createWordGetCapabilitiesTool())),
  ],
  [
   "word.read_document",

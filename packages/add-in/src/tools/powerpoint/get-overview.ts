@@ -2,13 +2,20 @@
  * powerpoint_get_overview — Structural overview of the live presentation.
  */
 
-import { Type, type Static } from "@sinclair/typebox";
+import {
+  officeToolDescription,
+  POWERPOINT_GET_OVERVIEW_PARAMETERS,
+} from "@dieulc/pi-office-protocol/office-catalog";
+import type { Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { powerPointRun } from "../../powerpoint/helpers.js";
+import {
+  powerPointRun,
+  powerPointShapesGateMessage,
+} from "../../powerpoint/helpers.js";
 import { getErrorMessage } from "../../utils/errors.js";
 import { t } from "../../language/index.js";
 
-const schema = Type.Object({});
+const schema = POWERPOINT_GET_OVERVIEW_PARAMETERS;
 
 type Params = Static<typeof schema>;
 
@@ -16,15 +23,17 @@ export function createPowerPointGetOverviewTool(): AgentTool<typeof schema> {
   return {
     name: "powerpoint_get_overview",
     label: t("tools.powerPointGetOverview"),
-    description:
-      "Get a structural overview of the live PowerPoint presentation: slide count and " +
-      "shape count per slide. Call this before editing to learn the presentation structure.",
+    description: officeToolDescription("powerpoint.get_overview"),
     parameters: schema,
     execute: async (
       _toolCallId: string,
       _params: Params,
     ): Promise<AgentToolResult<undefined>> => {
       try {
+        // `slide.shapes` is PowerPointApi 1.3.
+        const shapesGap = powerPointShapesGateMessage();
+        if (shapesGap !== null) throw new Error(shapesGap);
+
         const result = await powerPointRun(async (context) => {
           const slides = context.presentation.slides;
           slides.load("items");

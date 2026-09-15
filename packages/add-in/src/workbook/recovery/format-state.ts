@@ -66,7 +66,9 @@ async function resolveFormatCaptureTarget(
     const parsed = parseRangeRef(part);
     if (parsed.sheet) {
       if (sheetNameFromRef && parsed.sheet !== sheetNameFromRef) {
-        throw new Error("Format checkpoint capture supports a single sheet per mutation.");
+        throw new Error(
+          "Format checkpoint capture supports a single sheet per mutation.",
+        );
       }
       sheetNameFromRef = parsed.sheet;
     }
@@ -114,9 +116,16 @@ async function captureFormatRangeStateWithSelection(
     };
   }
 
-  const captureCellCount = estimateFormatCaptureCellCount(target.areas, selection);
+  const captureCellCount = estimateFormatCaptureCellCount(
+    target.areas,
+    selection,
+  );
 
-  if (typeof maxCellCount === "number" && Number.isFinite(maxCellCount) && captureCellCount > maxCellCount) {
+  if (
+    typeof maxCellCount === "number" &&
+    Number.isFinite(maxCellCount) &&
+    captureCellCount > maxCellCount
+  ) {
     return {
       supported: false,
       reason: `Format checkpoint capture skipped: snapshot size exceeds ${maxCellCount.toLocaleString()} units.`,
@@ -130,6 +139,7 @@ async function captureFormatRangeStateWithSelection(
     selection.bold === true ||
     selection.italic === true ||
     selection.underlineStyle === true ||
+    selection.strikethrough === true ||
     selection.fontName === true ||
     selection.fontSize === true;
 
@@ -162,15 +172,28 @@ async function captureFormatRangeStateWithSelection(
     }
 
     if (needsFontLoad) {
-      area.format.font.load("color,bold,italic,underline,name,size");
+      area.format.font.load(
+        "color,bold,italic,underline,strikethrough,name,size",
+      );
     }
 
-    if (selection.horizontalAlignment === true || selection.verticalAlignment === true || selection.wrapText === true) {
-      area.format.load("horizontalAlignment,verticalAlignment,wrapText");
+    if (
+      selection.horizontalAlignment === true ||
+      selection.verticalAlignment === true ||
+      selection.wrapText === true ||
+      selection.indentLevel === true
+    ) {
+      area.format.load(
+        "horizontalAlignment,verticalAlignment,wrapText,indentLevel",
+      );
     }
 
     if (selection.columnWidth === true) {
-      for (let columnIndex = 0; columnIndex < area.columnCount; columnIndex += 1) {
+      for (
+        let columnIndex = 0;
+        columnIndex < area.columnCount;
+        columnIndex += 1
+      ) {
         const columnFormat = area.getColumn(columnIndex).format;
         columnFormat.load("columnWidth");
         prepared.columnFormats.push(columnFormat);
@@ -195,7 +218,9 @@ async function captureFormatRangeStateWithSelection(
       for (const borderKey of RECOVERY_BORDER_KEYS) {
         if (selection[borderKey] !== true) continue;
 
-        const border = area.format.borders.getItem(BORDER_KEY_TO_EDGE[borderKey]);
+        const border = area.format.borders.getItem(
+          BORDER_KEY_TO_EDGE[borderKey],
+        );
         border.load("style,weight,color");
         prepared.borders[borderKey] = border;
       }
@@ -244,11 +269,16 @@ async function captureFormatRangeStateWithSelection(
     };
 
     if (selection.numberFormat === true) {
-      const matrix = validateStringGrid(prepared.range.numberFormat, prepared.rowCount, prepared.columnCount);
+      const matrix = validateStringGrid(
+        prepared.range.numberFormat,
+        prepared.rowCount,
+        prepared.columnCount,
+      );
       if (!matrix) {
         return {
           supported: false,
-          reason: "Format checkpoint capture failed: number format matrix is invalid.",
+          reason:
+            "Format checkpoint capture failed: number format matrix is invalid.",
         };
       }
 
@@ -256,11 +286,14 @@ async function captureFormatRangeStateWithSelection(
     }
 
     if (selection.fillColor === true) {
-      const fillColor = normalizeOptionalString(prepared.range.format.fill.color);
+      const fillColor = normalizeOptionalString(
+        prepared.range.format.fill.color,
+      );
       if (fillColor === undefined) {
         return {
           supported: false,
-          reason: "Format checkpoint capture failed: fill color is not restorable.",
+          reason:
+            "Format checkpoint capture failed: fill color is not restorable.",
         };
       }
 
@@ -268,11 +301,14 @@ async function captureFormatRangeStateWithSelection(
     }
 
     if (selection.fontColor === true) {
-      const fontColor = normalizeOptionalString(prepared.range.format.font.color);
+      const fontColor = normalizeOptionalString(
+        prepared.range.format.font.color,
+      );
       if (fontColor === undefined) {
         return {
           supported: false,
-          reason: "Format checkpoint capture failed: font color is not restorable.",
+          reason:
+            "Format checkpoint capture failed: font color is not restorable.",
         };
       }
 
@@ -284,7 +320,8 @@ async function captureFormatRangeStateWithSelection(
       if (bold === undefined) {
         return {
           supported: false,
-          reason: "Format checkpoint capture failed: bold state is mixed or unsupported.",
+          reason:
+            "Format checkpoint capture failed: bold state is mixed or unsupported.",
         };
       }
 
@@ -292,11 +329,14 @@ async function captureFormatRangeStateWithSelection(
     }
 
     if (selection.italic === true) {
-      const italic = normalizeOptionalBoolean(prepared.range.format.font.italic);
+      const italic = normalizeOptionalBoolean(
+        prepared.range.format.font.italic,
+      );
       if (italic === undefined) {
         return {
           supported: false,
-          reason: "Format checkpoint capture failed: italic state is mixed or unsupported.",
+          reason:
+            "Format checkpoint capture failed: italic state is mixed or unsupported.",
         };
       }
 
@@ -308,11 +348,42 @@ async function captureFormatRangeStateWithSelection(
       if (!isRecoveryUnderlineStyle(underline)) {
         return {
           supported: false,
-          reason: "Format checkpoint capture failed: underline style is unsupported.",
+          reason:
+            "Format checkpoint capture failed: underline style is unsupported.",
         };
       }
 
       areaState.underlineStyle = underline;
+    }
+
+    if (selection.strikethrough === true) {
+      const strikethrough = normalizeOptionalBoolean(
+        prepared.range.format.font.strikethrough,
+      );
+      if (strikethrough === undefined) {
+        return {
+          supported: false,
+          reason:
+            "Format checkpoint capture failed: strikethrough state is mixed or unsupported.",
+        };
+      }
+
+      areaState.strikethrough = strikethrough;
+    }
+
+    if (selection.indentLevel === true) {
+      const indentLevel = normalizeOptionalNumber(
+        prepared.range.format.indentLevel,
+      );
+      if (indentLevel === undefined) {
+        return {
+          supported: false,
+          reason:
+            "Format checkpoint capture failed: indent level is mixed or unsupported.",
+        };
+      }
+
+      areaState.indentLevel = indentLevel;
     }
 
     if (selection.fontName === true) {
@@ -320,7 +391,8 @@ async function captureFormatRangeStateWithSelection(
       if (fontName === undefined) {
         return {
           supported: false,
-          reason: "Format checkpoint capture failed: font name is not restorable.",
+          reason:
+            "Format checkpoint capture failed: font name is not restorable.",
         };
       }
 
@@ -332,7 +404,8 @@ async function captureFormatRangeStateWithSelection(
       if (fontSize === undefined) {
         return {
           supported: false,
-          reason: "Format checkpoint capture failed: font size is mixed or unsupported.",
+          reason:
+            "Format checkpoint capture failed: font size is mixed or unsupported.",
         };
       }
 
@@ -344,7 +417,8 @@ async function captureFormatRangeStateWithSelection(
       if (!isRecoveryHorizontalAlignment(horizontalAlignment)) {
         return {
           supported: false,
-          reason: "Format checkpoint capture failed: horizontal alignment is unsupported.",
+          reason:
+            "Format checkpoint capture failed: horizontal alignment is unsupported.",
         };
       }
 
@@ -356,7 +430,8 @@ async function captureFormatRangeStateWithSelection(
       if (!isRecoveryVerticalAlignment(verticalAlignment)) {
         return {
           supported: false,
-          reason: "Format checkpoint capture failed: vertical alignment is unsupported.",
+          reason:
+            "Format checkpoint capture failed: vertical alignment is unsupported.",
         };
       }
 
@@ -368,7 +443,8 @@ async function captureFormatRangeStateWithSelection(
       if (wrapText === undefined) {
         return {
           supported: false,
-          reason: "Format checkpoint capture failed: wrap-text state is mixed or unsupported.",
+          reason:
+            "Format checkpoint capture failed: wrap-text state is mixed or unsupported.",
         };
       }
 
@@ -382,7 +458,8 @@ async function captureFormatRangeStateWithSelection(
         if (width === undefined) {
           return {
             supported: false,
-            reason: "Format checkpoint capture failed: column width is mixed or unsupported.",
+            reason:
+              "Format checkpoint capture failed: column width is mixed or unsupported.",
           };
         }
 
@@ -392,7 +469,8 @@ async function captureFormatRangeStateWithSelection(
       if (columnWidths.length !== prepared.columnCount) {
         return {
           supported: false,
-          reason: "Format checkpoint capture failed: column-width count mismatch.",
+          reason:
+            "Format checkpoint capture failed: column-width count mismatch.",
         };
       }
 
@@ -406,7 +484,8 @@ async function captureFormatRangeStateWithSelection(
         if (height === undefined) {
           return {
             supported: false,
-            reason: "Format checkpoint capture failed: row height is mixed or unsupported.",
+            reason:
+              "Format checkpoint capture failed: row height is mixed or unsupported.",
           };
         }
 
@@ -416,7 +495,8 @@ async function captureFormatRangeStateWithSelection(
       if (rowHeights.length !== prepared.rowCount) {
         return {
           supported: false,
-          reason: "Format checkpoint capture failed: row-height count mismatch.",
+          reason:
+            "Format checkpoint capture failed: row-height count mismatch.",
         };
       }
 
@@ -434,7 +514,8 @@ async function captureFormatRangeStateWithSelection(
       if (!border) {
         return {
           supported: false,
-          reason: "Format checkpoint capture failed: border state is unavailable.",
+          reason:
+            "Format checkpoint capture failed: border state is unavailable.",
         };
       }
 
@@ -442,7 +523,8 @@ async function captureFormatRangeStateWithSelection(
       if (!borderState) {
         return {
           supported: false,
-          reason: "Format checkpoint capture failed: border state is unsupported.",
+          reason:
+            "Format checkpoint capture failed: border state is unsupported.",
         };
       }
 
@@ -462,7 +544,10 @@ async function captureFormatRangeStateWithSelection(
   };
 }
 
-function applyFormatRangeStateToArea(range: Excel.Range, state: RecoveryFormatAreaState): void {
+function applyFormatRangeStateToArea(
+  range: Excel.Range,
+  state: RecoveryFormatAreaState,
+): void {
   if (state.numberFormat) {
     range.numberFormat = cloneStringGrid(state.numberFormat);
   }
@@ -485,9 +570,19 @@ function applyFormatRangeStateToArea(range: Excel.Range, state: RecoveryFormatAr
 
   if (typeof state.underlineStyle === "string") {
     if (!isRecoveryUnderlineStyle(state.underlineStyle)) {
-      throw new Error("Format checkpoint is invalid: underline style is unsupported.");
+      throw new Error(
+        "Format checkpoint is invalid: underline style is unsupported.",
+      );
     }
     range.format.font.underline = state.underlineStyle;
+  }
+
+  if (typeof state.strikethrough === "boolean") {
+    range.format.font.strikethrough = state.strikethrough;
+  }
+
+  if (typeof state.indentLevel === "number") {
+    range.format.indentLevel = state.indentLevel;
   }
 
   if (typeof state.fontName === "string") {
@@ -500,14 +595,18 @@ function applyFormatRangeStateToArea(range: Excel.Range, state: RecoveryFormatAr
 
   if (typeof state.horizontalAlignment === "string") {
     if (!isRecoveryHorizontalAlignment(state.horizontalAlignment)) {
-      throw new Error("Format checkpoint is invalid: horizontal alignment is unsupported.");
+      throw new Error(
+        "Format checkpoint is invalid: horizontal alignment is unsupported.",
+      );
     }
     range.format.horizontalAlignment = state.horizontalAlignment;
   }
 
   if (typeof state.verticalAlignment === "string") {
     if (!isRecoveryVerticalAlignment(state.verticalAlignment)) {
-      throw new Error("Format checkpoint is invalid: vertical alignment is unsupported.");
+      throw new Error(
+        "Format checkpoint is invalid: vertical alignment is unsupported.",
+      );
     }
     range.format.verticalAlignment = state.verticalAlignment;
   }
@@ -537,7 +636,9 @@ function applyFormatRangeStateToArea(range: Excel.Range, state: RecoveryFormatAr
   }
 }
 
-function captureFormatRangeStateUnsupported(reason: string): RecoveryFormatCaptureResult {
+function captureFormatRangeStateUnsupported(
+  reason: string,
+): RecoveryFormatCaptureResult {
   return {
     supported: false,
     reason,
@@ -554,12 +655,19 @@ export async function captureFormatCellsState(
   options: CaptureFormatCellsStateOptions = {},
 ): Promise<RecoveryFormatCaptureResult> {
   if (!hasSelectedFormatProperty(selection)) {
-    return captureFormatRangeStateUnsupported("No restorable format properties were selected.");
+    return captureFormatRangeStateUnsupported(
+      "No restorable format properties were selected.",
+    );
   }
 
   return excelRun<RecoveryFormatCaptureResult>(async (context) => {
     const target = await resolveFormatCaptureTarget(context, address);
-    return captureFormatRangeStateWithSelection(context, target, selection, options.maxCellCount);
+    return captureFormatRangeStateWithSelection(
+      context,
+      target,
+      selection,
+      options.maxCellCount,
+    );
   });
 }
 
@@ -567,9 +675,15 @@ export async function applyFormatCellsState(
   address: string,
   targetState: RecoveryFormatRangeState,
 ): Promise<RecoveryFormatRangeState> {
-  const previousStateResult = await captureFormatCellsState(address, targetState.selection);
+  const previousStateResult = await captureFormatCellsState(
+    address,
+    targetState.selection,
+  );
   if (!previousStateResult.supported || !previousStateResult.state) {
-    throw new Error(previousStateResult.reason ?? "Format checkpoint cannot be restored safely.");
+    throw new Error(
+      previousStateResult.reason ??
+        "Format checkpoint cannot be restored safely.",
+    );
   }
   const previousState = previousStateResult.state;
 
@@ -599,17 +713,32 @@ export async function applyFormatCellsState(
         typeof areaState.rowHeights !== "undefined";
 
       if (requiresExactShape) {
-        if (range.rowCount !== areaState.rowCount || range.columnCount !== areaState.columnCount) {
-          throw new Error("Format checkpoint range shape changed and cannot be restored safely.");
+        if (
+          range.rowCount !== areaState.rowCount ||
+          range.columnCount !== areaState.columnCount
+        ) {
+          throw new Error(
+            "Format checkpoint range shape changed and cannot be restored safely.",
+          );
         }
       }
 
-      if (Array.isArray(areaState.columnWidths) && areaState.columnWidths.length !== areaState.columnCount) {
-        throw new Error("Format checkpoint is invalid: column-width data does not match range shape.");
+      if (
+        Array.isArray(areaState.columnWidths) &&
+        areaState.columnWidths.length !== areaState.columnCount
+      ) {
+        throw new Error(
+          "Format checkpoint is invalid: column-width data does not match range shape.",
+        );
       }
 
-      if (Array.isArray(areaState.rowHeights) && areaState.rowHeights.length !== areaState.rowCount) {
-        throw new Error("Format checkpoint is invalid: row-height data does not match range shape.");
+      if (
+        Array.isArray(areaState.rowHeights) &&
+        areaState.rowHeights.length !== areaState.rowCount
+      ) {
+        throw new Error(
+          "Format checkpoint is invalid: row-height data does not match range shape.",
+        );
       }
 
       applyFormatRangeStateToArea(range, areaState);

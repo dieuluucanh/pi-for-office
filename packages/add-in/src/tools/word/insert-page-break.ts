@@ -3,7 +3,10 @@
  * live Word document.
  */
 
-import { WORD_INSERT_PAGE_BREAK_PARAMETERS } from "@dieulc/pi-office-protocol/office-catalog";
+import {
+  WORD_INSERT_PAGE_BREAK_PARAMETERS,
+  officeToolDescription,
+} from "@dieulc/pi-office-protocol/office-catalog";
 import type { Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { wordRun } from "../../word/helpers.js";
@@ -17,8 +20,7 @@ export function createWordInsertPageBreakTool(): AgentTool<typeof schema> {
   return {
     name: "word_insert_page_break",
     label: t("tools.wordInsertPageBreak"),
-    description:
-      "Insert a page break at the start or end of the live Word document.",
+    description: officeToolDescription("word.insert_page_break"),
     parameters: schema,
     execute: async (
       _toolCallId: string,

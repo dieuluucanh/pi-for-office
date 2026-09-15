@@ -338,8 +338,12 @@ export const AUXILIARY_UI_TOOL_NAMES = [
   "python_transform_range",
   "execute_office_js",
   "execute_wps_js",
+  // Capability probes: read-only host checks, available on every host.
+  "excel_get_capabilities",
+  "powerpoint_get_capabilities",
   // Local Word/PowerPoint document tools (non-bridge path).
   "word_get_overview",
+  "word_get_capabilities",
   "word_read_document",
   "word_insert_text",
   "word_replace_text",
@@ -395,7 +399,10 @@ export const TOOL_UI_METADATA = {
   python_transform_range: { renderer: true, humanizer: true },
   execute_office_js: { renderer: true, humanizer: true },
   execute_wps_js: { renderer: true, humanizer: true },
+  excel_get_capabilities: { renderer: false, humanizer: false },
+  powerpoint_get_capabilities: { renderer: false, humanizer: false },
   word_get_overview: { renderer: false, humanizer: false },
+  word_get_capabilities: { renderer: false, humanizer: false },
   word_read_document: { renderer: false, humanizer: false },
   word_insert_text: { renderer: false, humanizer: false },
   word_replace_text: { renderer: false, humanizer: false },

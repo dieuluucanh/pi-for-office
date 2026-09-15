@@ -69,6 +69,11 @@ See each package's README for app-specific instructions.
 
 ## Docs for development & releases
 
+- [packages/add-in/src/tools/DECISIONS.md](packages/add-in/src/tools/DECISIONS.md) —
+  tool behaviour decisions, including the **fail-loud capability contract** (a tool
+  that needs a requirement set the host lacks names the capability, set, version,
+  platform, and remedy instead of silently degrading) and the verified Office.js
+  requirement sets behind every gate.
 - [docs/local-development.md](docs/local-development.md) — run & test everything
   locally (add-in, Pi bridge extension, Python/tmux bridges, proxy), including
   how to enable the **Local Pi agent** in Settings → Connections.

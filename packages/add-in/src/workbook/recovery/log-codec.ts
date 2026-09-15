@@ -1,4 +1,6 @@
-function isWorkbookRecoveryLogCodecPayloadShape(value: DynamicValue): value is DynamicObject {
+function isWorkbookRecoveryLogCodecPayloadShape(
+  value: DynamicValue,
+): value is DynamicObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -39,12 +41,13 @@ export interface ParsePersistedSnapshotsOptions {
  * check and drop the entry, instead of misreading it as an empty range backup
  * after a version downgrade.
  */
-export type PersistedWorkbookRecoverySnapshot =
-  & Omit<WorkbookRecoverySnapshot, "beforeValues" | "beforeFormulas">
-  & {
-    beforeValues?: DynamicValue[][];
-    beforeFormulas?: DynamicValue[][];
-  };
+export type PersistedWorkbookRecoverySnapshot = Omit<
+  WorkbookRecoverySnapshot,
+  "beforeValues" | "beforeFormulas"
+> & {
+  beforeValues?: DynamicValue[][];
+  beforeFormulas?: DynamicValue[][];
+};
 
 export interface PersistedWorkbookRecoveryPayload {
   version: 1;
@@ -64,7 +67,9 @@ function defaultCreateId(): string {
   return `checkpoint_${Date.now().toString(36)}_${randomChunk}`;
 }
 
-function isWorkbookRecoveryToolName(value: DynamicValue): value is WorkbookRecoveryToolName {
+function isWorkbookRecoveryToolName(
+  value: DynamicValue,
+): value is WorkbookRecoveryToolName {
   return (
     value === "write_cells" ||
     value === "fill_formula" ||
@@ -82,18 +87,22 @@ function isGrid(value: DynamicValue): value is DynamicValue[][] {
   return Array.isArray(value) && value.every((row) => Array.isArray(row));
 }
 
-function parseWorkbookRecoverySnapshotKind(value: DynamicValue): WorkbookRecoverySnapshotKind {
+function parseWorkbookRecoverySnapshotKind(
+  value: DynamicValue,
+): WorkbookRecoverySnapshotKind {
   return value === "conditional_format_rules" ||
-      value === "comment_thread" ||
-      value === "chart_state" ||
-      value === "format_cells_state" ||
-      value === "modify_structure_state" ||
-      value === "range_values"
+    value === "comment_thread" ||
+    value === "chart_state" ||
+    value === "format_cells_state" ||
+    value === "modify_structure_state" ||
+    value === "range_values"
     ? value
     : "range_values";
 }
 
-function isRecoveryFormatSelection(value: DynamicValue): value is RecoveryFormatRangeState["selection"] {
+function isRecoveryFormatSelection(
+  value: DynamicValue,
+): value is RecoveryFormatRangeState["selection"] {
   if (!isWorkbookRecoveryLogCodecPayloadShape(value)) return false;
 
   const keys: Array<keyof RecoveryFormatRangeState["selection"]> = [
@@ -103,6 +112,8 @@ function isRecoveryFormatSelection(value: DynamicValue): value is RecoveryFormat
     "bold",
     "italic",
     "underlineStyle",
+    "strikethrough",
+    "indentLevel",
     "fontName",
     "fontSize",
     "horizontalAlignment",
@@ -130,19 +141,31 @@ function isRecoveryFormatSelection(value: DynamicValue): value is RecoveryFormat
 }
 
 function isStringGrid(value: DynamicValue): value is string[][] {
-  return Array.isArray(value) &&
-    value.every((row) => Array.isArray(row) && row.every((cell) => typeof cell === "string"));
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (row) =>
+        Array.isArray(row) && row.every((cell) => typeof cell === "string"),
+    )
+  );
 }
 
 function isNumberList(value: DynamicValue): value is number[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "number" && Number.isFinite(item));
+  return (
+    Array.isArray(value) &&
+    value.every((item) => typeof item === "number" && Number.isFinite(item))
+  );
 }
 
 function isStringList(value: DynamicValue): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === "string")
+  );
 }
 
-function isRecoveryFormatBorderState(value: DynamicValue): value is RecoveryFormatBorderState {
+function isRecoveryFormatBorderState(
+  value: DynamicValue,
+): value is RecoveryFormatBorderState {
   if (!isWorkbookRecoveryLogCodecPayloadShape(value)) return false;
 
   return (
@@ -152,59 +175,126 @@ function isRecoveryFormatBorderState(value: DynamicValue): value is RecoveryForm
   );
 }
 
-function isRecoveryFormatAreaState(value: DynamicValue): value is RecoveryFormatRangeState["areas"][number] {
+function isRecoveryFormatAreaState(
+  value: DynamicValue,
+): value is RecoveryFormatRangeState["areas"][number] {
   if (!isWorkbookRecoveryLogCodecPayloadShape(value)) return false;
   if (typeof value.address !== "string") return false;
   if (typeof value.rowCount !== "number") return false;
   if (typeof value.columnCount !== "number") return false;
 
-  if (value.numberFormat !== undefined && !isStringGrid(value.numberFormat)) return false;
-  if (value.fillColor !== undefined && typeof value.fillColor !== "string") return false;
-  if (value.fontColor !== undefined && typeof value.fontColor !== "string") return false;
+  if (value.numberFormat !== undefined && !isStringGrid(value.numberFormat))
+    return false;
+  if (value.fillColor !== undefined && typeof value.fillColor !== "string")
+    return false;
+  if (value.fontColor !== undefined && typeof value.fontColor !== "string")
+    return false;
   if (value.bold !== undefined && typeof value.bold !== "boolean") return false;
-  if (value.italic !== undefined && typeof value.italic !== "boolean") return false;
-  if (value.underlineStyle !== undefined && typeof value.underlineStyle !== "string") return false;
-  if (value.fontName !== undefined && typeof value.fontName !== "string") return false;
-  if (value.fontSize !== undefined && typeof value.fontSize !== "number") return false;
-  if (value.horizontalAlignment !== undefined && typeof value.horizontalAlignment !== "string") return false;
-  if (value.verticalAlignment !== undefined && typeof value.verticalAlignment !== "string") return false;
-  if (value.wrapText !== undefined && typeof value.wrapText !== "boolean") return false;
-  if (value.columnWidths !== undefined && !isNumberList(value.columnWidths)) return false;
-  if (value.rowHeights !== undefined && !isNumberList(value.rowHeights)) return false;
-  if (value.mergedAreas !== undefined && !isStringList(value.mergedAreas)) return false;
+  if (value.italic !== undefined && typeof value.italic !== "boolean")
+    return false;
+  if (
+    value.underlineStyle !== undefined &&
+    typeof value.underlineStyle !== "string"
+  )
+    return false;
+  if (
+    value.strikethrough !== undefined &&
+    typeof value.strikethrough !== "boolean"
+  )
+    return false;
+  if (value.indentLevel !== undefined && typeof value.indentLevel !== "number")
+    return false;
+  if (value.fontName !== undefined && typeof value.fontName !== "string")
+    return false;
+  if (value.fontSize !== undefined && typeof value.fontSize !== "number")
+    return false;
+  if (
+    value.horizontalAlignment !== undefined &&
+    typeof value.horizontalAlignment !== "string"
+  )
+    return false;
+  if (
+    value.verticalAlignment !== undefined &&
+    typeof value.verticalAlignment !== "string"
+  )
+    return false;
+  if (value.wrapText !== undefined && typeof value.wrapText !== "boolean")
+    return false;
+  if (value.columnWidths !== undefined && !isNumberList(value.columnWidths))
+    return false;
+  if (value.rowHeights !== undefined && !isNumberList(value.rowHeights))
+    return false;
+  if (value.mergedAreas !== undefined && !isStringList(value.mergedAreas))
+    return false;
 
-  if (value.borderTop !== undefined && !isRecoveryFormatBorderState(value.borderTop)) return false;
-  if (value.borderBottom !== undefined && !isRecoveryFormatBorderState(value.borderBottom)) return false;
-  if (value.borderLeft !== undefined && !isRecoveryFormatBorderState(value.borderLeft)) return false;
-  if (value.borderRight !== undefined && !isRecoveryFormatBorderState(value.borderRight)) return false;
-  if (value.borderInsideHorizontal !== undefined && !isRecoveryFormatBorderState(value.borderInsideHorizontal)) {
+  if (
+    value.borderTop !== undefined &&
+    !isRecoveryFormatBorderState(value.borderTop)
+  )
+    return false;
+  if (
+    value.borderBottom !== undefined &&
+    !isRecoveryFormatBorderState(value.borderBottom)
+  )
+    return false;
+  if (
+    value.borderLeft !== undefined &&
+    !isRecoveryFormatBorderState(value.borderLeft)
+  )
+    return false;
+  if (
+    value.borderRight !== undefined &&
+    !isRecoveryFormatBorderState(value.borderRight)
+  )
+    return false;
+  if (
+    value.borderInsideHorizontal !== undefined &&
+    !isRecoveryFormatBorderState(value.borderInsideHorizontal)
+  ) {
     return false;
   }
-  if (value.borderInsideVertical !== undefined && !isRecoveryFormatBorderState(value.borderInsideVertical)) {
+  if (
+    value.borderInsideVertical !== undefined &&
+    !isRecoveryFormatBorderState(value.borderInsideVertical)
+  ) {
     return false;
   }
 
-  if (Array.isArray(value.columnWidths) && value.columnWidths.length !== value.columnCount) {
+  if (
+    Array.isArray(value.columnWidths) &&
+    value.columnWidths.length !== value.columnCount
+  ) {
     return false;
   }
 
-  if (Array.isArray(value.rowHeights) && value.rowHeights.length !== value.rowCount) {
+  if (
+    Array.isArray(value.rowHeights) &&
+    value.rowHeights.length !== value.rowCount
+  ) {
     return false;
   }
 
   return true;
 }
 
-function isRecoveryFormatRangeState(value: DynamicValue): value is RecoveryFormatRangeState {
+function isRecoveryFormatRangeState(
+  value: DynamicValue,
+): value is RecoveryFormatRangeState {
   if (!isWorkbookRecoveryLogCodecPayloadShape(value)) return false;
   if (!isRecoveryFormatSelection(value.selection)) return false;
-  if (!Array.isArray(value.areas) || !value.areas.every((area) => isRecoveryFormatAreaState(area))) return false;
+  if (
+    !Array.isArray(value.areas) ||
+    !value.areas.every((area) => isRecoveryFormatAreaState(area))
+  )
+    return false;
   if (typeof value.cellCount !== "number") return false;
 
   return true;
 }
 
-function isRecoverySheetVisibility(value: DynamicValue): value is "Visible" | "Hidden" | "VeryHidden" {
+function isRecoverySheetVisibility(
+  value: DynamicValue,
+): value is "Visible" | "Hidden" | "VeryHidden" {
   return value === "Visible" || value === "Hidden" || value === "VeryHidden";
 }
 
@@ -212,7 +302,9 @@ function isPositiveInteger(value: DynamicValue): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0;
 }
 
-function isRecoveryStructureValueRangeState(value: DynamicValue): value is RecoveryStructureValueRangeState {
+function isRecoveryStructureValueRangeState(
+  value: DynamicValue,
+): value is RecoveryStructureValueRangeState {
   if (!isWorkbookRecoveryLogCodecPayloadShape(value)) {
     return false;
   }
@@ -221,7 +313,10 @@ function isRecoveryStructureValueRangeState(value: DynamicValue): value is Recov
     return false;
   }
 
-  if (!isPositiveInteger(value.rowCount) || !isPositiveInteger(value.columnCount)) {
+  if (
+    !isPositiveInteger(value.rowCount) ||
+    !isPositiveInteger(value.columnCount)
+  ) {
     return false;
   }
 
@@ -233,7 +328,9 @@ function isRecoveryStructureValueRangeState(value: DynamicValue): value is Recov
   return stats.rows === value.rowCount && stats.cols === value.columnCount;
 }
 
-function isRecoveryModifyStructureState(value: DynamicValue): value is RecoveryModifyStructureState {
+function isRecoveryModifyStructureState(
+  value: DynamicValue,
+): value is RecoveryModifyStructureState {
   if (!isWorkbookRecoveryLogCodecPayloadShape(value)) return false;
 
   if (value.kind === "sheet_name") {
@@ -241,14 +338,18 @@ function isRecoveryModifyStructureState(value: DynamicValue): value is RecoveryM
   }
 
   if (value.kind === "sheet_visibility") {
-    return typeof value.sheetId === "string" && isRecoverySheetVisibility(value.visibility);
+    return (
+      typeof value.sheetId === "string" &&
+      isRecoverySheetVisibility(value.visibility)
+    );
   }
 
   if (value.kind === "sheet_absent") {
     return (
       typeof value.sheetId === "string" &&
       typeof value.sheetName === "string" &&
-      (value.allowDataDelete === undefined || typeof value.allowDataDelete === "boolean")
+      (value.allowDataDelete === undefined ||
+        typeof value.allowDataDelete === "boolean")
     );
   }
 
@@ -260,7 +361,8 @@ function isRecoveryModifyStructureState(value: DynamicValue): value is RecoveryM
       Number.isInteger(value.position) &&
       value.position >= 0 &&
       isRecoverySheetVisibility(value.visibility) &&
-      (value.dataRange === undefined || isRecoveryStructureValueRangeState(value.dataRange))
+      (value.dataRange === undefined ||
+        isRecoveryStructureValueRangeState(value.dataRange))
     );
   }
 
@@ -270,7 +372,8 @@ function isRecoveryModifyStructureState(value: DynamicValue): value is RecoveryM
       typeof value.sheetName === "string" &&
       isPositiveInteger(value.position) &&
       isPositiveInteger(value.count) &&
-      (value.allowDataDelete === undefined || typeof value.allowDataDelete === "boolean")
+      (value.allowDataDelete === undefined ||
+        typeof value.allowDataDelete === "boolean")
     );
   }
 
@@ -280,7 +383,8 @@ function isRecoveryModifyStructureState(value: DynamicValue): value is RecoveryM
       typeof value.sheetName === "string" &&
       isPositiveInteger(value.position) &&
       isPositiveInteger(value.count) &&
-      (value.dataRange === undefined || isRecoveryStructureValueRangeState(value.dataRange))
+      (value.dataRange === undefined ||
+        isRecoveryStructureValueRangeState(value.dataRange))
     );
   }
 
@@ -290,7 +394,8 @@ function isRecoveryModifyStructureState(value: DynamicValue): value is RecoveryM
       typeof value.sheetName === "string" &&
       isPositiveInteger(value.position) &&
       isPositiveInteger(value.count) &&
-      (value.allowDataDelete === undefined || typeof value.allowDataDelete === "boolean")
+      (value.allowDataDelete === undefined ||
+        typeof value.allowDataDelete === "boolean")
     );
   }
 
@@ -300,14 +405,17 @@ function isRecoveryModifyStructureState(value: DynamicValue): value is RecoveryM
       typeof value.sheetName === "string" &&
       isPositiveInteger(value.position) &&
       isPositiveInteger(value.count) &&
-      (value.dataRange === undefined || isRecoveryStructureValueRangeState(value.dataRange))
+      (value.dataRange === undefined ||
+        isRecoveryStructureValueRangeState(value.dataRange))
     );
   }
 
   return false;
 }
 
-function isRecoveryCommentThreadState(value: DynamicValue): value is RecoveryCommentThreadState {
+function isRecoveryCommentThreadState(
+  value: DynamicValue,
+): value is RecoveryCommentThreadState {
   if (!isWorkbookRecoveryLogCodecPayloadShape(value)) return false;
   if (typeof value.exists !== "boolean") return false;
   if (typeof value.content !== "string") return false;
@@ -324,7 +432,9 @@ function isRecoveryChartTitleState(value: DynamicValue): boolean {
 
 function isRecoveryChartLegendState(value: DynamicValue): boolean {
   if (!isWorkbookRecoveryLogCodecPayloadShape(value)) return false;
-  return typeof value.position === "string" && typeof value.visible === "boolean";
+  return (
+    typeof value.position === "string" && typeof value.visible === "boolean"
+  );
 }
 
 function isRecoveryChartPositionState(value: DynamicValue): boolean {
@@ -337,7 +447,9 @@ function isRecoveryChartPositionState(value: DynamicValue): boolean {
   );
 }
 
-function isRecoveryChartState(value: DynamicValue): value is RecoveryChartState {
+function isRecoveryChartState(
+  value: DynamicValue,
+): value is RecoveryChartState {
   if (!isWorkbookRecoveryLogCodecPayloadShape(value)) return false;
 
   if (value.kind === "chart_absent") {
@@ -355,8 +467,10 @@ function isRecoveryChartState(value: DynamicValue): value is RecoveryChartState 
       typeof value.chartType === "string" &&
       isRecoveryChartTitleState(value.title) &&
       isRecoveryChartLegendState(value.legend) &&
-      (value.xAxisTitle === undefined || isRecoveryChartTitleState(value.xAxisTitle)) &&
-      (value.yAxisTitle === undefined || isRecoveryChartTitleState(value.yAxisTitle)) &&
+      (value.xAxisTitle === undefined ||
+        isRecoveryChartTitleState(value.xAxisTitle)) &&
+      (value.yAxisTitle === undefined ||
+        isRecoveryChartTitleState(value.yAxisTitle)) &&
       isRecoveryChartPositionState(value.position)
     );
   }
@@ -364,7 +478,9 @@ function isRecoveryChartState(value: DynamicValue): value is RecoveryChartState 
   return false;
 }
 
-function parseWorkbookRecoverySnapshot(value: DynamicValue): WorkbookRecoverySnapshot | null {
+function parseWorkbookRecoverySnapshot(
+  value: DynamicValue,
+): WorkbookRecoverySnapshot | null {
   if (!isWorkbookRecoveryLogCodecPayloadShape(value)) return null;
 
   if (!isWorkbookRecoveryToolName(value.toolName)) return null;
@@ -380,7 +496,10 @@ function parseWorkbookRecoverySnapshot(value: DynamicValue): WorkbookRecoverySna
     ? cloneGrid(value.beforeFormulas)
     : [];
 
-  if (snapshotKind === "range_values" && (!isGrid(value.beforeValues) || !isGrid(value.beforeFormulas))) {
+  if (
+    snapshotKind === "range_values" &&
+    (!isGrid(value.beforeValues) || !isGrid(value.beforeFormulas))
+  ) {
     return null;
   }
 
@@ -400,11 +519,15 @@ function parseWorkbookRecoverySnapshot(value: DynamicValue): WorkbookRecoverySna
     ? cloneRecoveryFormatRangeState(value.formatRangeState)
     : undefined;
 
-  const modifyStructureState = isRecoveryModifyStructureState(value.modifyStructureState)
+  const modifyStructureState = isRecoveryModifyStructureState(
+    value.modifyStructureState,
+  )
     ? cloneRecoveryModifyStructureState(value.modifyStructureState)
     : undefined;
 
-  const commentThreadState = isRecoveryCommentThreadState(value.commentThreadState)
+  const commentThreadState = isRecoveryCommentThreadState(
+    value.commentThreadState,
+  )
     ? cloneRecoveryCommentThreadState(value.commentThreadState)
     : undefined;
 
@@ -420,7 +543,10 @@ function parseWorkbookRecoverySnapshot(value: DynamicValue): WorkbookRecoverySna
     return null;
   }
 
-  if (snapshotKind === "conditional_format_rules" && !Array.isArray(value.conditionalFormatRules)) {
+  if (
+    snapshotKind === "conditional_format_rules" &&
+    !Array.isArray(value.conditionalFormatRules)
+  ) {
     return null;
   }
 
@@ -436,23 +562,28 @@ function parseWorkbookRecoverySnapshot(value: DynamicValue): WorkbookRecoverySna
   const at = typeof value.at === "number" ? value.at : Date.now();
 
   const cellCountFromGrid = gridStats(beforeValues, beforeFormulas).cellCount;
-  const fallbackCellCount = snapshotKind === "range_values"
-    ? cellCountFromGrid
-    : snapshotKind === "format_cells_state"
-      ? (formatRangeState?.cellCount ?? 0)
-      : snapshotKind === "modify_structure_state"
-        ? (modifyStructureState ? estimateModifyStructureCellCount(modifyStructureState) : 1)
-        : snapshotKind === "conditional_format_rules"
-          ? conditionalFormatRules.length
-          : 1;
+  const fallbackCellCount =
+    snapshotKind === "range_values"
+      ? cellCountFromGrid
+      : snapshotKind === "format_cells_state"
+        ? (formatRangeState?.cellCount ?? 0)
+        : snapshotKind === "modify_structure_state"
+          ? modifyStructureState
+            ? estimateModifyStructureCellCount(modifyStructureState)
+            : 1
+          : snapshotKind === "conditional_format_rules"
+            ? conditionalFormatRules.length
+            : 1;
 
-  const cellCount = typeof value.cellCount === "number"
-    ? Math.max(0, value.cellCount)
-    : fallbackCellCount;
+  const cellCount =
+    typeof value.cellCount === "number"
+      ? Math.max(0, value.cellCount)
+      : fallbackCellCount;
 
-  const changedCount = typeof value.changedCount === "number"
-    ? Math.max(0, value.changedCount)
-    : cellCount;
+  const changedCount =
+    typeof value.changedCount === "number"
+      ? Math.max(0, value.changedCount)
+      : cellCount;
 
   const snapshot: WorkbookRecoverySnapshot = {
     id,
@@ -467,8 +598,10 @@ function parseWorkbookRecoverySnapshot(value: DynamicValue): WorkbookRecoverySna
     snapshotKind,
   };
 
-  if (typeof value.workbookId === "string") snapshot.workbookId = value.workbookId;
-  if (typeof value.workbookLabel === "string") snapshot.workbookLabel = value.workbookLabel;
+  if (typeof value.workbookId === "string")
+    snapshot.workbookId = value.workbookId;
+  if (typeof value.workbookLabel === "string")
+    snapshot.workbookLabel = value.workbookLabel;
   if (typeof value.restoredFromSnapshotId === "string") {
     snapshot.restoredFromSnapshotId = value.restoredFromSnapshotId;
   }
@@ -478,11 +611,14 @@ function parseWorkbookRecoverySnapshot(value: DynamicValue): WorkbookRecoverySna
   }
 
   if (snapshotKind === "modify_structure_state" && modifyStructureState) {
-    snapshot.modifyStructureState = cloneRecoveryModifyStructureState(modifyStructureState);
+    snapshot.modifyStructureState =
+      cloneRecoveryModifyStructureState(modifyStructureState);
   }
 
   if (snapshotKind === "conditional_format_rules") {
-    snapshot.conditionalFormatRules = cloneRecoveryConditionalFormatRules(conditionalFormatRules);
+    snapshot.conditionalFormatRules = cloneRecoveryConditionalFormatRules(
+      conditionalFormatRules,
+    );
   }
 
   if (snapshotKind === "comment_thread" && commentThreadState) {
@@ -517,17 +653,21 @@ export function parsePersistedSnapshots(
     ? Math.max(0, Math.floor(options.maxEntries))
     : snapshots.length;
 
-  return snapshots
-    .sort((a, b) => b.at - a.at)
-    .slice(0, maxEntries);
+  return snapshots.sort((a, b) => b.at - a.at).slice(0, maxEntries);
 }
 
-function toPersistedSnapshot(snapshot: WorkbookRecoverySnapshot): PersistedWorkbookRecoverySnapshot {
+function toPersistedSnapshot(
+  snapshot: WorkbookRecoverySnapshot,
+): PersistedWorkbookRecoverySnapshot {
   if (snapshot.snapshotKind !== "chart_state") {
     return snapshot;
   }
 
-  const { beforeValues: _beforeValues, beforeFormulas: _beforeFormulas, ...rest } = snapshot;
+  const {
+    beforeValues: _beforeValues,
+    beforeFormulas: _beforeFormulas,
+    ...rest
+  } = snapshot;
   return rest;
 }
 

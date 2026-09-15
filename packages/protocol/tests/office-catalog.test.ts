@@ -12,12 +12,17 @@ import {
   OFFICE_CATALOG,
   OFFICE_CATALOG_BY_OP,
   OFFICE_TOOL_NAMES,
+  OFFICE_TOOL_DESCRIPTIONS,
   LEGACY_V1_OPS,
   CATALOG_VERSION,
   catalogForHost,
   catalogOpIdsForHost,
   hostForToolName,
   officeToolName,
+  officeToolDescription,
+  wordFormattingPropertyList,
+  WORD_FONT_PROP_LABELS,
+  WORD_PARAGRAPH_PROP_LABELS,
   type OfficeCatalogEntry,
 } from "../src/office-catalog.ts";
 
@@ -106,6 +111,7 @@ test("Word catalog exposes the full formatting/composition surface", () => {
   const wordOps = new Set(catalogForHost("word").map((e) => e.op));
   for (const op of [
     "get_overview",
+    "get_capabilities",
     "read_document",
     "insert_text",
     "replace_text",
@@ -197,5 +203,110 @@ test("promptGuidelines name their tool when present", () => {
         `${entry.name}: guideline "${guideline}" does not name the tool`,
       );
     }
+  }
+});
+
+/* ── Negative space ────────────────────────────────────────────────────
+ * Assertions about what the catalog must NOT contain. Each of these would
+ * have caught the reported bug: a tool advertised a capability (and a prompt
+ * asserted it) that the implementation did not have.
+ */
+
+test("tool descriptions are single-sourced through OFFICE_TOOL_DESCRIPTIONS", () => {
+  const opIds = OFFICE_CATALOG.map((e) => `${e.host}.${e.op}`);
+  assert.deepEqual(
+    Object.keys(OFFICE_TOOL_DESCRIPTIONS).sort(),
+    [...opIds].sort(),
+    "description map must cover exactly the catalog ops",
+  );
+  for (const entry of OFFICE_CATALOG) {
+    const opId = `${entry.host}.${entry.op}`;
+    assert.equal(
+      entry.description,
+      OFFICE_TOOL_DESCRIPTIONS[opId],
+      `${opId}: catalog description must equal the shared map value`,
+    );
+    assert.equal(officeToolDescription(opId), entry.description);
+  }
+  assert.throws(
+    () => officeToolDescription("word.not_a_real_op"),
+    /no description for op/,
+    "unknown op ids must throw so drift fails loudly",
+  );
+});
+
+test("no catalog description claims unconditional capability", () => {
+  // Regression guard for the reported bug: the phrase "Formatting is fully
+  // supported — never tell the user it is not" made the agent assert support
+  // Word did not lack, instead of naming the one property that was missing.
+  for (const entry of OFFICE_CATALOG) {
+    assert.ok(
+      !/fully supported/i.test(entry.description),
+      `${entry.host}.${entry.op}: description claims unconditional support`,
+    );
+    assert.ok(
+      !/never tell the user/i.test(entry.description),
+      `${entry.host}.${entry.op}: description tells the model to deny limits`,
+    );
+  }
+});
+
+test("Word formatting descriptions carry the calibration rule", () => {
+  for (const opId of ["word.format_range", "word.insert_text"]) {
+    assert.match(
+      officeToolDescription(opId),
+      /Only the formatting properties listed above are exposed/,
+      `${opId}: missing the "not listed ⇒ not supported" rule`,
+    );
+  }
+});
+
+test("the prompt formatting list is derived from the schema", () => {
+  const entry = OFFICE_CATALOG_BY_OP.get("word.format_range");
+  assert.ok(entry);
+  const properties = (
+    entry.parameters as { properties?: Record<string, unknown> }
+  ).properties;
+  assert.ok(properties, "format_range schema has no properties");
+
+  // Parameters that are not formatting properties.
+  const nonFormatting = new Set(["text", "matchCase"]);
+
+  const labelled = new Set([
+    ...Object.keys(WORD_FONT_PROP_LABELS),
+    ...Object.keys(WORD_PARAGRAPH_PROP_LABELS),
+  ]);
+
+  // Every formatting property the schema exposes must have a prompt label...
+  for (const key of Object.keys(properties)) {
+    if (nonFormatting.has(key)) continue;
+    assert.ok(
+      labelled.has(key),
+      `format_range exposes "${key}" with no prompt label — the prompt would omit it`,
+    );
+  }
+
+  // ...and no label may describe a property the schema does not accept.
+  for (const key of labelled) {
+    assert.ok(
+      key in properties,
+      `prompt labels "${key}" but format_range does not expose it`,
+    );
+  }
+
+  // Every label must be non-empty and actually present in the rendered list.
+  const labels = [
+    ...Object.values(WORD_FONT_PROP_LABELS),
+    ...Object.values(WORD_PARAGRAPH_PROP_LABELS),
+  ];
+  for (const label of labels) {
+    assert.ok(label.length > 0, "prompt label must not be empty");
+  }
+  const rendered = wordFormattingPropertyList();
+  for (const label of new Set(labels)) {
+    assert.ok(
+      rendered.includes(label),
+      `rendered prompt list is missing the label "${label}"`,
+    );
   }
 });

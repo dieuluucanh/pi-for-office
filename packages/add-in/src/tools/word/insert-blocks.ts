@@ -5,12 +5,16 @@
  * item, or page break, with per-block font/paragraph formatting.
  */
 
-import { WORD_INSERT_BLOCKS_PARAMETERS } from "@dieulc/pi-office-protocol/office-catalog";
+import {
+  WORD_INSERT_BLOCKS_PARAMETERS,
+  officeToolDescription,
+} from "@dieulc/pi-office-protocol/office-catalog";
 import type { Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import {
   insertWordBlocks,
   wordRun,
+  wordShadingGateMessage,
   type WordInsertBlock,
   type WordInsertLocation,
 } from "../../word/helpers.js";
@@ -29,6 +33,7 @@ function toWordBlock(param: Params["blocks"][number]): WordInsertBlock {
     ...(param.size === undefined ? {} : { size: param.size }),
     ...(param.name === undefined ? {} : { name: param.name }),
     ...(param.color === undefined ? {} : { color: param.color }),
+    ...(param.highlight === undefined ? {} : { highlight: param.highlight }),
   };
   const paragraphFormat = {
     ...(param.style === undefined ? {} : { style: param.style }),
@@ -44,6 +49,7 @@ function toWordBlock(param: Params["blocks"][number]): WordInsertBlock {
       ? {}
       : { firstLineIndent: param.firstLineIndent }),
     ...(param.leftIndent === undefined ? {} : { leftIndent: param.leftIndent }),
+    ...(param.shading === undefined ? {} : { shading: param.shading }),
   };
 
   return {
@@ -59,12 +65,7 @@ export function createWordInsertBlocksTool(): AgentTool<typeof schema> {
   return {
     name: "word_insert_blocks",
     label: t("tools.wordInsertBlocks"),
-    description:
-      "Assemble a structured formatted document in the live Word document from blocks: " +
-      "paragraphs, headings (level 1-6), bullet/numbered list items, and page breaks. " +
-      "Each block can carry its own font (bold/italic/underline/size/name/color), " +
-      "paragraph alignment, style name, spacing and indents. Use this for a complete formatted " +
-      "document in one call — e.g. a title, then body paragraphs, then a right-aligned signature block.",
+    description: officeToolDescription("word.insert_blocks"),
     parameters: schema,
     execute: async (
       _toolCallId: string,
@@ -75,6 +76,17 @@ export function createWordInsertBlocksTool(): AgentTool<typeof schema> {
           content: [{ type: "text", text: "No blocks provided." }],
           details: undefined,
         };
+      }
+
+      // `shading` is desktop-only: report the gap instead of silently not filling.
+      if (params.blocks.some((block) => block.shading !== undefined)) {
+        const gap = wordShadingGateMessage();
+        if (gap !== null) {
+          return {
+            content: [{ type: "text", text: gap }],
+            details: undefined,
+          };
+        }
       }
 
       const location: WordInsertLocation =

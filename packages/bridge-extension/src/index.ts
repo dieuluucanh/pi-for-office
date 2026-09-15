@@ -360,9 +360,11 @@ export default function (pi: ExtensionAPI): void {
       "of one host are open and none is focused, calls without a document target fail with the candidate " +
       "list — pass the target explicitly instead of guessing. A user's `#name` mention selects that " +
       "document. Call office_list_documents if this list may be stale.\n\n" +
-      "Editing these documents with the office_* tools is fully supported, including formatting and " +
-      "structured documents (titles, headings, lists, tables, alignment, indents). Never claim formatting is " +
-      "unavailable, and never emit HTML for Word — use the office_word_* tools."
+      "These tools edit the attached documents directly — use them, and never emit HTML for Word. " +
+      "Formatting support depends on the host and the APIs it exposes: each tool's schema lists exactly " +
+      "the properties it accepts. If a property is not in the schema, say it is not available rather " +
+      "than claiming support, and call office_word_get_capabilities when a request depends on a Word " +
+      "feature you are unsure about."
     );
   }
 
@@ -556,9 +558,9 @@ export default function (pi: ExtensionAPI): void {
         const provider = p.provider ? `, provider=${p.provider}` : "";
         const ago = Math.max(0, Math.round((Date.now() - p.lastSeen) / 1000));
         const ops =
-          p.ops !== null
-            ? `${p.ops.length} ops${p.catalogVersion ? ` (catalog v${p.catalogVersion})` : ""}`
-            : "legacy client (v1 ops)";
+          p.ops === null
+            ? "legacy client (v1 ops)"
+            : `${p.ops.length} ops${p.catalogVersion ? ` (catalog v${p.catalogVersion})` : ""}`;
         const ignored =
           p.opsIgnoredCount > 0
             ? `, ${p.opsIgnoredCount} advertised op(s) ignored (unknown to this server)`
