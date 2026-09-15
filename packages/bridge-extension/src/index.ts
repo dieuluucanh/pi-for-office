@@ -25,9 +25,19 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { CATALOG_VERSION, BRIDGE_DEFAULT_PORT } from "./protocol.js";
+import {
+  CATALOG_VERSION,
+  BRIDGE_DEFAULT_PORT,
+  nextCallId,
+} from "./protocol.js";
 import type { AttachedPane } from "./bridge-server.js";
 import { OfficeBridgeServer } from "./bridge-server.js";
+import { PanePromptTracker, formatDocumentTag } from "./pane-replies.js";
+import {
+  createDocumentMentionProvider,
+  type DocumentMentionTarget,
+  type MentionProvider,
+} from "./document-mentions.js";
 import {
   OFFICE_TOOL_DESCRIPTORS,
   hostForToolName,
@@ -75,8 +85,35 @@ export default function (pi: ExtensionAPI): void {
   let server: OfficeBridgeServer | null = null;
   let currentCtx: ExtensionContext | null = null;
 
-  /** Panes awaiting the assistant reply to their injected prompt. */
-  const pendingReplyTargets: AttachedPane[] = [];
+  /**
+   * Pane prompts injected into the shared conversation, bound to the turn
+   * being answered at delivery time so replies go only to the originating pane.
+   */
+  const panePrompts = new PanePromptTracker<AttachedPane>();
+
+  /** Short human label for a pane's document (status line, commands). */
+  function paneDocumentLabel(pane: AttachedPane): string {
+    const name = pane.documentName ?? `Untitled (${pane.targetId})`;
+    return `${HOST_APP_LABEL[pane.host]} · "${name}"${pane.focused ? " (focused)" : ""}`;
+  }
+
+  /** Map an attached pane to the `#` mention dropdown's target shape. */
+  function toMentionTarget(
+    pane: AttachedPane,
+    all: readonly AttachedPane[],
+  ): DocumentMentionTarget {
+    return {
+      host: pane.host,
+      hostLabel: HOST_APP_LABEL[pane.host],
+      name: pane.documentName,
+      documentId: pane.documentId,
+      targetId: pane.targetId,
+      focused: pane.focused,
+      windows: all.filter(
+        (q) => q.host === pane.host && q.targetId === pane.targetId,
+      ).length,
+    };
+  }
 
   pi.registerFlag(FLAG_PORT, {
     description: `Port for the pi-office bridge server (default ${BRIDGE_DEFAULT_PORT})`,
@@ -115,11 +152,23 @@ export default function (pi: ExtensionAPI): void {
       );
       return;
     }
-    const labels = panes.map((p) => HOST_APP_LABEL[p.host]).join(", ");
+    const labels = [...countByHost(panes)]
+      .map(([label, count]) => (count > 1 ? `${label}×${count}` : label))
+      .join(", ");
     ui.setStatus(
       "office-bridge",
       `office: ${labels} attached (bridge :${port})`,
     );
+  }
+
+  /** Count attached panes per host label (for the status line). */
+  function countByHost(panes: readonly AttachedPane[]): Map<string, number> {
+    const counts = new Map<string, number>();
+    for (const pane of panes) {
+      const label = HOST_APP_LABEL[pane.host];
+      counts.set(label, (counts.get(label) ?? 0) + 1);
+    }
+    return counts;
   }
 
   let panesChangedTimer: ReturnType<typeof setTimeout> | null = null;
@@ -133,8 +182,8 @@ export default function (pi: ExtensionAPI): void {
     }, 100);
   }
 
-  /** Extract display text from an assistant message content payload. */
-  function flattenAssistantText(content: unknown): string {
+  /** Extract display text from a message content payload (user or assistant). */
+  function flattenTextContent(content: unknown): string {
     if (typeof content === "string") return content;
     if (!Array.isArray(content)) return "";
     const parts: string[] = [];
@@ -197,6 +246,80 @@ export default function (pi: ExtensionAPI): void {
   }
 
   /**
+   * Discovery tool: lists the documents currently attached to the bridge so the
+   * agent can choose a `document` target. Registered once per session; it is
+   * host-agnostic and not part of the reconciled catalog, so it stays active
+   * whenever the extension is loaded.
+   */
+  function registerOfficeListDocumentsTool(): void {
+    const parameters = Type.Object({
+      host: Type.Optional(
+        Type.String({
+          description:
+            'Only list documents of this host app ("excel", "word", or "powerpoint").',
+        }),
+      ),
+    });
+    type Params = Static<typeof parameters>;
+
+    pi.registerTool({
+      name: "office_list_documents",
+      label: "List Open Office Documents",
+      description:
+        "List every Office document attached to the bridge (Excel, Word, PowerPoint) " +
+        "with its document id, name, host app, and whether it is focused. Use this to " +
+        "choose the `document` target for the office_* tools.",
+      promptSnippet: "List the Office documents attached to the bridge",
+      parameters,
+      executionMode: "sequential",
+      async execute(
+        _toolCallId: string,
+        params: Params,
+        _signal: AbortSignal | undefined,
+        _onUpdate,
+        _ctx,
+      ): Promise<AgentToolResult<unknown>> {
+        const active = server;
+        if (!active?.isRunning) {
+          throw new Error(
+            "office-bridge: server is not running. Check the Pi extension loaded, then open the add-in.",
+          );
+        }
+        const all = active.attachedPanes();
+        const host = typeof params.host === "string" ? params.host : undefined;
+        const panes = all.filter((p) => host === undefined || p.host === host);
+        if (panes.length === 0) {
+          return {
+            content: [
+              {
+                type: "text",
+                text:
+                  host === undefined
+                    ? "No Office documents are attached to the bridge."
+                    : `No ${host} documents are attached to the bridge.`,
+              },
+            ],
+            details: undefined,
+          };
+        }
+        const rows = panes.map((p) => {
+          const windows = all.filter(
+            (q) => q.host === p.host && q.targetId === p.targetId,
+          ).length;
+          const name = p.documentName ?? `Untitled (${p.targetId})`;
+          return `| ${name} | \`${p.documentId ?? p.targetId}\` | ${HOST_APP_LABEL[p.host]} | ${p.focused ? "yes" : "no"} | ${windows} |`;
+        });
+        const table = [
+          "| document | id | host | focused | windows |",
+          "|---|---|---|---|---|",
+          ...rows,
+        ].join("\n");
+        return { content: [{ type: "text", text: table }], details: undefined };
+      },
+    });
+  }
+
+  /**
    * Reconcile the Pi active tool set with the currently attached panes: only
    * the office ops the attached panes advertise stay active; everything else
    * (user/other-extension tools) is preserved. Called on attach/detach.
@@ -221,16 +344,23 @@ export default function (pi: ExtensionAPI): void {
     if (panes.length === 0) return null;
 
     const lines = panes.map((p) => {
-      const legacy =
-        p.ops === null
-          ? " (legacy client: only v1 ops — update the add-in for newer tools)"
-          : "";
-      return `- ${HOST_APP_LABEL[p.host]} is attached via the office bridge${legacy}. The open document is live: the office_${p.host}_* tools edit it directly.`;
+      const name = p.documentName ?? `Untitled (${p.targetId})`;
+      const id = p.documentId ?? p.targetId;
+      const marks = [
+        p.focused ? "focused" : null,
+        p.ops === null ? "legacy client (v1 ops)" : null,
+      ].filter((mark): mark is string => mark !== null);
+      return `- ${HOST_APP_LABEL[p.host]} · "${name}" — id \`${id}\`${marks.length > 0 ? ` (${marks.join(", ")})` : ""}`;
     });
     return (
       "\n\n## Attached Office documents\n" +
       lines.join("\n") +
-      "\n\nEditing these documents with the office_* tools is fully supported, including formatting and " +
+      "\n\nEvery office_* tool accepts an optional `document` argument: a document id from the list above, " +
+      'a unique document name, or "active" (the default) for the focused document. When several documents ' +
+      "of one host are open and none is focused, calls without a document target fail with the candidate " +
+      "list — pass the target explicitly instead of guessing. A user's `#name` mention selects that " +
+      "document. Call office_list_documents if this list may be stale.\n\n" +
+      "Editing these documents with the office_* tools is fully supported, including formatting and " +
       "structured documents (titles, headings, lists, tables, alignment, indents). Never claim formatting is " +
       "unavailable, and never emit HTML for Word — use the office_word_* tools."
     );
@@ -241,6 +371,17 @@ export default function (pi: ExtensionAPI): void {
   pi.on("session_start", async (_event, ctx) => {
     currentCtx = ctx;
     registerAllOfficeTools();
+    registerOfficeListDocumentsTool();
+
+    // TUI `#` document mentions. Registered before the early return below so a
+    // session rebind (which rebuilds Pi's autocomplete provider stack)
+    // re-registers it. Read the panes live so the dropdown is never stale.
+    ctx.ui.addAutocompleteProvider((current) =>
+      createDocumentMentionProvider(current as MentionProvider, () => {
+        const panes = server?.attachedPanes() ?? [];
+        return panes.map((pane) => toMentionTarget(pane, panes));
+      }),
+    );
 
     if (server?.isRunning) {
       updateStatus();
@@ -255,11 +396,13 @@ export default function (pi: ExtensionAPI): void {
       piVersion: piVersion(),
       handlers: {
         onUserMessage: (text, pane) => {
-          pendingReplyTargets.push(pane);
+          const promptId = nextCallId("prompt");
+          const sentText = `${formatDocumentTag(pane)}\n${text}`;
+          panePrompts.enqueue({ pane, promptId, sentText });
           updateStatus();
           // followUp: if Pi is idle the message is delivered immediately and
           // triggers a turn; if a turn is running it is queued until it settles.
-          pi.sendUserMessage(text, { deliverAs: "followUp" });
+          pi.sendUserMessage(sentText, { deliverAs: "followUp" });
         },
         // Keep the TUI status line live and the active tool set in sync:
         // opening an app activates that host's office tools; closing it
@@ -298,7 +441,7 @@ export default function (pi: ExtensionAPI): void {
 
   pi.on("session_shutdown", async () => {
     currentCtx = null;
-    pendingReplyTargets.length = 0;
+    panePrompts.clear();
     if (panesChangedTimer !== null) {
       clearTimeout(panesChangedTimer);
       panesChangedTimer = null;
@@ -320,33 +463,52 @@ export default function (pi: ExtensionAPI): void {
     return { systemPrompt: event.systemPrompt + block };
   });
 
-  // Forward the final assistant reply to the pane that prompted it.
+  // Bind a delivered user message to the pane prompt that produced it. The Pi
+  // `input` event fires at enqueue time and queued follow-ups skip
+  // `before_agent_start`, so delivery (`message_start`) is the reliable point.
+  pi.on("message_start", (event, _ctx) => {
+    if (event.message.role !== "user") return;
+    const text = flattenTextContent(event.message.content);
+    if (text) panePrompts.bindDeliveredUserMessage(text);
+  });
+
+  // Forward the final assistant reply to the pane that prompted it — never to
+  // every pane, and never for a TUI-initiated turn.
   pi.on("message_end", async (event, _ctx) => {
     if (event.message.role !== "assistant") return;
     if (!server?.isRunning) return;
-    const target = pendingReplyTargets.shift();
-    if (!target) return;
+    const prompt = panePrompts.active();
+    if (!prompt) return;
 
-    const text = flattenAssistantText(event.message.content);
+    const text = flattenTextContent(event.message.content);
+    panePrompts.complete();
     if (!text) return;
     // SAFETY: assistant messages may carry an id that the Pi event type does
     // not surface; read it through a narrow shape check before using it.
     const maybeId = (event.message as unknown as { id?: unknown }).id;
-    server.broadcast({
+    server.sendToPane(prompt.pane, {
       type: "agent_message",
       kind: "final",
       text,
       messageId: typeof maybeId === "string" ? maybeId : undefined,
+      promptId: prompt.promptId,
     });
     updateStatus();
+  });
+
+  // An aborted/settled turn that produced no final must not leave a pane bound
+  // to the next, unrelated turn.
+  pi.on("agent_settled", () => {
+    panePrompts.complete();
   });
 
   // Forward progress of non-office tools while a pane is awaiting a reply.
   pi.on("tool_execution_start", async (event) => {
     if (!server?.isRunning) return;
-    if (pendingReplyTargets.length === 0) return;
+    const prompt = panePrompts.active();
+    if (!prompt) return;
     if (hostForToolName(event.toolName) !== null) return;
-    server.broadcast({
+    server.sendToPane(prompt.pane, {
       type: "tool_activity",
       tool: event.toolName,
       status: "start",
@@ -356,9 +518,10 @@ export default function (pi: ExtensionAPI): void {
 
   pi.on("tool_execution_end", async (event) => {
     if (!server?.isRunning) return;
-    if (pendingReplyTargets.length === 0) return;
+    const prompt = panePrompts.active();
+    if (!prompt) return;
     if (hostForToolName(event.toolName) !== null) return;
-    server.broadcast({
+    server.sendToPane(prompt.pane, {
       type: "tool_activity",
       tool: event.toolName,
       status: event.isError ? "error" : "end",
@@ -400,7 +563,7 @@ export default function (pi: ExtensionAPI): void {
           p.opsIgnoredCount > 0
             ? `, ${p.opsIgnoredCount} advertised op(s) ignored (unknown to this server)`
             : "";
-        return `- ${HOST_APP_LABEL[p.host]} (${p.clientName}, pane ${p.paneId.slice(0, 8)})${model}${provider}, seen ${ago}s ago — ${ops}${ignored}`;
+        return `- ${paneDocumentLabel(p)} (${p.clientName}, pane ${p.paneId.slice(0, 8)})${model}${provider}, seen ${ago}s ago — ${ops}${ignored}`;
       });
       ctx.ui.notify(
         `Office bridge on :${port} (catalog v${CATALOG_VERSION})\n${lines.join("\n")}`,

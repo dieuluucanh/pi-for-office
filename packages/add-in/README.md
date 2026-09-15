@@ -78,6 +78,13 @@ what's open:
 - **PowerPoint** — 5 ops: overview, read slide, add slide, add text box (with
   formatting), format slide.
 
+With several documents open, every `office_*` tool takes an optional
+`document` target (id from `office_list_documents`, a unique document name, or
+`"active"`); an omitted target uses the focused document and fails with the
+candidate list when that is ambiguous. In the Pi TUI, type `#` to pick an open
+document from a dropdown. See the
+[bridge README → Multiple open documents](../bridge-extension/README.md#multiple-open-documents-protocol-v2).
+
 The op catalog is the **single source of truth**: it lives in
 `@dieulc/pi-office-protocol` (`office-catalog.ts`); this add-in's bridge
 registry (`src/bridge/`) delegates to the local tool factories and a parity

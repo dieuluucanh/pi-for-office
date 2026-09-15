@@ -72,7 +72,7 @@ async function main() {
   if (!Array.isArray(healthBody.panes) || healthBody.panes.length !== 0) {
     throw new Error("expected zero panes before any hello");
   }
-  if (healthBody.protocolVersion !== 1) throw new Error("bad protocolVersion");
+  if (healthBody.protocolVersion !== 2) throw new Error("bad protocolVersion");
   if (healthBody.serverVersion !== "0.2.0-test")
     throw new Error(
       `health missing serverVersion: ${JSON.stringify(healthBody.serverVersion)}`,
@@ -133,10 +133,15 @@ async function main() {
   ws.send(
     JSON.stringify({
       type: "hello",
-      protocolVersion: 1,
+      protocolVersion: 2,
       host: "excel",
       clientName: "test-pane",
       paneId: "pane-a",
+      document: {
+        id: "url_sha256:pane-a-doc",
+        name: "Smoke.xlsx",
+        source: "document.url",
+      },
     }),
   );
   await sleep(100);
@@ -274,9 +279,41 @@ async function main() {
     throw new Error("health pane model wrong");
   if (healthWithPane.panes[0].ops !== null)
     throw new Error("health legacy pane should show ops=null");
+  if (healthWithPane.panes[0].document?.name !== "Smoke.xlsx")
+    throw new Error("health pane document name wrong");
+  if (healthWithPane.panes[0].document?.id !== "url_sha256:pane-a-doc")
+    throw new Error("health pane document id wrong");
+  if (healthWithPane.panes[0].targetId !== "url_sha256:pane-a-doc")
+    throw new Error("health pane targetId wrong");
+  // The pane sent a user_message above, which doubles as a focus signal.
+  if (healthWithPane.panes[0].focused !== true)
+    throw new Error("health pane should be focused after pane user_message");
+  if (healthWithPane.panes[0].visible !== true)
+    throw new Error("health pane should default to visible");
+  if (healthWithPane.panes[0].windows !== 1)
+    throw new Error("health pane windows should be 1");
   if (healthWithPane.catalogVersion !== 1)
     throw new Error("health should advertise server catalogVersion=1");
   console.log("[ok] /health lists attached excel pane w/ model+provider");
+
+  // --- pane_state can clear focus (visibility reporting path) ---
+  ws.send(
+    JSON.stringify({
+      type: "pane_state",
+      focused: false,
+      visible: false,
+      activeAt: Date.now(),
+    }),
+  );
+  await sleep(100);
+  const healthBlurred = JSON.parse((await httpGet(port, "/health")).body);
+  if (healthBlurred.panes[0].focused !== false) {
+    throw new Error("pane_state focused:false must clear focus");
+  }
+  if (healthBlurred.panes[0].visible !== false) {
+    throw new Error("pane_state visible:false must be stored");
+  }
+  console.log("[ok] pane_state focus/visibility updates stored");
 
   // --- modern pane (advertises ops) → normalization + per-op gating ---
   ws.close();
@@ -290,10 +327,15 @@ async function main() {
   ws2.send(
     JSON.stringify({
       type: "hello",
-      protocolVersion: 1,
+      protocolVersion: 2,
       host: "excel",
       clientName: "modern-pane",
       paneId: "pane-modern",
+      document: {
+        id: "url_sha256:pane-modern-doc",
+        name: "Modern.xlsx",
+        source: "document.url",
+      },
       ops: [
         "excel.get_overview",
         "excel.read_range",
@@ -382,6 +424,36 @@ async function main() {
   const formatResult = await toolPromise2;
   console.log(`[ok] advertised op proxied: "${formatResult.text}"`);
 
+  // --- document targeting: the selector is resolved then stripped ---
+  const beforeTargeted = incoming2.length;
+  const targetedPromise = server.callOfficeTool("excel", "read_range", {
+    range: "A1",
+    document: "Modern.xlsx",
+  });
+  await sleep(100);
+  const targetedCall = incoming2
+    .slice(beforeTargeted)
+    .find((m) => m.type === "tool_call");
+  if (!targetedCall) throw new Error("no tool_call for targeted read_range");
+  if (targetedCall.documentId !== "url_sha256:pane-modern-doc")
+    throw new Error(
+      `tool_call.documentId wrong: ${String(targetedCall.documentId)}`,
+    );
+  if ("document" in targetedCall.args)
+    throw new Error("document selector must be stripped before the pane");
+  ws2.send(
+    JSON.stringify({
+      type: "tool_result",
+      id: targetedCall.id,
+      ok: true,
+      text: "targeted ok",
+    }),
+  );
+  await targetedPromise;
+  console.log(
+    "[ok] document target resolved by name, echoed as documentId, stripped from args",
+  );
+
   // Point the remaining legacy sections at the modern connection.
   ws = ws2;
   incoming = incoming2;
@@ -416,6 +488,52 @@ async function main() {
     );
   }
   console.log("[ok] pane removed on disconnect; onPanesChanged(0) on detach");
+
+  // --- protocol v2 handshake gating ---
+  const wsV1 = new WebSocket(`ws://127.0.0.1:${port}`);
+  await new Promise((r) => wsV1.once("open", r));
+  const v1Frames = [];
+  wsV1.on("message", (raw) => v1Frames.push(JSON.parse(raw.toString())));
+  wsV1.send(
+    JSON.stringify({
+      type: "hello",
+      protocolVersion: 1,
+      host: "excel",
+      clientName: "old-client",
+      paneId: "pane-v1",
+      document: { id: null, name: null, source: "unknown" },
+    }),
+  );
+  await sleep(100);
+  if (
+    !v1Frames.some((m) => m.type === "error" && m.code === "protocol_mismatch")
+  ) {
+    throw new Error("v1 hello must be rejected with protocol_mismatch");
+  }
+  console.log("[ok] v1 hello rejected with protocol_mismatch");
+  wsV1.close();
+
+  const wsNoDoc = new WebSocket(`ws://127.0.0.1:${port}`);
+  await new Promise((r) => wsNoDoc.once("open", r));
+  const noDocFrames = [];
+  wsNoDoc.on("message", (raw) => noDocFrames.push(JSON.parse(raw.toString())));
+  wsNoDoc.send(
+    JSON.stringify({
+      type: "hello",
+      protocolVersion: 2,
+      host: "excel",
+      clientName: "no-document",
+      paneId: "pane-nodoc",
+    }),
+  );
+  await sleep(100);
+  if (
+    !noDocFrames.some((m) => m.type === "error" && m.code === "bad_message")
+  ) {
+    throw new Error("v2 hello without document must be rejected");
+  }
+  console.log("[ok] v2 hello without document rejected (bad_message)");
+  wsNoDoc.close();
 
   await server.stop();
   console.log("[ok] server stopped cleanly");

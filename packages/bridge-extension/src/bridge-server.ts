@@ -21,10 +21,12 @@ import {
   CATALOG_VERSION,
   LEGACY_V1_OPS,
   OFFICE_CATALOG_BY_OP,
+  OFFICE_TARGET_PARAM,
   nextCallId,
   parseClientMessage,
   type BridgeCapability,
   type ClientMessage,
+  type DocumentIdentitySource,
   type OfficeHostApp,
   type ServerMessage,
   type ToolResultMessage,
@@ -49,6 +51,27 @@ export interface AttachedPane {
   catalogVersion: number | null;
   /** Count of advertised ops dropped because they are unknown to this server. */
   opsIgnoredCount: number;
+  /**
+   * Stable local id for the pane's document (`url_sha256:…` /
+   * `wps_path_sha256:…`), or null when the host cannot provide one (unsaved).
+   */
+  documentId: string | null;
+  /** Best-effort display name for the document. */
+  documentName: string | null;
+  /** Where the document identity came from. */
+  documentSource: DocumentIdentitySource;
+  /**
+   * Routing key for this pane: the document id when known, otherwise an
+   * ephemeral per-connection id. Two windows showing the same file share a
+   * `targetId`, which resolution treats as one logical document.
+   */
+  targetId: string;
+  /** True when this pane's window/webview last reported focus. */
+  focused: boolean;
+  /** Timestamp of the last focus gain (ms since epoch; 0 = never reported). */
+  focusUpdatedAt: number;
+  /** Last reported visibility (`document.visibilityState === "visible"`). */
+  visible: boolean;
 }
 
 export interface BridgeServerHandlers {
@@ -80,6 +103,21 @@ function parseExtraOrigins(): string[] {
     .split(/[,\s]+/u)
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
+}
+
+/**
+ * Split the protocol v2 `document` selector out of a tool-call args record so
+ * the pane never receives it. Non-string values are treated as "no target".
+ */
+function splitTarget(args: Record<string, unknown>): {
+  target: string | undefined;
+  rest: Record<string, unknown>;
+} {
+  const { [OFFICE_TARGET_PARAM]: raw, ...rest } = args;
+  return {
+    target: typeof raw === "string" ? raw : undefined,
+    rest,
+  };
 }
 
 interface PendingCall {
@@ -211,9 +249,13 @@ export class OfficeBridgeServer {
   }
 
   /**
-   * Proxy one Office.js operation to the most recent pane attached for `host`.
-   * Resolves with the pane's tool_result, rejects when no pane is attached, the
-   * call times out, the pane disconnects, or the caller's signal aborts.
+   * Proxy one Office.js operation to the pane that owns the requested document.
+   *
+   * The target comes from `args.document`: missing or `"active"` resolves to the
+   * focused document, otherwise it must be an id, a unique document name, or a
+   * TUI `#name` mention. The selector is stripped before the call is forwarded.
+   * Rejects when no pane of `host` is attached, the target is ambiguous or
+   * unknown, the call times out, the pane disconnects, or the signal aborts.
    */
   callOfficeTool(
     host: OfficeHostApp,
@@ -222,14 +264,13 @@ export class OfficeBridgeServer {
     signal?: AbortSignal,
     timeoutMs: number = TOOL_CALL_TIMEOUT_MS,
   ): Promise<CallOfficeToolResult> {
-    const pane = this.findPane(host);
-    if (!pane) {
-      return Promise.reject(
-        new Error(
-          `office-bridge: no ${host} workbook/document is attached. ` +
-            "Open the document in the Office add-in (pi-for-office) to enable this tool.",
-        ),
-      );
+    const { target, rest } = splitTarget(args);
+
+    let pane: AttachedPane;
+    try {
+      pane = this.resolvePane(host, target);
+    } catch (error) {
+      return Promise.reject(error);
     }
 
     const opId = `${host}.${op}`;
@@ -260,7 +301,8 @@ export class OfficeBridgeServer {
       type: "tool_call",
       id,
       tool: opId,
-      args,
+      args: rest,
+      ...(pane.documentId !== null ? { documentId: pane.documentId } : {}),
     };
 
     return new Promise<CallOfficeToolResult>((resolve, reject) => {
@@ -356,10 +398,23 @@ export class OfficeBridgeServer {
     }
 
     if (req.method === "GET" && url.pathname === "/health") {
-      const panes = this.attachedPanes().map((p) => ({
+      const all = this.attachedPanes();
+      const panes = all.map((p) => ({
         host: p.host,
         paneId: p.paneId,
         clientName: p.clientName,
+        document: {
+          id: p.documentId,
+          name: p.documentName,
+          source: p.documentSource,
+        },
+        targetId: p.targetId,
+        focused: p.focused,
+        visible: p.visible,
+        // >1 means the same document is open in several windows.
+        windows: all.filter(
+          (q) => q.host === p.host && q.targetId === p.targetId,
+        ).length,
         connectedAt: p.connectedAt,
         lastSeen: p.lastSeen,
         model: p.model,
@@ -429,11 +484,131 @@ export class OfficeBridgeServer {
 
   /* ── Internals ─────────────────────────────────────────────────────── */
 
-  private findPane(host: OfficeHostApp): AttachedPane | null {
-    const sorted = [...this.panes].sort(
-      (a, b) => b.connectedAt - a.connectedAt,
+  /**
+   * Resolve a `document` selector to exactly one pane of `host`.
+   *
+   * Order: focused document → the only attached document → exact id
+   * (`documentId`/`targetId`) → case-insensitive exact name → unique name
+   * substring. Ambiguity or no match throws an actionable error listing the
+   * open documents instead of guessing.
+   */
+  private resolvePane(host: OfficeHostApp, target?: string): AttachedPane {
+    const panes = this.panes.filter((p) => p.host === host);
+    if (panes.length === 0) {
+      throw new Error(
+        `office-bridge: no ${host} workbook/document is attached. ` +
+          "Open the document in the Office add-in (pi-for-office) to enable this tool.",
+      );
+    }
+
+    // A TUI `#name` mention is a valid selector; normalize it away.
+    const needle = (target ?? "").trim().replace(/^#/u, "").trim();
+    if (needle === "" || needle.toLowerCase() === "active") {
+      return this.pickFocusedOrOnly(panes, host, "active");
+    }
+
+    const exactId = panes.filter(
+      (p) => p.targetId === needle || p.documentId === needle,
     );
-    return sorted.find((p) => p.host === host) ?? null;
+    if (exactId.length > 0)
+      return this.pickFocusedOrOnly(exactId, host, needle);
+
+    const lower = needle.toLowerCase();
+    const exactName = panes.filter(
+      (p) => (p.documentName ?? "").toLowerCase() === lower,
+    );
+    if (exactName.length > 0) {
+      // The same name on several *different* documents is ambiguous even when
+      // one is focused; only multiple windows of one document may use focus.
+      const distinct = new Set(exactName.map((p) => p.targetId)).size;
+      if (distinct > 1) {
+        throw new Error(
+          `office-bridge: "${needle}" matches several ${host} documents with the same name. ` +
+            `Open: ${this.describePanes(host)}. ` +
+            `Pass ${OFFICE_TARGET_PARAM}=<id> to choose one.`,
+        );
+      }
+      return this.pickFocusedOrOnly(exactName, host, needle);
+    }
+
+    const partial = panes.filter((p) =>
+      (p.documentName ?? "").toLowerCase().includes(lower),
+    );
+    if (partial.length === 1) {
+      const only = partial[0];
+      if (only !== undefined) return only;
+    }
+    if (partial.length > 1) {
+      throw new Error(
+        `office-bridge: "${needle}" matches several ${host} documents. ` +
+          `Open: ${this.describePanes(host)}. ` +
+          `Pass ${OFFICE_TARGET_PARAM}=<exact name|id> or open the one you mean.`,
+      );
+    }
+
+    throw new Error(
+      `office-bridge: no ${host} document matches "${needle}". ` +
+        `Open: ${this.describePanes(host)}. ` +
+        `Pass ${OFFICE_TARGET_PARAM}=<name|id|"active"> (or mention #<name> in the prompt).`,
+    );
+  }
+
+  /**
+   * Pick the focused pane among candidates, else the only one. When several
+   * candidates share a document id (the same file open in two windows) and none
+   * is focused, fail instead of silently editing the wrong window.
+   */
+  private pickFocusedOrOnly(
+    candidates: readonly AttachedPane[],
+    host: OfficeHostApp,
+    needle: string,
+  ): AttachedPane {
+    const focused = [...candidates]
+      .filter((p) => p.focused)
+      .sort((a, b) => b.focusUpdatedAt - a.focusUpdatedAt);
+    const first = focused[0];
+    if (first !== undefined) return first;
+    if (candidates.length === 1) {
+      const only = candidates[0];
+      if (only !== undefined) return only;
+    }
+    throw new Error(
+      `office-bridge: several ${host} documents are open and none is focused, ` +
+        `so "${needle}" is ambiguous. Open: ${this.describePanes(host)}. ` +
+        `Focus the document you mean, or pass ${OFFICE_TARGET_PARAM}=<name|id>.`,
+    );
+  }
+
+  /** Human-readable list of the open documents of `host`, for error messages. */
+  private describePanes(host: OfficeHostApp): string {
+    const panes = this.panes.filter((p) => p.host === host);
+    return panes
+      .map((p) => {
+        const windows = panes.filter((q) => q.targetId === p.targetId).length;
+        const name = p.documentName ?? `Untitled (${p.targetId})`;
+        const notes = [
+          p.focused ? "focused" : null,
+          windows > 1 ? `${windows} windows` : null,
+        ].filter((note): note is string => note !== null);
+        const suffix = notes.length > 0 ? `, ${notes.join(", ")}` : "";
+        return `"${name}" (${p.documentId ?? p.targetId}${suffix})`;
+      })
+      .join(", ");
+  }
+
+  /**
+   * Mark `pane` as focused, demoting every other pane of the same host so at
+   * most one document per host app is "active" at a time.
+   */
+  private markPaneFocused(pane: AttachedPane, visible?: boolean): void {
+    for (const other of this.panes) {
+      if (other !== pane && other.host === pane.host && other.focused) {
+        other.focused = false;
+      }
+    }
+    pane.focused = true;
+    pane.focusUpdatedAt = Date.now();
+    if (visible !== undefined) pane.visible = visible;
   }
 
   /**
@@ -508,6 +683,13 @@ export class OfficeBridgeServer {
             ops: this.normalizeAdvertisedOps(msg.host, msg.ops),
             catalogVersion: msg.catalogVersion ?? null,
             opsIgnoredCount: this.countIgnoredOps(msg.host, msg.ops),
+            documentId: msg.document.id,
+            documentName: msg.document.name,
+            documentSource: msg.document.source,
+            targetId: msg.document.id ?? `ephemeral:${msg.paneId}`,
+            focused: false,
+            focusUpdatedAt: 0,
+            visible: true,
           };
           // A pane reconnecting replaces any older pane with the same paneId.
           this.panes.splice(
@@ -540,8 +722,22 @@ export class OfficeBridgeServer {
         case "user_message": {
           if (!pane) return;
           pane.lastSeen = Date.now();
+          // Typing in the pane is the strongest signal of which document the
+          // user means, so it doubles as a focus report.
+          this.markPaneFocused(pane);
           const text = msg.text?.trim();
           if (text) this.handlers.onUserMessage(text, pane);
+          break;
+        }
+        case "pane_state": {
+          if (!pane) return;
+          pane.lastSeen = Date.now();
+          if (msg.visible !== undefined) pane.visible = msg.visible;
+          if (msg.focused === true) {
+            this.markPaneFocused(pane, msg.visible);
+          } else if (msg.focused === false) {
+            pane.focused = false;
+          }
           break;
         }
         case "status": {
@@ -651,10 +847,7 @@ export class OfficeBridgeServer {
     }, HEARTBEAT_INTERVAL_MS);
   }
 
-  private sendToPane(
-    pane: WebSocket | AttachedPane,
-    message: ServerMessage,
-  ): boolean {
+  sendToPane(pane: WebSocket | AttachedPane, message: ServerMessage): boolean {
     const ws = pane instanceof WebSocket ? pane : pane.ws;
     if (ws.readyState !== WebSocket.OPEN) return false;
     try {

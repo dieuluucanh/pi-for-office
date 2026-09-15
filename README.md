@@ -42,7 +42,9 @@ Two operational modes, one app:
   GitHub Copilot) that are CORS-blocked inside Office webviews.
 - **Bridge mode (advanced)** — when a local Pi process is running with the
   bridge extension installed, the add-in auto-detects it and gains full
-  system-tool capabilities (bash, git, files).
+  system-tool capabilities (bash, git, files). The agent can target **any**
+  open Excel/Word/PowerPoint document (by id, unique name, or a `#` mention in
+  the terminal) — not just the most recently opened one.
 
 ## Repo layout
 

@@ -19,6 +19,8 @@ import {
   disablePiBridge,
   enablePiBridge,
   getPiBridgeState,
+  PI_BRIDGE_AGENT_MESSAGE_EVENT,
+  PI_BRIDGE_TOOL_ACTIVITY_EVENT,
   resetPiBridgeManagerForTests,
   setPiBridgeManagerHooks,
   type PiBridgeClientLike,
@@ -31,7 +33,10 @@ import {
   setAppStorage,
   type AppStorage,
 } from "../src/storage/local/app-storage.ts";
-import type { WelcomeMessage } from "@dieulc/pi-office-protocol";
+import type {
+  DocumentIdentity,
+  WelcomeMessage,
+} from "@dieulc/pi-office-protocol";
 import { installFakeDom } from "./fake-dom.test.ts";
 
 /* ── Harness ───────────────────────────────────────────────────────── */
@@ -39,7 +44,7 @@ import { installFakeDom } from "./fake-dom.test.ts";
 interface FakeClient extends PiBridgeClientLike {
   connectCount: number;
   disconnectCount: number;
-  options: { host: string; url: string };
+  options: { host: string; url: string; document: DocumentIdentity };
   callbacks: PaneBridgeClientCallbacks;
 }
 
@@ -171,7 +176,7 @@ function setup(): Harness {
 
 const WELCOME: WelcomeMessage = {
   type: "welcome",
-  protocolVersion: 1,
+  protocolVersion: 2,
   piVersion: "0.85.1-test",
   serverName: "pi-office-bridge",
   serverVersion: "0.2.0",
@@ -405,6 +410,59 @@ void test("an 'online' event retries immediately (cancelling the pending delay)"
       1,
       "the old delay was replaced by the new one",
     );
+  } finally {
+    h.restore();
+  }
+});
+
+void test("passes the protocol v2 document identity to the client", async () => {
+  const h = setup();
+  try {
+    await enablePiBridge();
+    // No Office/WPS host is installed in this environment, so the browser
+    // fallback yields an unknown identity rather than failing the connect.
+    assert.deepEqual(h.firstClient().options.document, {
+      id: null,
+      name: null,
+      source: "unknown",
+    });
+  } finally {
+    h.restore();
+  }
+});
+
+void test("pane replies and activity are dispatched as documented DOM events", async () => {
+  const h = setup();
+  try {
+    await enablePiBridge();
+    h.firstClient().callbacks.onStatusChange?.(true);
+
+    const finals: DynamicValue[] = [];
+    const activity: DynamicValue[] = [];
+    const doc = Reflect.get(globalThis, "document") as {
+      addEventListener: (
+        type: string,
+        handler: (event: DynamicValue) => void,
+      ) => void;
+    };
+    doc.addEventListener(PI_BRIDGE_AGENT_MESSAGE_EVENT, (event) =>
+      finals.push(event.detail),
+    );
+    doc.addEventListener(PI_BRIDGE_TOOL_ACTIVITY_EVENT, (event) =>
+      activity.push(event.detail),
+    );
+
+    h.firstClient().callbacks.onAssistantFinal?.("hello from pi", "msg-1");
+    h.firstClient().callbacks.onActivity?.({
+      tool: "bash",
+      status: "start",
+      summary: "ls",
+    });
+
+    assert.deepEqual(finals, [{ text: "hello from pi", messageId: "msg-1" }]);
+    assert.deepEqual(activity, [
+      { tool: "bash", status: "start", summary: "ls" },
+    ]);
   } finally {
     h.restore();
   }

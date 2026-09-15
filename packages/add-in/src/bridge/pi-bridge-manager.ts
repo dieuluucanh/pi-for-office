@@ -22,14 +22,39 @@ import {
   defaultBridgePort,
   resolvePiBridgeUrl,
 } from "../config/local-service-defaults.js";
-import type { OfficeHostApp } from "@dieulc/pi-office-protocol";
+import type {
+  DocumentIdentity,
+  OfficeHostApp,
+} from "@dieulc/pi-office-protocol";
 import { CATALOG_VERSION } from "@dieulc/pi-office-protocol/office-catalog";
+import {
+  getWorkbookContext,
+  type WorkbookContext,
+} from "../workbook/context.js";
 
 const PI_BRIDGE_SETTING_KEY = "pi-bridge.enabled";
 
 /** Persisted bridge WebSocket URL; only loopback ws:// or wss:// is valid. */
 export const PI_BRIDGE_URL_SETTING_KEY = "pi-bridge.url";
 export const DEFAULT_PI_BRIDGE_URL = resolvePiBridgeUrl();
+
+/**
+ * Documented DOM events the manager emits for pane-facing bridge output.
+ * There is no UI consumer yet (the Pi TUI is the chat surface), but emitting
+ * them keeps the protocol contract complete and testable.
+ */
+export const PI_BRIDGE_AGENT_MESSAGE_EVENT = "pi:pi-bridge-agent-message";
+export const PI_BRIDGE_TOOL_ACTIVITY_EVENT = "pi:pi-bridge-tool-activity";
+
+/** Dispatch a bridge CustomEvent when a DOM is available. Never throws. */
+function dispatchBridgeEvent(name: string, detail: unknown): void {
+  if (typeof document === "undefined") return;
+  try {
+    document.dispatchEvent(new CustomEvent(name, { detail }));
+  } catch {
+    // Non-DOM runtimes / restricted webviews: dropping the event is safe.
+  }
+}
 
 export type PiBridgeStatus = "off" | "connecting" | "connected" | "error";
 
@@ -72,7 +97,7 @@ export interface PiBridgeClientLike {
  */
 export interface PiBridgeManagerHooks {
   createClient?: (
-    options: { host: OfficeHostApp; url: string },
+    options: { host: OfficeHostApp; url: string; document: DocumentIdentity },
     callbacks: PaneBridgeClientCallbacks,
   ) => PiBridgeClientLike;
   setTimer?: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
@@ -149,6 +174,27 @@ function warnBridge(message: string): void {
 function hostForCurrentApp(): OfficeHostApp {
   const detected = detectOfficeAppFromGlobals();
   return detected === "word" || detected === "powerpoint" ? detected : "excel";
+}
+
+/** Map the host-neutral workbook context onto the bridge protocol identity. */
+export function toDocumentIdentity(context: WorkbookContext): DocumentIdentity {
+  return {
+    id: context.workbookId,
+    name: context.workbookName,
+    source: context.source,
+  };
+}
+
+/**
+ * Resolve the pane's document identity for the v2 handshake, degrading to an
+ * unknown identity when the host cannot provide one (unsaved/browser).
+ */
+export async function resolveDocumentIdentity(): Promise<DocumentIdentity> {
+  try {
+    return toDocumentIdentity(await getWorkbookContext());
+  } catch {
+    return { id: null, name: null, source: "unknown" };
+  }
 }
 
 function setState(patch: Partial<PiBridgeState>): void {
@@ -254,7 +300,11 @@ function clearScheduledTimer(handle: ReturnType<typeof setTimeout>): void {
 
 /** Production client factory (tests override via `createClient`). */
 function defaultCreateClient(
-  options: { host: OfficeHostApp; url: string },
+  options: {
+    host: OfficeHostApp;
+    url: string;
+    document: DocumentIdentity;
+  },
   callbacks: PaneBridgeClientCallbacks,
 ): PiBridgeClientLike {
   // Advertise exactly the bridge ops this pane can execute so the Pi server
@@ -263,6 +313,7 @@ function defaultCreateClient(
   return new PaneBridgeClient(
     {
       host: options.host,
+      document: options.document,
       registry: ALL_BRIDGE_OPS,
       url: options.url,
       ops,
@@ -396,8 +447,12 @@ async function startBridge(): Promise<void> {
   }
 
   const createClient = managerHooks.createClient ?? defaultCreateClient;
+  const [url, document] = await Promise.all([
+    getPiBridgeUrl(),
+    resolveDocumentIdentity(),
+  ]);
   const next = createClient(
-    { host, url: await getPiBridgeUrl() },
+    { host, url, document },
     {
       onWelcome: (welcome) => {
         if (gen !== generation) return;
@@ -431,6 +486,17 @@ async function startBridge(): Promise<void> {
           warnBridge("connection lost — scheduling reconnect");
           scheduleReconnect(gen);
         }
+      },
+      onAssistantFinal: (text, messageId) => {
+        if (gen !== generation) return;
+        dispatchBridgeEvent(PI_BRIDGE_AGENT_MESSAGE_EVENT, {
+          text,
+          messageId,
+        });
+      },
+      onActivity: (activity) => {
+        if (gen !== generation) return;
+        dispatchBridgeEvent(PI_BRIDGE_TOOL_ACTIVITY_EVENT, activity);
       },
       onServerError: (error) => {
         if (gen !== generation) return;

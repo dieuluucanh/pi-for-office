@@ -67,14 +67,19 @@ async function main() {
   }
   console.log("[ok] /health advertises serverVersion + capabilities");
 
-  // A fake Word op executor (no Office in this test).
+  // A fake Word op executor (no Office in this test). Args are recorded so the
+  // test can prove the `document` selector never reaches the pane.
+  const seenArgs = [];
   const fakeRegistry = new Map([
     [
       "word.read_document",
-      async (args) => ({
-        text: `Fake doc text (${args.scope ?? "all"})`,
-        details: { scope: args.scope ?? "all" },
-      }),
+      async (args) => {
+        seenArgs.push(args);
+        return {
+          text: `Fake doc text (${args.scope ?? "all"})`,
+          details: { scope: args.scope ?? "all" },
+        };
+      },
     ],
   ]);
 
@@ -85,6 +90,11 @@ async function main() {
       registry: fakeRegistry,
       url: `ws://127.0.0.1:${port}`,
       paneId: "pane-interop",
+      document: {
+        id: "url_sha256:interop-doc",
+        name: "Interop.docx",
+        source: "document.url",
+      },
       ops: ["word.read_document", "word.insert_text"],
       catalogVersion: 1,
     },
@@ -104,11 +114,17 @@ async function main() {
   }
   console.log("[ok] onPanesChanged(1) fired on pane attach");
 
-  // Server sees the pane as host "word".
+  // Server sees the pane as host "word" with its v2 document identity.
   const panes = server.attachedPanes();
   if (panes.length !== 1 || panes[0].host !== "word")
     throw new Error("server did not register word pane");
-  console.log("[ok] server registered word pane");
+  if (panes[0].documentId !== "url_sha256:interop-doc")
+    throw new Error(`documentId not stored: ${String(panes[0].documentId)}`);
+  if (panes[0].documentName !== "Interop.docx")
+    throw new Error("documentName not stored");
+  if (panes[0].targetId !== "url_sha256:interop-doc")
+    throw new Error("targetId not derived from documentId");
+  console.log("[ok] server registered word pane + v2 document identity");
 
   // Capability handshake: the pane's advertised ops reach the server.
   const paneOps = panes[0].ops;
@@ -146,6 +162,17 @@ async function main() {
   console.log(
     "[ok] tool_call routed through shared protocol → executor → tool_result",
   );
+
+  // Targeted call: a document name resolves, and the selector is stripped.
+  const targeted = await server.callOfficeTool("word", "read_document", {
+    scope: "all",
+    document: "Interop.docx",
+  });
+  if (!targeted.text.includes("Fake doc text (all)"))
+    throw new Error("targeted tool result mismatch");
+  if (seenArgs.some((args) => "document" in args))
+    throw new Error("document selector must not reach the pane executor");
+  console.log("[ok] document target resolved + stripped before the pane");
 
   // Pane → Pi chat.
   client.sendPrompt("Summarize the doc");

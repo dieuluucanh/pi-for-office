@@ -31,3 +31,4 @@ Thumbs.db
 
 # Local AI plans (the rest of .pi/ is committable — dev config, etc.)
 .pi/plans/
+docs/workflows/

@@ -209,7 +209,7 @@ function connectLastClient(clients: PiBridgeClientLike[]): void {
   ).callbacks;
   const welcome: WelcomeMessage = {
     type: "welcome",
-    protocolVersion: 1,
+    protocolVersion: 2,
     piVersion: "0.85.1-test",
     serverName: "pi-office-bridge",
     serverVersion: "0.2.0",

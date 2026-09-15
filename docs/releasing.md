@@ -8,8 +8,8 @@ For daily local development & testing see
 
 | Component | Package name | Ships via | Current |
 | ----------- | -------------- | ----------- | --------- |
-| Shared wire protocol | `@dieulc/pi-office-protocol` | npm | 0.1.0 |
-| Pi bridge extension | `@dieulc/pi-office-bridge` | npm | 0.1.0 |
+| Shared wire protocol | `@dieulc/pi-office-protocol` | npm | 0.4.0 |
+| Pi bridge extension | `@dieulc/pi-office-bridge` | npm | 0.4.0 |
 | CORS proxy | `pi-for-office-proxy` | npm | 0.2.6-pre |
 | Python bridge | `pi-for-office-python-bridge` | npm | 0.1.2 |
 | Tmux bridge | `pi-for-office-tmux-bridge` | npm | 0.1.2 |
@@ -25,6 +25,11 @@ sideloaded into Office via a manifest. It is never published to npm.
   `publishConfig.access` already says `public`).
 - Depends on the shared protocol → bump/publish **protocol first**, then
   `@dieulc/pi-office-bridge` (it depends on `@dieulc/pi-office-protocol`).
+- **Protocol v2 (document targeting) is breaking**: the add-in and the bridge
+  must ship together. Release order: publish `@dieulc/pi-office-protocol`
+  0.4.0 → `@dieulc/pi-office-bridge` 0.4.0 → deploy the add-in from `main`.
+  A v1 pane (older add-in) is rejected at the handshake with
+  `protocol_mismatch`, and the bridge card surfaces the update hint.
 - A `-pre` suffix means prerelease: it does **not** serve as the `latest`
   dist-tag by default. For a real user-facing release, publish a non-prelude
   version.

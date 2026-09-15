@@ -17,9 +17,16 @@
  *    session and streams the assistant's reply back as `agent_message`.
  *
  * Every connection starts with a `hello` (client) / `welcome` (server) pair so
- * both sides know which Office host app is attached. The client may also
- * advertise the op ids it can execute (`hello.ops`) plus the catalog version
- * they were derived from; the server validates them against its own catalog.
+ * both sides know which Office host app **and which document** is attached.
+ * `hello.document` carries a privacy-preserving identity (an `id` hash when the
+ * host can provide one, a display `name`, and the identity `source`), so the
+ * server routes each tool call to a specific document instead of guessing. The
+ * client may also advertise the op ids it can execute (`hello.ops`) plus the
+ * catalog version they were derived from; the server validates them against its
+ * own catalog. Panes report focus/visibility changes with `pane_state` frames
+ * so `document: "active"` can resolve to the document the user is looking at.
+ *
+ * Protocol v2 is breaking: a v1 client is rejected with `protocol_mismatch`.
  *
  * The office op catalog is exported via the `@dieulc/pi-office-protocol/office-catalog`
  * subpath (kept out of this entry so Node loads this raw-TS file without a
@@ -29,14 +36,41 @@
 /** Default TCP port the bridge server listens on (loopback only). */
 export const BRIDGE_DEFAULT_PORT = 38617;
 
-/** Protocol version. Bump on breaking message-shape changes. */
-export const BRIDGE_PROTOCOL_VERSION = 1;
+/** Protocol version. Bump on breaking message-shape changes (v2 = document identity). */
+export const BRIDGE_PROTOCOL_VERSION = 2;
+
+/**
+ * Tool-argument key that selects the target document for every `office_*` tool.
+ * The Pi extension adds it to every descriptor and strips it from the args
+ * before forwarding a `tool_call`; the pane never sees it.
+ */
+export const OFFICE_TARGET_PARAM = "document";
 
 /** Office host applications the add-in can attach. */
 export type OfficeHostApp = "excel" | "word" | "powerpoint";
 
 /** Every office tool name is namespaced by host: "excel.read_range" etc. */
 export type OfficeToolId = string;
+
+/** Where a pane's document identity came from. */
+export type DocumentIdentitySource =
+ | "document.url"
+ | "wps.activeWorkbook.fullName"
+ | "unknown";
+
+/**
+ * Privacy-preserving document identity sent in `hello`.
+ *
+ * `id` is a stable local hash (never a raw URL/path) or null when the host
+ * cannot provide one (for example an unsaved document); `name` is a best-effort
+ * display name. The server derives a routing `targetId` per pane and uses the
+ * identity to resolve the `document` tool argument.
+ */
+export interface DocumentIdentity {
+ id: string | null;
+ name: string | null;
+ source: DocumentIdentitySource;
+}
 
 /* ── Client → Server ─────────────────────────────────────────────────── */
 
@@ -46,6 +80,8 @@ export interface HelloMessage {
  host: OfficeHostApp;
  clientName: string;
  paneId: string;
+ /** The document this pane is attached to (required since protocol v2). */
+ document: DocumentIdentity;
  /**
   * Op ids this pane can execute (optional; additive since protocol v1).
   * When absent the pane is treated as a legacy 0.2.x client and only the
@@ -86,12 +122,28 @@ export interface ClientStatusMessage {
  provider?: string;
 }
 
+/**
+ * Pane reports window focus/visibility so the server can resolve a missing or
+ * `"active"` target to the document the user is actually looking at.
+ * Best-effort: not every Office host exposes a document-activation event.
+ */
+export interface PaneStateMessage {
+ type: "pane_state";
+ /** True when this pane's window/webview currently has focus. */
+ focused?: boolean;
+ /** `document.visibilityState === "visible"` inside the pane. */
+ visible?: boolean;
+ /** Timestamp of the focus change (ms since epoch). */
+ activeAt?: number;
+}
+
 export type ClientMessage =
  | HelloMessage
  | PingMessage
  | ToolResultMessage
  | UserMessageMessage
- | ClientStatusMessage;
+ | ClientStatusMessage
+ | PaneStateMessage;
 
 /* ── Server → Client ─────────────────────────────────────────────────── */
 
@@ -131,6 +183,11 @@ export interface ToolCallMessage {
  id: string;
  tool: OfficeToolId;
  args: Record<string, unknown>;
+ /**
+  * The document this call was routed to (echo of the pane's identity, for
+  * logging and pane-side defense-in-depth validation).
+  */
+ documentId?: string;
 }
 
 /** A chunk of the assistant's reply (streamed, display-only). */
@@ -146,6 +203,8 @@ export interface AgentFinalMessage {
  kind: "final";
  text: string;
  messageId?: string;
+ /** Correlation id of the pane prompt this reply answers, when there is one. */
+ promptId?: string;
 }
 
 /** Non-office tool activity (bash, read, …) so the pane can show progress. */
@@ -205,6 +264,32 @@ export function parseClientMessage(raw: string): ClientMessage {
    if (!["excel", "word", "powerpoint"].includes(m.host)) {
     throw new Error(`bridge: hello with unknown host '${String(m.host)}'`);
    }
+   // SAFETY: `document` is validated field-by-field below; the cast only
+   // widens the typed shape to a keyed record so unknown keys can be rejected.
+   const doc = m.document as unknown as
+    | Record<string, unknown>
+    | null
+    | undefined;
+   if (typeof doc !== "object" || doc === null) {
+    throw new Error(
+     "bridge: hello missing 'document' identity (protocol v2 requires it)",
+    );
+   }
+   if (doc.id !== null && typeof doc.id !== "string") {
+    throw new Error("bridge: hello.document.id must be a string or null");
+   }
+   if (doc.name !== null && typeof doc.name !== "string") {
+    throw new Error("bridge: hello.document.name must be a string or null");
+   }
+   if (
+    !["document.url", "wps.activeWorkbook.fullName", "unknown"].includes(
+     String(doc.source),
+    )
+   ) {
+    throw new Error(
+     `bridge: hello.document.source is unknown '${String(doc.source)}'`,
+    );
+   }
    if (m.ops !== undefined) {
     if (!Array.isArray(m.ops) || m.ops.some((op) => typeof op !== "string")) {
      throw new Error("bridge: hello with malformed 'ops' (expected string[])");
@@ -221,6 +306,22 @@ export function parseClientMessage(raw: string): ClientMessage {
       `bridge: hello with malformed 'catalogVersion' (${String(m.catalogVersion)})`,
      );
     }
+   }
+   return m;
+  }
+  case "pane_state": {
+   const m = data as PaneStateMessage;
+   if (m.focused !== undefined && typeof m.focused !== "boolean") {
+    throw new Error("bridge: pane_state.focused must be a boolean");
+   }
+   if (m.visible !== undefined && typeof m.visible !== "boolean") {
+    throw new Error("bridge: pane_state.visible must be a boolean");
+   }
+   if (
+    m.activeAt !== undefined &&
+    (typeof m.activeAt !== "number" || !Number.isFinite(m.activeAt))
+   ) {
+    throw new Error("bridge: pane_state.activeAt must be a finite number");
    }
    return m;
   }

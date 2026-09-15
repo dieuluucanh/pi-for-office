@@ -1,6 +1,6 @@
 {
   "name": "@dieulc/pi-office-bridge",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Native Pi extension — WebSocket bridge + Office tool proxy so Pi can drive Excel, Word, and PowerPoint through the pi-for-office add-in.",
   "type": "module",
   "license": "MIT",
@@ -19,7 +19,7 @@
     "extension"
   ],
   "dependencies": {
-    "@dieulc/pi-office-protocol": "^0.3.0",
+    "@dieulc/pi-office-protocol": "^0.4.0",
     "typebox": "^1.3.10",
     "ws": "^8.18.0"
   },
@@ -51,9 +51,12 @@
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.build.json",
     "test:active": "node --test tests/active-tools.test.mjs",
+    "test:replies": "npm run build && node --test tests/pane-replies.test.mjs",
+    "test:mentions": "npm run build && node --test tests/document-mentions.test.mjs",
     "test:smoke": "npm run build && node tests/smoke.mjs",
     "test:interop": "npm run build && node --import ./tests/register-ts-loader.mjs tests/pane-interop.mjs",
-    "test": "npm run test:active && npm run test:smoke && npm run test:interop"
+    "test:multi": "npm run build && node tests/multi-document.test.mjs",
+    "test": "npm run test:active && npm run test:replies && npm run test:mentions && npm run test:smoke && npm run test:interop && npm run test:multi"
   },
   "publishConfig": {
     "access": "public"

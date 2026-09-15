@@ -31,6 +31,38 @@ Two flows:
    pane forwards a `user_message`; the extension injects it into the Pi session
    and streams the assistant's final reply back to the pane.
 
+## Multiple open documents (protocol v2)
+
+The bridge serves **every open document of every attached host app**, not just
+the most recently connected one. In `hello` each pane reports a
+privacy-preserving document identity (`document.id` = a local hash,
+`document.name` = display name, `document.source`), and the server routes each
+tool call to one specific document:
+
+- Every `office_*` tool takes an optional **`document`** argument: a document id
+  (from `office_list_documents`), a unique document name, or `"active"`.
+- An omitted / `"active"` target resolves to the **focused** document, then to
+  the only attached document of that host. If several documents are open and
+  none is focused, the call **fails with the candidate list** instead of
+  editing a guess.
+- Panes report focus/visibility with `pane_state` frames; typing in a pane also
+  counts as focus, and Excel additionally uses `Workbook.onActivated`.
+- `office_list_documents` lists the attached documents (id, name, host, focused,
+  windows); the system prompt carries the same list before every turn.
+- Two windows of the **same file** share one document id: the call routes to the
+  focused window, and errors if neither is focused.
+- In the Pi TUI, type **`#`** while composing a prompt to pick a document from a
+  dropdown (focused first). Enter inserts `#<name>` — or `#<document id>` when
+  two open documents share a name. The server strips the leading `#` when
+  resolving the target, so the mention is directly usable.
+- Agent replies are matched to the pane prompt that caused them and are sent
+  **only to that pane** (never broadcast), and the injected prompt carries an
+  `[office:<host> "<name>" id=…]` tag so a shared conversation stays traceable.
+
+**Protocol v2 is breaking:** update the add-in and the bridge together
+(protocol 0.4.0 + bridge 0.4.0). A v1 pane is rejected at the handshake with
+`protocol_mismatch`.
+
 ## Install
 
 ```bash
@@ -38,7 +70,9 @@ pi install npm:@dieulc/pi-office-bridge
 ```
 
 **Update to the latest** (the full 29-tool catalog incl. structure/format tools
-needs ≥ 0.3.0; the `/health` probe and version display need ≥ 0.2.0):
+needs ≥ 0.3.0; multi-document targeting, `office_list_documents` and `#` mention
+autocomplete need ≥ 0.4.0 (protocol v2, which requires the matching add-in
+build); the `/health` probe and version display need ≥ 0.2.0):
 
 ```bash
 pi install npm:@dieulc/pi-office-bridge@latest
@@ -133,6 +167,9 @@ registry (`packages/add-in/src/bridge/`) there. Op ids are namespaced by host:
 | Word | `get_overview`, `read_document`, `insert_text`, `replace_text`, `format_range`, `insert_blocks`, `insert_table`, `insert_page_break`, `insert_image`, `insert_hyperlink` |
 | PowerPoint | `get_overview`, `read_slide`, `add_slide`, `add_text_box`, `format_slide` |
 
+Plus the host-agnostic discovery tool **`office_list_documents`** (id, name,
+host, focused, windows), always active while the extension is loaded.
+
 ### Active-tool reconciliation
 
 The office tools are registered at `session_start` from the catalog, but only
@@ -179,7 +216,9 @@ the strongest proof the two halves agree on the wire format.
 ## Protocol
 
 The wire protocol is shared in `@dieulc/pi-office-protocol`
-(`packages/protocol`). Bump `BRIDGE_PROTOCOL_VERSION` on breaking changes.
+(`packages/protocol`). It is currently at **v2** (document identity + targeting);
+bump `BRIDGE_PROTOCOL_VERSION` on breaking changes. See
+[`packages/protocol/README.md`](../protocol/README.md) for the v2 changelog.
 
 ## License
 

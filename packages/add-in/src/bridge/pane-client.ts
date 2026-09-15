@@ -17,6 +17,7 @@
 import {
   BRIDGE_PROTOCOL_VERSION,
   type ClientMessage,
+  type DocumentIdentity,
   type HelloMessage,
   type OfficeHostApp,
   type ServerMessage,
@@ -24,6 +25,7 @@ import {
 } from "@dieulc/pi-office-protocol";
 import { defaultBridgePort } from "../config/local-service-defaults.js";
 import type { OfficeOpExecutor } from "./ops.js";
+import { createPaneFocusReporter, type PaneFocusState } from "./pane-focus.js";
 
 const WELCOME_TIMEOUT_MS = 5_000;
 const PING_INTERVAL_MS = 25_000;
@@ -48,6 +50,11 @@ export class BridgeConnectError extends Error {
 
 export interface PaneBridgeClientOptions {
   host: OfficeHostApp;
+  /**
+   * Privacy-preserving identity of the document this pane is attached to
+   * (protocol v2). Host adapters resolve it via `getWorkbookContext()`.
+   */
+  document: DocumentIdentity;
   /** Op registry used to execute incoming tool calls. */
   registry: ReadonlyMap<string, OfficeOpExecutor>;
   url?: string;
@@ -90,6 +97,7 @@ export class PaneBridgeClient {
   readonly host: OfficeHostApp;
   readonly paneId: string;
   readonly clientName: string;
+  readonly document: DocumentIdentity;
 
   private readonly registry: ReadonlyMap<string, OfficeOpExecutor>;
   private readonly callbacks: PaneBridgeClientCallbacks;
@@ -106,6 +114,8 @@ export class PaneBridgeClient {
   private connectionGen = 0;
   /** Last pong timestamp — the watchdog uses this to spot half-open sockets. */
   private lastPongAt = 0;
+  /** Cleanup for the focus/visibility reporter while connected. */
+  private stopFocusReporter: (() => void) | null = null;
 
   constructor(
     options: PaneBridgeClientOptions,
@@ -114,6 +124,7 @@ export class PaneBridgeClient {
     this.host = options.host;
     this.clientName = options.clientName ?? "pi-for-office";
     this.paneId = options.paneId ?? defaultPaneId();
+    this.document = options.document;
     this.registry = options.registry;
     this.callbacks = callbacks;
     this.ops = options.ops;
@@ -178,6 +189,7 @@ export class PaneBridgeClient {
           host: this.host,
           clientName: this.clientName,
           paneId: this.paneId,
+          document: this.document,
         };
         if (this.ops !== undefined) hello.ops = [...this.ops];
         if (this.catalogVersion !== undefined)
@@ -208,6 +220,7 @@ export class PaneBridgeClient {
     }
     this.connectReject = null;
     this.connectResolve = null;
+    this.stopFocusReporting();
     this.setConnected(false);
   }
 
@@ -249,6 +262,7 @@ export class PaneBridgeClient {
       this.callbacks.onWelcome?.(msg);
       this.callbacks.onStatusChange?.(true);
       this.startHeartbeat();
+      this.startFocusReporting();
       resolve?.();
       return;
     }
@@ -266,7 +280,7 @@ export class PaneBridgeClient {
 
     switch (msg.type) {
       case "tool_call": {
-        this.handleToolCall(msg.id, msg.tool, msg.args ?? {});
+        this.handleToolCall(msg.id, msg.tool, msg.args ?? {}, msg.documentId);
         break;
       }
       case "agent_message":
@@ -292,7 +306,24 @@ export class PaneBridgeClient {
     id: string,
     tool: string,
     args: Record<string, DynamicValue>,
+    documentId?: string,
   ): void {
+    // Defense in depth: the server routes calls to the pane that owns the
+    // target document; refuse anything addressed to a different document.
+    if (
+      documentId !== undefined &&
+      this.document.id !== null &&
+      documentId !== this.document.id
+    ) {
+      this.send({
+        type: "tool_result",
+        id,
+        ok: false,
+        text: "",
+        error: `bridge: call targeted document ${documentId} but this pane owns ${this.document.id}.`,
+      } satisfies ClientMessage);
+      return;
+    }
     const executor = this.registry.get(tool);
     if (!executor) {
       this.send({
@@ -358,8 +389,40 @@ export class PaneBridgeClient {
     }, PING_INTERVAL_MS);
   }
 
+  /** Send the pane's current focus/visibility to the server. */
+  private reportPaneState(state: PaneFocusState): void {
+    this.send({
+      type: "pane_state",
+      focused: state.focused,
+      visible: state.visible,
+      activeAt: state.activeAt,
+    });
+  }
+
+  /**
+   * Start reporting focus/visibility (no-op outside a browser). Idempotent, so
+   * it is safe to call after every (re)connect.
+   */
+  private startFocusReporting(): void {
+    if (this.stopFocusReporter !== null) return;
+    const reporter = createPaneFocusReporter({
+      host: this.host,
+      onChange: (state) => this.reportPaneState(state),
+    });
+    this.stopFocusReporter = reporter.start();
+    this.reportPaneState(reporter.snapshot());
+  }
+
+  private stopFocusReporting(): void {
+    if (this.stopFocusReporter !== null) {
+      this.stopFocusReporter();
+      this.stopFocusReporter = null;
+    }
+  }
+
   /** Force-close a stale socket and report the disconnect to the manager. */
   private killConnection(_why: string): void {
+    this.stopFocusReporting();
     if (this.pingTimer !== null) {
       clearInterval(this.pingTimer);
       this.pingTimer = null;
