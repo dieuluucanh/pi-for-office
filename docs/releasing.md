@@ -21,6 +21,13 @@ sideloaded into Office via a manifest. It is never published to npm.
 ## Version policy
 
 - Each npm package versions **independently**; bump only what changed.
+- **Package contents are checked, not assumed.** `@dieulc/pi-office-protocol`
+  and `@dieulc/pi-office-bridge` (and the `pkg/*` packages) publish from explicit
+  `files` allowlists. The bridge extension ships raw TypeScript and is loaded by
+  Pi from `pi.extensions`, so **every** runtime module reached by a relative
+  import must be in the tarball. `scripts/check-package-contents.mjs` enforces
+  this in `release:check` and in the bridge package's `npm test`; never publish
+  a bridge manually with `npm publish` without running it first.
 - Scoped packages (`@dieulc/*`) must publish with `--access public` (their
   `publishConfig.access` already says `public`).
 - Depends on the shared protocol → bump/publish **protocol first**, then
@@ -51,7 +58,12 @@ All commands delegate to `scripts/release.mjs`:
 - `check` — runs the root typecheck, the bridge-extension test suite, then
   `npm pack --dry-run` for every publishable package (this also exercises each
   package's `prepack` sync, which copies server scripts from
-  `packages/add-in/scripts/` into `pkg/<name>/scripts/` before packing).
+  `packages/add-in/scripts/` into `pkg/<name>/scripts/` before packing). Every
+  pack is additionally verified by `scripts/check-package-contents.mjs`: it
+  walks the relative imports reachable from each package's entry points and
+  fails if any resolved module is not inside the tarball. This guards the
+  raw-TypeScript Pi extension, which is loaded straight from the published
+  `src/` (a stale `files` allowlist once shipped a broken release).
 - `publish` — optional `--bump patch|minor|major`, then publishes in
   dependency order, **skipping versions already published**, and verifies each
   with `npm view` afterwards.

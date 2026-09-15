@@ -34,6 +34,8 @@ import { fileURLToPath } from "node:url";
 import { execPath } from "node:process";
 import { createInterface } from "node:readline";
 
+import { verifyPackageContents } from "./check-package-contents.mjs";
+
 const rootDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
@@ -248,13 +250,34 @@ async function check({ only, verb = "check" }) {
       if (!parsed) throw new Error("no JSON in pack output");
       const entry = Array.isArray(parsed) ? parsed[0] : parsed;
       const files = Array.isArray(entry.files) ? entry.files : [];
-      const names = files
-        .map((f) => (typeof f === "string" ? f : f.path))
-        .slice(0, 30);
+      const packedPaths = files.map((f) =>
+        String(typeof f === "string" ? f : f.path).replace(/\\/g, "/"),
+      );
+      const names = packedPaths.slice(0, 30);
       console.log(
-        `${pkg.name}@${pkgJsonPackage(pkg.dir).version}: ${names.length} file(s)`,
+        `${pkg.name}@${pkgJsonPackage(pkg.dir).version}: ${packedPaths.length} file(s)`,
       );
       for (const n of names) console.log(`   ${n}`);
+
+      // Guard: every relative import reachable from the package entry points
+      // must be inside the tarball (raw-TS Pi extensions load straight from it).
+      const verdict = verifyPackageContents(
+        path.join(rootDir, pkg.dir),
+        packedPaths,
+      );
+      if (!verdict.ok) {
+        console.error(
+          `\n[release] ${pkg.name}: imports missing from the tarball:`,
+        );
+        for (const m of verdict.missing) {
+          console.error(`   ${m.from} → ${m.specifier}`);
+        }
+        console.error(`[release] package contents check failed — aborting`);
+        process.exit(1);
+      }
+      console.log(
+        `   ✓ all ${verdict.checked} reachable module(s) packed`,
+      );
     } catch {
       const tail = stripAnsi(pack.stdout ?? "")
         .split("\n")
