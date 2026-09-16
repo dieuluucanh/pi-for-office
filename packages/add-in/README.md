@@ -2,13 +2,15 @@
 
 English | [简体中文](./README.zh-CN.md)
 
-Open-source, multi-model AI sidebar add-in for Microsoft Excel. Powered by [Pi](https://pi.dev).
+Open-source, multi-model AI sidebar add-in for **Excel, Word, and PowerPoint**. Powered by [Pi](https://pi.dev).
 
-Pi for Office is an AI agent that lives inside Excel. It reads your workbook, makes changes, and does research — using any model you choose. Bring your own API key or OAuth login for Anthropic, OpenAI, Google Gemini, or GitHub Copilot.
+Pi for Office is an AI agent that lives inside Office. It reads your document, makes changes, and does research — using any model you choose. Bring your own API key or OAuth login for Anthropic, OpenAI, Google Gemini, or GitHub Copilot.
+
+> Architecture deep-dive: [pi-for-office architecture page](https://dieuluucanh.github.io/pi-for-office/architecture/) · [maintainer guide](docs/architecture-page.md)
 
 ## Features
 
-**Core spreadsheet tools** — 16 built-in tools that the AI can call to interact with your workbook:
+**Core spreadsheet tools** — 17 built-in tools that the AI can call to interact with your workbook:
 
 | Tool | What it does |
 | --- | --- |
@@ -18,6 +20,7 @@ Pi for Office is an AI agent that lives inside Excel. It reads your workbook, ma
 | `fill_formula` | AutoFill a formula across a range (relative refs adjust automatically) |
 | `search_workbook` | Find text, values, or formula references across all sheets |
 | `modify_structure` | Insert/delete rows/columns, add/rename/delete/hide sheets |
+| `charts` | List, create, update, delete charts, or capture one as an image |
 | `format_cells` | Apply formatting — fonts, colors, number formats, borders, named styles |
 | `conditional_format` | Add or clear conditional formatting rules |
 | `trace_dependencies` | Trace formula lineage (precedents upstream or dependents downstream) |
@@ -31,11 +34,16 @@ Pi for Office is an AI agent that lives inside Excel. It reads your workbook, ma
 
 **Multi-model support** — use any supported provider; switch models mid-conversation:
 
-- **Anthropic** (Claude) — API key or OAuth
-- **OpenAI** / **OpenAI Codex** — API key
-- **Google Gemini** — API key
-- **GitHub Copilot** — OAuth
+- **Anthropic** (Claude) — OAuth or API key
+- **OpenAI Codex** (ChatGPT Plus/Pro) — OAuth; **OpenAI** — API key
+- **Google Gemini CLI / Antigravity** — OAuth; **Google Gemini** — API key
+- **GitHub Copilot** — OAuth (device code)
 - **Custom OpenAI-compatible gateways** — configure endpoint + model + API key in `/settings`
+- **Discovered catalogues** — OpenCode Zen/Go models are fetched into the registry
+
+**Word & PowerPoint tools** — 11 document tools for Word (paragraph-aware read, markdown insert,
+tables, images, hyperlinks, formatting) and 6 presentation tools for PowerPoint (deck overview,
+slide read, add slide, text boxes, slide restyling). Host detection picks the right set per app.
 
 **Session management** — multiple session tabs per workbook, auto-save/restore, session history, `/resume` to pick up where you left off.
 
@@ -126,7 +134,7 @@ custom URLs are never touched). Pair the modes: dev add-in ↔ dev bridge
 ### Setup
 
 ```bash
-git clone https://github.com/tmustier/pi-for-excel.git
+git clone https://github.com/dieuluucanh/pi-for-office.git
 cd pi-for-office
 npm install
 
@@ -181,11 +189,12 @@ The dev manifest points to `https://localhost:3141`. The production manifest (`m
 | `npm run dev` | Start Vite dev server (port 3141, HTTPS) |
 | `npm run dev:portless` | Opt-in: dev server behind portless — [docs/portless.md](./docs/portless.md) |
 | `npm run build` | Production build → `dist/` |
-| `npm run check` | Lint + typecheck + CSS theme checks |
+| `npm run check` | Guards + lint + typecheck (includes the architecture-page fact guard) |
 | `npm run typecheck` | TypeScript type checking only |
 | `npm run lint` | ESLint |
 | `npm run test:models` | Unit tests — model ordering |
 | `npm run test:context` | Unit tests — tools, context, sessions, extensions, integrations |
+| `npm test` | All nine suites (models, context, security, bridge, word, excel, powerpoint, guards, manifest) |
 | `npm run test:security` | Security policy tests — proxy, CORS, sandbox, OAuth |
 | `npm run proxy:https` | CORS proxy for OAuth flows (default `https://localhost:3003`; random port only if 3003 is busy and no healthy default proxy is already running) |
 | `npm run validate` | Validate the Office add-in manifest |
@@ -240,26 +249,25 @@ Source-checkout alternatives remain available via `npm run python:bridge:https` 
 Pi for Office is a single-page Office taskpane add-in built with:
 
 - **[Vite](https://vite.dev/)** — dev server + production bundler
-- **[Lit](https://lit.dev/)** — web components for the sidebar UI
+- **[Lit](https://lit.dev/)** — web components for the sidebar UI (first-party: message rendering, dialogs, storage, and CSS are all in-repo)
 - **[pi-agent-core](https://www.npmjs.com/package/@earendil-works/pi-agent-core)** — agent runtime (tool loop, streaming, state management)
-- **[pi-ai](https://www.npmjs.com/package/@earendil-works/pi-ai)** — multi-provider LLM abstraction (Anthropic, OpenAI, Google, GitHub Copilot)
-- **[pi-web-ui](https://www.npmjs.com/package/@earendil-works/pi-web-ui)** — shared web UI components (message rendering, storage, settings dialogs)
-- **[Office.js](https://learn.microsoft.com/en-us/office/dev/add-ins/)** — Excel workbook API
+- **[pi-ai](https://www.npmjs.com/package/@earendil-works/pi-ai)** — multi-provider LLM abstraction (Anthropic, OpenAI, Google, GitHub Copilot, custom gateways)
+- **[Office.js](https://learn.microsoft.com/en-us/office/dev/add-ins/)** — Excel workbook + Word document + PowerPoint presentation APIs
 
 ### Source layout
 
-```
+```text
 src/
 ├── taskpane/          # App init, session management, tab layout, context injection
 ├── taskpane.html      # Entry HTML (loads Office.js + taskpane.ts)
 ├── taskpane.ts        # Entry script
 ├── boot.ts            # Pre-mount setup (CSS, patches)
-├── tools/             # 16 core tools + feature-flagged tools + registry
+├── tools/             # 17 core tools + host tools (word/, powerpoint/) + integrations + registry
 ├── prompt/            # System prompt builder
 ├── context/           # Workbook blueprint cache, selection/change tracking
 ├── auth/              # OAuth providers, API proxy, credential restore
 ├── models/            # Model ordering + version scoring
-├── ui/                # Sidebar component, tool renderers, theme CSS
+├── ui/                # First-party Lit components, tool renderers, theme CSS
 │   └── theme/         # Design tokens, component styles (DM Sans + brand blue/gold palette)
 ├── commands/          # Slash command registry + builtins
 ├── extensions/        # Extension store, sandbox runtime, permissions
@@ -283,7 +291,7 @@ scripts/               # Dev helpers — CORS proxy, tmux/python bridges, manife
 pkg/proxy/             # Publishable npm CLI package: `pi-for-office-proxy`
 pkg/python-bridge/     # Publishable npm CLI package: `pi-for-office-python-bridge`
 pkg/tmux-bridge/       # Publishable npm CLI package: `pi-for-office-tmux-bridge`
-tests/                 # Unit + security tests (~50 test files)
+tests/                 # Unit + security tests (147 test files across 9 suites)
 docs/                  # Current docs (install/deploy/features/policy) + archive/ for historical plans
 skills/                # Bundled Agent Skill definitions (web-search, mcp-gateway, tmux-bridge, python-bridge)
 public/assets/         # Add-in icons (16/32/80/128/256/512px + brand SVGs)
@@ -314,14 +322,15 @@ Users install by downloading `manifest.prod.xml` and uploading it in Excel — t
 | [docs/extensions.md](docs/extensions.md) | Extension authoring guide |
 | [docs/integrations-external-tools.md](docs/integrations-external-tools.md) | Web Search + MCP integration setup |
 | [docs/security-threat-model.md](docs/security-threat-model.md) | Security threat model |
+| [docs/architecture-page.md](docs/architecture-page.md) | Maintaining the public architecture page (+ its fact guard) |
 | [docs/compaction.md](docs/compaction.md) | Session compaction (`/compact`) |
 | [src/tools/DECISIONS.md](src/tools/DECISIONS.md) | Tool behavior decisions log |
-| [src/ui/README.md](src/ui/README.md) | UI architecture + Tailwind v4 notes |
+| [src/ui/README.md](src/ui/README.md) | UI architecture + design tokens |
 
 ## Credits
 
-- [Pi](https://github.com/badlogic/pi-mono) by [@badlogic](https://github.com/badlogic) (Mario Zechner) — the agent framework powering this project. Pi for Office uses pi-agent-core, pi-ai, and pi-web-ui for the agent loop, LLM abstraction, and session storage.
-- [whimsical.ts](https://github.com/mitsuhiko/agent-stuff/blob/main/pi-extensions/whimsical.ts) by [@mitsuhiko](https://github.com/mitsuhiko) (Armin Ronacher) — the rotating "Working…" messages are adapted from his Pi extension, rewritten for a spreadsheet/finance audience.
+- [Pi](https://github.com/badlogic/pi-mono) by [@badlogic](https://github.com/badlogic) (Mario Zechner) — the agent framework powering this project: `pi-agent-core` (agent loop) and `pi-ai` (provider + model abstraction). The UI and storage layers are first-party.
+- [Pi for Excel](https://github.com/tmustier/pi-for-excel) by [@tmustier](https://github.com/tmustier) (Thomas Mustier) — the project Pi for Office was forked from.
 
 ## License
 

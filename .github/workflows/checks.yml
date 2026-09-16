@@ -1,0 +1,54 @@
+name: Checks
+
+# Runs the repo's guard suite on every push and pull request:
+#   - 10 check-*.mjs scripts (theme vars, copy drift, lockstep, …)
+#   - the architecture-page fact guard (check:architecture-facts)
+#   - TypeScript
+#
+# `npm run check:guards` is the guard subset of `npm run check` (which also runs
+# ESLint). ESLint is intentionally not wired in yet: `main` carries pre-existing
+# lint errors in unrelated files, and a red job would mask the guards. Run
+# `npm run lint` locally before touching those files.
+#
+# Publishing is a separate workflow (deploy-pages.yml). This one never
+# deploys and needs no secrets.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          # npm auto-detects the workspace root even when run inside
+          # packages/add-in, so the ROOT lockfile drives the install.
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Guards (includes the architecture-page fact guard)
+        working-directory: packages/add-in
+        run: npm run check:guards
+
+      - name: Typecheck
+        working-directory: packages/add-in
+        run: npm run typecheck

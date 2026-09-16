@@ -32,6 +32,7 @@ This folder contains **current** docs that should match shipped behavior.
 
 - [Coding standards for agents](./coding-standards.md)
 - [Upstream divergences from pi-mono](./upstream-divergences.md)
+- [Maintaining the architecture page](./architecture-page.md)
 - [Context management policy (cache-safe)](./context-management-policy.md)
 - [Cache observability baselines](./cache-observability-baselines.md)
 - [Security threat model](./security-threat-model.md)
