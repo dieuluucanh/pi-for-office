@@ -461,6 +461,10 @@
  line-height: 1.4;
 }
 
+.pi-hub-bridge-setup__hint--hidden {
+ display: none;
+}
+
 .pi-hub-actions-end {
  display: flex;
  justify-content: flex-end;

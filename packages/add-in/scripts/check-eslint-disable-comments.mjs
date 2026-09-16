@@ -23,7 +23,9 @@ function disableDirectiveBeforeReason(line) {
 
 for (const dir of searchRoots) {
   for (const file of collectFiles(join(root, dir))) {
-    const rel = relative(root, file);
+    // Normalize separators before the self-exclusion check, otherwise this
+    // script flags its own pattern strings on Windows (backslash paths).
+    const rel = relative(root, file).replaceAll("\\", "/");
     if (rel === "scripts/check-eslint-disable-comments.mjs") continue;
     const lines = readFileSync(file, "utf8").split("\n");
     for (const [index, line] of lines.entries()) {

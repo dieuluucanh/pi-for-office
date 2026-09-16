@@ -19,7 +19,9 @@ function collectFiles(dir, out = []) {
 
 for (const dir of searchRoots) {
   for (const file of collectFiles(join(root, dir))) {
-    const rel = relative(root, file);
+    // Normalize separators: the allowlist is written POSIX-style so it must
+    // match on Windows too (join/relative return backslashes there).
+    const rel = relative(root, file).replaceAll("\\", "/");
     if (allowedFiles.has(rel)) continue;
     const lines = readFileSync(file, "utf8").split("\n");
     for (const [index, line] of lines.entries()) {

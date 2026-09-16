@@ -185,7 +185,7 @@
   border: 1px solid oklch(0.55 0.22 25 / 0.35);
   background: oklch(0.55 0.22 25 / 0.06);
   color: var(--destructive);
-  font-family: var(--font-ui);
+  font-family: var(--font-sans);
   font-size: var(--text-sm);
   border-radius: 6px;
   padding: 6px 12px;

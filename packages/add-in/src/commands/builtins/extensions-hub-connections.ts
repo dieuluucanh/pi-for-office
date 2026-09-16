@@ -864,10 +864,10 @@ export async function renderConnectionsTab(args: {
     piBridgeStatus.textContent = model.statusText;
     if (model.detail !== undefined) {
       piBridgeStatusDetail.textContent = model.detail;
-      piBridgeStatusDetail.style.display = "";
+      piBridgeStatusDetail.classList.remove("pi-hub-bridge-setup__hint--hidden");
     } else {
       piBridgeStatusDetail.textContent = "";
-      piBridgeStatusDetail.style.display = "none";
+      piBridgeStatusDetail.classList.add("pi-hub-bridge-setup__hint--hidden");
     }
   };
   renderPiBridgeState(getPiBridgeState());

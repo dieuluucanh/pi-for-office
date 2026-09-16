@@ -30,6 +30,28 @@ import { createPaneFocusReporter, type PaneFocusState } from "./pane-focus.js";
 const WELCOME_TIMEOUT_MS = 5_000;
 const PING_INTERVAL_MS = 25_000;
 
+/** Server→client discriminants accepted at the inbound frame boundary. */
+const SERVER_MESSAGE_TYPES: readonly string[] = [
+  "welcome",
+  "pong",
+  "tool_call",
+  "agent_message",
+  "tool_activity",
+  "error",
+];
+
+/**
+ * Boundary refinement for inbound frames: `JSON.parse` lands as `DynamicValue`,
+ * and a frame is used only when it carries a known server discriminant.
+ */
+function isServerMessage(value: DynamicValue): value is ServerMessage {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const type = (value as DynamicObject).type;
+  return typeof type === "string" && SERVER_MESSAGE_TYPES.includes(type);
+}
+
 /** Why a connect attempt failed — the UI turns this into an actionable line. */
 export type BridgeConnectFailureReason =
   | "refused" // nothing listening (Pi not running, wrong port/URL)
@@ -242,12 +264,15 @@ export class PaneBridgeClient {
   /* ── internals ─────────────────────────────────────────────────────── */
 
   private handleFrame(raw: string): void {
-    let msg: ServerMessage;
+    let decoded: DynamicValue;
     try {
-      msg = JSON.parse(raw) as ServerMessage;
+      decoded = JSON.parse(raw) as DynamicValue;
     } catch {
       return;
     }
+
+    if (!isServerMessage(decoded)) return;
+    const msg = decoded;
 
     if (msg.type === "welcome") {
       this.connected = true;
