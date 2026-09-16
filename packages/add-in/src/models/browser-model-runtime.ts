@@ -23,8 +23,16 @@ import {
   ProviderCredentialsStore,
   type ProviderKeysStoreLike,
 } from "../storage/local/provider-credentials-store.js";
+import {
+  OPENCODE_FALLBACK_CONTEXT_WINDOW,
+  inferOpenCodeContextWindow,
+} from "./opencode-context-windows.js";
 
-const DEFAULT_DISCOVERED_CONTEXT_WINDOW = 256_000;
+/**
+ * Fallback for discovered models without registry metadata. The value lives with
+ * the OpenCode inference tables; custom gateways share the same convention.
+ */
+const DEFAULT_DISCOVERED_CONTEXT_WINDOW = OPENCODE_FALLBACK_CONTEXT_WINDOW;
 const DEFAULT_DISCOVERED_MAX_TOKENS = 4_096;
 const MODEL_DISCOVERY_TIMEOUT_MS = 8_000;
 const MAX_MODEL_DISCOVERY_RESPONSE_BYTES = 2 * 1024 * 1024;
@@ -491,94 +499,13 @@ function inferOpenCodeModelApi(modelId: string, providerId: string): Api {
   return "openai-completions";
 }
 
-/**
- * Prefix tables mirroring the static pi-ai OpenCode catalogs, most-specific
- * first. `freeContextWindow` overrides the value for `-free` id variants.
- */
-const OPENCODE_CONTEXT_WINDOW_RULES: readonly {
-  readonly prefixes: readonly string[];
-  readonly contextWindow: number;
-  readonly freeContextWindow?: number;
-}[] = [
-  // ~1M-token families.
-  { prefixes: ["gemini-"], contextWindow: 1_048_576 },
-  { prefixes: ["gpt-5.5", "gpt-5.6", "gpt-5.4-pro"], contextWindow: 1_050_000 },
-  { prefixes: ["gpt-5.4"], contextWindow: 272_000 },
-  { prefixes: ["gpt-5"], contextWindow: 400_000 },
-  { prefixes: ["grok-"], contextWindow: 500_000 },
-  {
-    prefixes: [
-      "claude-opus-4-6",
-      "claude-opus-4-7",
-      "claude-opus-4-8",
-      "claude-opus-5",
-      "claude-sonnet-4-6",
-      "claude-sonnet-5",
-      "claude-fable-",
-    ],
-    contextWindow: 1_000_000,
-  },
-  { prefixes: ["deepseek-v4-pro"], contextWindow: 1_000_000 },
-  {
-    prefixes: ["deepseek-v4-flash"],
-    contextWindow: 1_000_000,
-    freeContextWindow: 200_000,
-  },
-  { prefixes: ["glm-5.2"], contextWindow: 1_000_000 },
-  { prefixes: ["kimi-k3"], contextWindow: 1_000_000 },
-  { prefixes: ["nemotron-3-ultra"], contextWindow: 1_000_000 },
-  { prefixes: ["mimo-"], contextWindow: 1_000_000, freeContextWindow: 200_000 },
-  { prefixes: ["qwen3.7"], contextWindow: 1_000_000 },
-  { prefixes: ["minimax-m3"], contextWindow: 512_000 },
-  // 200k-262k families (free variants sit at the low end).
-  {
-    prefixes: [
-      "claude-",
-      "qwen",
-      "kimi-",
-      "glm-",
-      "minimax-",
-      "deepseek-",
-      "big-pickle",
-      "laguna-",
-      "ling-",
-      "north-mini",
-      "hy",
-      "muse-",
-      "longcat",
-      "omen-",
-    ],
-    contextWindow: 262_144,
-    freeContextWindow: 200_000,
-  },
-];
-
-/**
- * The `/models` endpoint returns bare IDs without context metadata, so infer a
- * conservative context window from the model-family prefix, using the static
- * pi-ai catalogs as the source of truth. Unknown families fall back to
- * DEFAULT_DISCOVERED_CONTEXT_WINDOW.
- */
-export function inferOpenCodeContextWindow(modelId: string): number {
-  const id = modelId.toLowerCase();
-  const isFree = id.endsWith("-free");
-  for (const rule of OPENCODE_CONTEXT_WINDOW_RULES) {
-    if (rule.prefixes.some((prefix) => id.startsWith(prefix))) {
-      return isFree
-        ? (rule.freeContextWindow ?? rule.contextWindow)
-        : rule.contextWindow;
-    }
-  }
-  return DEFAULT_DISCOVERED_CONTEXT_WINDOW;
-}
-
 function buildDiscoveredOpenCodeModel(
   providerId: string,
   modelId: string,
   config: OpenCodeDiscoveryConfig,
 ): Model<Api> {
   const api = inferOpenCodeModelApi(modelId, providerId);
-  const contextWindow = inferOpenCodeContextWindow(modelId);
+  const contextWindow = inferOpenCodeContextWindow(modelId, providerId);
   return {
     id: modelId,
     name: modelId,
@@ -589,6 +516,24 @@ function buildDiscoveredOpenCodeModel(
     reasoning: true,
     input: ["text"],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow,
+    maxTokens: Math.min(DEFAULT_DISCOVERED_MAX_TOKENS, contextWindow),
+  };
+}
+
+/**
+ * Re-apply context-window inference to a model restored from the persisted
+ * catalogue, so catalogues written by older builds pick up corrected windows
+ * without waiting for a live `/models` refresh. Only inferred fields change;
+ * api, baseUrl and cost stay as stored.
+ */
+function reInferDiscoveredContextWindow(
+  model: Model<Api>,
+  providerId: string,
+): Model<Api> {
+  const contextWindow = inferOpenCodeContextWindow(model.id, providerId);
+  return {
+    ...model,
     contextWindow,
     maxTokens: Math.min(DEFAULT_DISCOVERED_MAX_TOKENS, contextWindow),
   };
@@ -626,9 +571,11 @@ function wrapWithOpenCodeDiscovery(
         try {
           const stored = await context.store.read();
           if (stored) {
-            dynamicModels = stored.models.filter(
-              (model) => model.provider === provider.id,
-            );
+            dynamicModels = stored.models
+              .filter((model) => model.provider === provider.id)
+              .map((model) =>
+                reInferDiscoveredContextWindow(model, provider.id),
+              );
           }
           if (!context.allowNetwork || context.signal?.aborted) return;
 

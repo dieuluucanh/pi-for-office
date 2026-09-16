@@ -1,6 +1,7 @@
 # Model / dependency update playbook
 
 **Last verified:** 2026-09-15 (GPT-5.6 snapshot re-checked against `pi-ai` 0.83.0 `dist/providers/data/openai.json` + `openai-codex.json`; no registry drift)
+**OpenCode Zen/Go context tiers verified:** 2026-09-16 (models.dev `providers/opencode-go` page + `api.json` provider key)
 
 This repo hardcodes a small set of "featured" and "preferred" model patterns for sorting and default selection. Static built-in models come from Pi AI, while custom and extension providers can add cached, dynamically discovered catalogues at runtime.
 
@@ -9,13 +10,14 @@ This doc describes how to update:
 - the **Pi dependency versions** we ship (`@earendil-works/pi-ai`, `@earendil-works/pi-agent-core`)
 - the **model ordering/default-selection behavior** in the add-in (`src/models/model-ordering.ts`, `src/models/featured-models.ts`, `src/taskpane/default-model.ts`), including the app-wide remembered model (`src/models/last-used-model.ts`)
 - the **thinking-level UI** that reflects registry capabilities (`src/models/thinking-levels.ts`, `src/taskpane/thinking-display.ts`)
-- the browser-native runtime and dynamic catalogue path (`src/models/browser-model-runtime.ts`, `src/storage/local/model-catalogs-store.ts`)
+- the browser-native runtime and dynamic catalogue path (`src/models/browser-model-runtime.ts`, `src/models/opencode-context-windows.ts`, `src/storage/local/model-catalogs-store.ts`)
 
 ## Sources of truth
 
 - **Built-in model IDs:** `node_modules/@earendil-works/pi-ai/dist/providers/data/*.json`, aggregated by `dist/models.generated.js` and exposed through `builtinProviders()`.
 - **Runtime lookup and streaming:** the taskpane-owned `BrowserModelRuntime`, backed by Pi AI's `createModels()` collection.
 - **Dynamic catalogue cache:** IndexedDB store `model-catalogs`, accessed through `ModelCatalogsStore`; restored entries are rebound to the provider's current API/base URL before use.
+- **OpenCode Zen/Go context windows:** ids present in `/models` but missing from the bundled `pi-ai` catalogues get a window inferred from the model family in `src/models/opencode-context-windows.ts` (see the tier note below).
 - **Discovery bounds:** responses are limited to 2 MiB, 2,000 entries and 256 characters per model ID. An invalid/oversized refresh leaves the last safe cache and configured baseline intact.
 - **Custom gateways:** baseline models remain in `CustomProvidersStore`; `/models` discovery overlays them without deleting the configured fallback model.
 - **Extension providers:** `api.models.registerProvider()` declarations are runtime-owned and unload with their extension. Unregistering aborts in-flight discovery before deleting its cache so late responses cannot resurrect stale entries.
@@ -41,6 +43,23 @@ Prices are registry values in USD per million tokens. All three models:
 - expose `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max` through ChatGPT, with the add-in's `minimal` level mapped to upstream `low`
 
 `tests/model-ordering.test.ts` pins this metadata so a future registry change is reviewed rather than silently changing the UI/runtime contract.
+
+### OpenCode Zen/Go context-window inference
+
+Discovered ids (listed by `/models`, absent from `pi-ai`'s static `opencode.json`/`opencode-go.json`) get a window inferred by family prefix in `src/models/opencode-context-windows.ts`, from two tables:
+
+- **base table** — conservative family defaults mirroring the static `pi-ai` catalogues (Zen semantics);
+- **OpenCode Go table** — models.dev values where Go differs: `minimax-m3` 1M (Zen 512k), `qwen3.6-plus` 1M (Zen 262,144), `glm-5`/`glm-5.1` 202,752 (Zen 204,800), `hy4-preview` 1,024,000, `ox-alpha-free` 1M, `omen-alpha` 500,000, `qwen3.8-*` 1M, `deepseek-v4.1-flash` 1M.
+
+Invariants when editing the tables:
+
+- **the longest matching prefix wins**, so a coarse provider rule (`glm-5`) never shadows a finer base rule (`glm-5.2`); an equal-length provider rule wins;
+- a provider rule replaces the base rule, so repeat `freeContextWindow` when that family has a cheaper `-free` tier;
+- static catalogue entries always win (`mergeModels()` never re-infers a known id), and restored IndexedDB catalogues are re-inferred on load so windows written by older builds self-heal;
+- Zen `gpt-5.4` (272,000) and `claude-sonnet-4`/`4-5` (200,000) deliberately follow the static `pi-ai` catalogue rather than models.dev Zen (1,050,000 / 1,000,000);
+- `tests/opencode-context-windows.test.ts` pins all 36 models.dev OpenCode Go rows — refresh that table with the doc date when the provider changes.
+
+Provider catalogues can overstate the real cap (the OpenCode Go contributor tier is the known example). Those claimed values are recorded as published; the verdict comes from the adaptive effective window (`docs/compaction.md`), which downgrades after an overflow-like failure.
 
 ## When to run this
 

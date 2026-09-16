@@ -9,7 +9,6 @@ import type {
 
 import {
   BrowserModelRuntime,
-  inferOpenCodeContextWindow,
   type BrowserProviderRegistration,
 } from "../src/models/browser-model-runtime.ts";
 import type { CustomProvider } from "../src/storage/local/custom-providers-store.ts";
@@ -440,72 +439,26 @@ void test("credential adapter does not reinterpret OAuth records as browser API 
   );
 });
 
-void test("inferOpenCodeContextWindow maps known families to catalog-tier values", () => {
-  // ~1M families
-  assert.equal(inferOpenCodeContextWindow("claude-opus-4-6"), 1_000_000);
-  assert.equal(inferOpenCodeContextWindow("claude-opus-5"), 1_000_000);
-  assert.equal(inferOpenCodeContextWindow("claude-fable-5"), 1_000_000);
-  assert.equal(inferOpenCodeContextWindow("claude-sonnet-5"), 1_000_000);
-  assert.equal(inferOpenCodeContextWindow("gemini-3.7-flash"), 1_048_576);
-  assert.equal(inferOpenCodeContextWindow("gpt-5.5"), 1_050_000);
-  assert.equal(inferOpenCodeContextWindow("gpt-5.6-terra"), 1_050_000);
-  assert.equal(inferOpenCodeContextWindow("gpt-5.4-pro"), 1_050_000);
-  assert.equal(inferOpenCodeContextWindow("deepseek-v4-flash"), 1_000_000);
-  assert.equal(inferOpenCodeContextWindow("deepseek-v4-pro"), 1_000_000);
-  assert.equal(inferOpenCodeContextWindow("glm-5.2"), 1_000_000);
-  assert.equal(inferOpenCodeContextWindow("kimi-k3"), 1_000_000);
-  assert.equal(inferOpenCodeContextWindow("nemotron-3-ultra-free"), 1_000_000);
-  assert.equal(inferOpenCodeContextWindow("mimo-v2.5"), 1_000_000);
-  assert.equal(inferOpenCodeContextWindow("qwen3.7-plus"), 1_000_000);
-  assert.equal(inferOpenCodeContextWindow("minimax-m3"), 512_000);
-
-  // Mid tiers
-  assert.equal(inferOpenCodeContextWindow("grok-4.5"), 500_000);
-  assert.equal(inferOpenCodeContextWindow("gpt-5.4"), 272_000);
-  assert.equal(inferOpenCodeContextWindow("gpt-5.9-codex"), 400_000);
-  assert.equal(inferOpenCodeContextWindow("gpt-5"), 400_000);
-
-  // 200k-262k families
-  assert.equal(inferOpenCodeContextWindow("claude-haiku-6"), 262_144);
-  assert.equal(inferOpenCodeContextWindow("qwen3.8-plus"), 262_144);
-  assert.equal(inferOpenCodeContextWindow("kimi-k4"), 262_144);
-  assert.equal(inferOpenCodeContextWindow("glm-5.3"), 262_144);
-  assert.equal(inferOpenCodeContextWindow("minimax-m4"), 262_144);
-  assert.equal(inferOpenCodeContextWindow("longcat-3.0"), 262_144);
-  assert.equal(inferOpenCodeContextWindow("omen-alpha"), 262_144);
-
-  // Free variants cap to the low tier
-  assert.equal(inferOpenCodeContextWindow("deepseek-v4-flash-free"), 200_000);
-  assert.equal(inferOpenCodeContextWindow("mimo-v2.5-free"), 200_000);
-  assert.equal(inferOpenCodeContextWindow("claude-sonnet-6-free"), 200_000);
-
-  // Case-insensitive matching
-  assert.equal(inferOpenCodeContextWindow("Claude-Opus-4-6"), 1_000_000);
-});
-
-void test("inferOpenCodeContextWindow falls back to the default for unknown families", () => {
-  assert.equal(inferOpenCodeContextWindow("brand-new-model"), 256_000);
-  assert.equal(inferOpenCodeContextWindow("acme-ultra-9"), 256_000);
-});
-
 void test("OpenCode discovery keeps static catalog values and infers context for new ids", async () => {
   const providerKeys = new MemoryProviderKeys();
   await providerKeys.set("opencode", "oc-secret");
   const catalogs = new MemoryCatalogs();
-  const fetchFn: typeof globalThis.fetch = (async () =>
-    new Response(
-      JSON.stringify({
-        data: [
-          { id: "claude-opus-4-6" },
-          { id: "brand-new-model" },
-          { id: "deepseek-v4-flash-free" },
-        ],
-      }),
-      {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      },
-    )) as typeof globalThis.fetch;
+  const fetchFn: typeof globalThis.fetch = () =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          data: [
+            { id: "claude-opus-4-6" },
+            { id: "brand-new-model" },
+            { id: "deepseek-v4-flash-free" },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
 
   const runtime = createRuntime({ providerKeys, catalogs, fetchFn });
   await runtime.models.refresh({ allowNetwork: true });
@@ -526,4 +479,73 @@ void test("OpenCode discovery keeps static catalog values and infers context for
   );
   assert.equal(storedById.get("brand-new-model")?.contextWindow, 256_000);
   assert.equal(storedById.has("claude-opus-4-6"), false);
+});
+
+void test("OpenCode Go discovery uses the provider-specific inference table", async () => {
+  const providerKeys = new MemoryProviderKeys();
+  await providerKeys.set("opencode-go", "oc-go-secret");
+  const catalogs = new MemoryCatalogs();
+  const fetchFn: typeof globalThis.fetch = () =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          data: [
+            { id: "kimi-k3" },
+            { id: "hy4-preview" },
+            { id: "ox-alpha-free" },
+            { id: "glm-5.3" },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+  const runtime = createRuntime({ providerKeys, catalogs, fetchFn });
+  await runtime.models.refresh({ allowNetwork: true });
+
+  const byId = new Map(
+    runtime.models.getModels("opencode-go").map((model) => [model.id, model]),
+  );
+
+  // Static catalogue stays authoritative for a known Go id.
+  assert.equal(byId.get("kimi-k3")?.contextWindow, 1_048_576);
+  // Newly listed ids use the models.dev OpenCode Go table.
+  assert.equal(byId.get("hy4-preview")?.contextWindow, 1_024_000);
+  assert.equal(byId.get("ox-alpha-free")?.contextWindow, 1_000_000);
+  assert.equal(byId.get("glm-5.3")?.contextWindow, 1_000_000);
+});
+
+void test("OpenCode discovery re-infers persisted windows on restore", async () => {
+  const providerKeys = new MemoryProviderKeys();
+  await providerKeys.set("opencode-go", "oc-go-secret");
+  const catalogs = new MemoryCatalogs();
+  await catalogs.write("opencode-go", {
+    checkedAt: Date.now(),
+    models: [
+      // Window inferred by an older build, before the models.dev Go refresh.
+      {
+        id: "omen-alpha",
+        name: "omen-alpha",
+        api: "openai-completions",
+        provider: "opencode-go",
+        baseUrl: "https://opencode.ai/zen/go/v1",
+        reasoning: true,
+        input: ["text"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 262_144,
+        maxTokens: 4_096,
+      },
+    ],
+  });
+
+  const runtime = createRuntime({ providerKeys, catalogs });
+  await runtime.models.refresh({ allowNetwork: false });
+
+  const byId = new Map(
+    runtime.models.getModels("opencode-go").map((model) => [model.id, model]),
+  );
+  assert.equal(byId.get("omen-alpha")?.contextWindow, 500_000);
 });
