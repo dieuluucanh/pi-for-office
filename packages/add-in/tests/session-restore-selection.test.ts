@@ -23,6 +23,7 @@ import { restoreQueuedMessagesToEditor } from "../src/taskpane/keyboard-shortcut
 import { RecentlyClosedStack } from "../src/taskpane/recently-closed.ts";
 import {
   getRestoreCandidateSessionIds,
+  shouldPersistModelChange,
   shouldPersistSession,
 } from "../src/taskpane/sessions.ts";
 import { failOnUnexpectedStream } from "./fail-on-unexpected-stream.ts";
@@ -68,18 +69,38 @@ void test("candidate selection normalizes empty session IDs", () => {
 });
 
 void test("session persistence guard allows forced saves before first assistant response", () => {
-  assert.equal(
-    shouldPersistSession({ firstAssistantSeen: false }),
-    false,
-  );
+  assert.equal(shouldPersistSession({ firstAssistantSeen: false }), false);
   assert.equal(
     shouldPersistSession({ firstAssistantSeen: false, force: true }),
     true,
   );
-  assert.equal(
-    shouldPersistSession({ firstAssistantSeen: true }),
-    true,
-  );
+  assert.equal(shouldPersistSession({ firstAssistantSeen: true }), true);
+});
+
+void test("model-change persistence guard writes existing or non-empty sessions only", () => {
+  // A model change must reach storage immediately once the session has any
+  // identity or content, but must not create records for untouched blank tabs.
+  const scenarios: Array<{
+    firstAssistantSeen: boolean;
+    hasExistingRecord: boolean;
+    expected: boolean;
+  }> = [
+    { firstAssistantSeen: false, hasExistingRecord: false, expected: false },
+    { firstAssistantSeen: false, hasExistingRecord: true, expected: true },
+    { firstAssistantSeen: true, hasExistingRecord: false, expected: true },
+    { firstAssistantSeen: true, hasExistingRecord: true, expected: true },
+  ];
+
+  for (const scenario of scenarios) {
+    assert.equal(
+      shouldPersistModelChange({
+        firstAssistantSeen: scenario.firstAssistantSeen,
+        hasExistingRecord: scenario.hasExistingRecord,
+      }),
+      scenario.expected,
+      `firstAssistantSeen=${scenario.firstAssistantSeen} hasExistingRecord=${scenario.hasExistingRecord}`,
+    );
+  }
 });
 
 void test("recently closed stack reopens newest first and enforces max size", () => {
@@ -138,17 +159,17 @@ void test("recently closed stack removes duplicate-session entries by unique id"
 
   const removed = stack.removeById("closed-a");
   assert.equal(removed?.id, "closed-a");
-  assert.deepEqual(stack.snapshot().map((item) => item.id), ["closed-b"]);
+  assert.deepEqual(
+    stack.snapshot().map((item) => item.id),
+    ["closed-b"],
+  );
 });
 
 void test("resume target labels and workbook confirmation copy follow selected target", () => {
   assert.equal(getResumeTargetLabel("new_tab"), "Open in new tab");
   assert.equal(getResumeTargetLabel("replace_current"), "Replace current tab");
 
-  assert.match(
-    getCrossWorkbookResumeConfirmMessage("new_tab"),
-    /new tab/i,
-  );
+  assert.match(getCrossWorkbookResumeConfirmMessage("new_tab"), /new tab/i);
   assert.match(
     getCrossWorkbookResumeConfirmMessage("replace_current"),
     /replace the current chat/i,
@@ -706,7 +727,9 @@ void test("queued restore can drop queued commands when requested", () => {
       enqueueCommand: (name, args) => {
         requeuedCommands.push({ name, args });
       },
-      drainQueuedActions: () => [{ type: "command", name: "compact", args: "" }],
+      drainQueuedActions: () => [
+        { type: "command", name: "compact", args: "" },
+      ],
       isBusy: () => true,
     },
     requeueCommands: false,

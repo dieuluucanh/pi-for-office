@@ -77,6 +77,7 @@ If churn is unexpected, treat as a release blocker until explained or fixed.
 | C-3 | Checkpoint + undo | macOS |  |  |  |
 | C-4 | Conventions influence formatting | macOS |  |  |  |
 | C-5 | Extension authoring + widget | macOS |  |  |  |
+| C-6 | Model selection persists across restarts | macOS |  |  |  |
 | P-1 | "Clean data + summary" prompt | macOS |  |  |  |
 | P-2 | "Assumptions + web search + PDFs" prompt | macOS |  |  |  |
 | P-3 | "FX rates + build extension" prompt | macOS |  |  |  |
@@ -156,6 +157,31 @@ Expected:
 - Extension installs via `extensions_manager install_code`
 - Widget renders and action works
 - Errors are user-readable if capability is denied
+
+### C-6. Model selection persists across restarts
+
+Steps:
+
+1. Pick a non-default model from the model selector (status-bar model button)
+2. Send one message, then close and reopen the task pane
+3. Close Excel (or the workbook) and reopen it
+4. Open a **new** tab/session
+5. Pick another model on a session that already has history, then close the pane
+   **without sending a message** and reopen it
+
+Expected:
+
+- The picked model is still selected after each reopen (status bar model label)
+- A brand-new session starts on the last picked model, not the computed default
+  (newest GPT)
+- The model changed without sending a message is still selected after reopen
+- A resumed older session keeps that session's own model
+- A remembered model whose provider is signed out falls back silently to the
+  computed default, and returns once the provider is signed in again
+
+Automation: the dev-only background verification bridge exposes `status`
+(active model) and `selectModel`; `tests/last-used-model.test.ts` also pins the
+`init.ts` wiring in `npm run test:models`.
 
 ## Prompt example checks
 

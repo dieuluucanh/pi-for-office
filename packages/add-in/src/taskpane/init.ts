@@ -82,6 +82,13 @@ import {
   shouldForkModelSwitch,
   type ModelSwitchBehavior,
 } from "../models/switch-behavior.js";
+import {
+  getStoredLastUsedModel,
+  isSameStoredLastUsedModel,
+  pickStartupModel,
+  setStoredLastUsedModel,
+  type StoredLastUsedModel,
+} from "../models/last-used-model.js";
 import { getResolvedConventions } from "../conventions/store.js";
 import {
   buildIntegrationPromptEntries,
@@ -761,6 +768,71 @@ export async function initTaskpane(opts: {
     left.contextWindow === right.contextWindow &&
     left.maxTokens === right.maxTokens;
 
+  // ── App-wide remembered model (docs/upstream-divergences.md §9) ──
+  //
+  // Equivalent to upstream pi-mono's `defaultProvider`/`defaultModel`
+  // settings, but written on every explicit selection instead of Ctrl+S.
+  // Only `rememberModelSelection` writes it: session restore, tab switches
+  // and provider reconciliation never do, so a temporarily unusable provider
+  // cannot overwrite the user's choice with a fallback default.
+  let lastUsedModel: StoredLastUsedModel | null =
+    await getStoredLastUsedModel(settings);
+
+  /** Best-effort: returns false when storage rejected the write. */
+  const rememberLastUsedModel = async (model: {
+    provider: string;
+    id: string;
+  }): Promise<boolean> => {
+    if (isSameStoredLastUsedModel(lastUsedModel, model)) return true;
+
+    try {
+      lastUsedModel = await setStoredLastUsedModel(settings, model);
+      return true;
+    } catch (error) {
+      console.warn("[pi] Failed to remember the selected model:", error);
+      return false;
+    }
+  };
+
+  /**
+   * Persist an explicit user model selection: app-wide first (small write,
+   * durable if the pane closes immediately), then the session record so a
+   * restored session does not come back on a stale model. Forked selections
+   * already save the clone's session, so they pass `runtime: null`.
+   *
+   * Best-effort: returns false when any step was rejected by storage. A
+   * failed write must never block the model switch itself.
+   */
+  const rememberModelSelection = async (
+    nextModel: RuntimeModel,
+    runtime: SessionRuntime | null,
+  ): Promise<boolean> => {
+    const remembered = await rememberLastUsedModel(nextModel);
+    if (!runtime) return remembered;
+
+    try {
+      await runtime.persistence.persistModelChange();
+      return remembered;
+    } catch (error) {
+      console.warn("[pi] Failed to persist the selected model:", error);
+      return false;
+    }
+  };
+
+  /**
+   * Model for a freshly created runtime: the active tab's model (new-tab
+   * inheritance), else the remembered model when it is still usable, else
+   * the computed default model.
+   */
+  const resolveInitialRuntimeModel = (): RuntimeModel =>
+    getActiveRuntime()?.agent.state.model ??
+    pickStartupModel({
+      modelsRuntime: modelRuntime.models,
+      availableProviders,
+      stored: lastUsedModel,
+      defaultModel,
+    });
+
   const reconcileRuntimeModelsWithProviders = (): void => {
     const activeRuntimeId = getActiveRuntime()?.runtimeId ?? null;
     let activeRuntimeChanged = false;
@@ -1244,7 +1316,7 @@ export async function initTaskpane(opts: {
       };
     };
 
-    const initialModel = getActiveRuntime()?.agent.state.model ?? defaultModel;
+    const initialModel = resolveInitialRuntimeModel();
     const initialCapabilities =
       await buildRuntimeCapabilities(runtimeSessionId);
 
@@ -2030,6 +2102,7 @@ export async function initTaskpane(opts: {
       document.dispatchEvent(new CustomEvent("pi:model-changed"));
       document.dispatchEvent(new CustomEvent("pi:status-update"));
       requestAnimationFrame(() => sidebar.requestUpdate());
+      await rememberModelSelection(nextModel, runtime);
       return;
     }
 
@@ -2041,6 +2114,7 @@ export async function initTaskpane(opts: {
       document.dispatchEvent(new CustomEvent("pi:model-changed"));
       document.dispatchEvent(new CustomEvent("pi:status-update"));
       requestAnimationFrame(() => sidebar.requestUpdate());
+      await rememberModelSelection(nextModel, runtime);
       return;
     }
 
@@ -2052,6 +2126,8 @@ export async function initTaskpane(opts: {
       targetModel: nextModel,
       targetTitle: modelForkTitle,
     });
+
+    await rememberModelSelection(nextModel, null);
 
     showToast(t("init.openedInNewTab", { title: modelForkTitle }));
   };

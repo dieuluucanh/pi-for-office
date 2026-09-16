@@ -27,6 +27,11 @@ export interface SessionPersistenceController {
   applyLoadedSession: (sessionData: SessionData) => Promise<void>;
   restoreLatestSession: () => Promise<boolean>;
   saveSession: (opts?: { force?: boolean }) => Promise<void>;
+  /**
+   * Persist a model selection immediately instead of waiting for the next
+   * assistant message (which is otherwise the first save trigger).
+   */
+  persistModelChange: () => Promise<void>;
   subscribe: (listener: () => void) => () => void;
   dispose: () => void;
 }
@@ -84,6 +89,19 @@ export function shouldPersistSession(opts: {
   return opts.firstAssistantSeen;
 }
 
+/**
+ * A model change is worth saving as soon as the session has any stored
+ * identity (a record already exists) or content (an assistant reply landed).
+ * Never-saved blank tabs keep no record from this path: they are covered by
+ * the app-wide remembered model and by the tab-layout force-save on restore.
+ */
+export function shouldPersistModelChange(opts: {
+  firstAssistantSeen: boolean;
+  hasExistingRecord: boolean;
+}): boolean {
+  return opts.firstAssistantSeen || opts.hasExistingRecord;
+}
+
 export function getRestoreCandidateSessionIds(args: {
   workbookId: string | null;
   workbookLatestSessionId: string | null;
@@ -132,9 +150,10 @@ export async function setupSessionPersistence(opts: {
 
   const listeners = new Set<() => void>();
   const initialSessionId = normalizeSessionId(opts.initialSessionId ?? null);
-  let sessionId: SessionId = initialSessionId && isSessionId(initialSessionId)
-    ? initialSessionId
-    : crypto.randomUUID();
+  let sessionId: SessionId =
+    initialSessionId && isSessionId(initialSessionId)
+      ? initialSessionId
+      : crypto.randomUUID();
   let sessionTitle = "";
   let sessionCreatedAt = new Date().toISOString();
   let firstAssistantSeen = false;
@@ -148,23 +167,38 @@ export async function setupSessionPersistence(opts: {
     }
   }
 
-  async function updateWorkbookAssociation(savedSessionId: string): Promise<void> {
+  async function updateWorkbookAssociation(
+    savedSessionId: string,
+  ): Promise<void> {
     const workbookId = await resolveWorkbookId();
     if (!workbookId) return;
 
     try {
-      await spreadsheetHost.sessionStorage.linkSessionToWorkbook(settings, savedSessionId, workbookId);
-      await spreadsheetHost.sessionStorage.setLatestSessionForWorkbook(settings, workbookId, savedSessionId);
+      await spreadsheetHost.sessionStorage.linkSessionToWorkbook(
+        settings,
+        savedSessionId,
+        workbookId,
+      );
+      await spreadsheetHost.sessionStorage.setLatestSessionForWorkbook(
+        settings,
+        workbookId,
+        savedSessionId,
+      );
     } catch (err) {
       console.warn("[pi] Workbook/session association update failed:", err);
     }
   }
 
   async function saveSession(optsForSave?: { force?: boolean }): Promise<void> {
-    if (!shouldPersistSession({
-      firstAssistantSeen,
-      ...(optsForSave?.force !== undefined ? { force: optsForSave.force } : {}),
-    })) return;
+    if (
+      !shouldPersistSession({
+        firstAssistantSeen,
+        ...(optsForSave?.force !== undefined
+          ? { force: optsForSave.force }
+          : {}),
+      })
+    )
+      return;
 
     try {
       const now = new Date().toISOString();
@@ -264,6 +298,28 @@ export async function setupSessionPersistence(opts: {
     }
   }
 
+  /**
+   * Save a model change without waiting for the next assistant message (the
+   * usual first save trigger). Only sessions that already have an identity or
+   * content are written; never-saved blank tabs are covered by the app-wide
+   * remembered model instead of an empty session record here.
+   *
+   * Storage-lookup errors propagate so callers own the failure policy.
+   */
+  async function persistModelChange(): Promise<void> {
+    if (!firstAssistantSeen) {
+      const hasExistingRecord =
+        (await sessions.loadSession(sessionId)) !== null;
+      if (
+        !shouldPersistModelChange({ firstAssistantSeen, hasExistingRecord })
+      ) {
+        return;
+      }
+    }
+
+    await saveSession({ force: true });
+  }
+
   function startNewSession(): void {
     sessionId = crypto.randomUUID();
     sessionTitle = "";
@@ -311,9 +367,14 @@ export async function setupSessionPersistence(opts: {
     try {
       const workbookId = await resolveWorkbookId();
       const workbookLatest = workbookId
-        ? await spreadsheetHost.sessionStorage.getLatestSessionForWorkbook(settings, workbookId)
+        ? await spreadsheetHost.sessionStorage.getLatestSessionForWorkbook(
+            settings,
+            workbookId,
+          )
         : null;
-      const globalLatest = workbookId ? null : await sessions.getLatestSessionId();
+      const globalLatest = workbookId
+        ? null
+        : await sessions.getLatestSessionId();
 
       const candidates = getRestoreCandidateSessionIds({
         workbookId,
@@ -326,7 +387,9 @@ export async function setupSessionPersistence(opts: {
         if (!sessionData || sessionData.messages.length === 0) continue;
 
         await applyLoadedSession(sessionData);
-        console.log(`[pi] Restored session: ${sessionData.title || candidateId}`);
+        console.log(
+          `[pi] Restored session: ${sessionData.title || candidateId}`,
+        );
         return true;
       }
     } catch (err) {
@@ -362,6 +425,7 @@ export async function setupSessionPersistence(opts: {
     applyLoadedSession,
     restoreLatestSession,
     saveSession,
+    persistModelChange,
     subscribe(listener: () => void): () => void {
       listeners.add(listener);
       return () => listeners.delete(listener);

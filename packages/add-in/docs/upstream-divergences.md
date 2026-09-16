@@ -1,6 +1,6 @@
 # Upstream divergences from pi-mono
 
-**Last reviewed:** 2026-07-16
+**Last reviewed:** 2026-09-15
 
 This document records every place Pi for Office intentionally diverges from
 [pi-mono](https://github.com/badlogic/pi-mono) / `@earendil-works/pi-coding-agent`
@@ -219,6 +219,44 @@ record.
 
 **Files:** `src/ui/messages/`, `src/ui/model-selector-dialog.ts`,
 `src/ui/api-key-dialog.ts`, `src/storage/local/`, `src/ui/theme/preflight.css`
+
+---
+
+## 9. Startup model persistence (remember last selected)
+
+| | pi-mono | Pi for Office |
+| --- | --- | --- |
+| Where the startup model lives | `defaultProvider` + `defaultModel` in `~/.pi/agent/settings.json` (global, project override possible) | `model.lastUsed.v1` in the settings IndexedDB store, as `{ provider, id }` |
+| When it is written | Only on an explicit "save as default" action (`Ctrl+S` in the model selector → `AgentSession.setModel(..., { persist: true })`) | Automatically on every explicit model selection (selector dialog, `/model`, `/default-models`, status-bar model button) |
+| Startup resolution | CLI args → scoped models → session restore → saved default (only when `hasConfiguredAuth(provider)`) → first available model | Active tab's model → remembered model (only while it resolves in the registry and its provider is usable) → computed default (`pickDefaultModel`) |
+| Thinking level | `defaultThinkingLevel` + per-model `modelThinkingLevels` are persisted | Not persisted; existing `reasoning ? "high" : "off"` defaults apply |
+
+**Rationale:** pi-mono's model selector has a dedicated "save as default"
+keybinding, so opt-in persistence is discoverable there. The Office task pane is
+a small, session-scoped surface with no such affordance, and users reasonably
+expect the model they picked last to still be selected when Excel is reopened.
+Without it, the model silently reverted to the computed default (the newest
+GPT) on every task pane start, which reads as a bug rather than a preference.
+
+Everything else stays aligned with upstream:
+
+- identity-only storage, re-resolved against the live registry, so registry
+  metadata (context window, max tokens) is never stale in the stored record
+- an unusable provider falls back silently to the computed default, mirroring
+  upstream's `hasConfiguredAuth()` gate in `model-resolver.findInitialModel()`
+- a restored session's own model always wins over the app-wide remembered model
+- provider-reconciliation swaps (a disconnected provider, #553) never overwrite
+  the remembered choice, so signing a provider back in restores it
+
+**Status:** implemented. Deliberately no settings UI (see the decision record in
+`.pi/plans/2026-09-15-remember-last-selected-model.md`): the preference is
+documented here and in `docs/model-updates.md`, and selecting a model is the
+natural reset.
+
+**Files:** `src/models/last-used-model.ts`, `src/taskpane/init.ts`
+(`resolveInitialRuntimeModel`, `rememberModelSelection`),
+`src/taskpane/sessions.ts` (`persistModelChange`),
+`tests/last-used-model.test.ts`
 
 ---
 

@@ -1,13 +1,13 @@
 # Model / dependency update playbook
 
-**Last verified:** 2026-08-05
+**Last verified:** 2026-09-15 (GPT-5.6 snapshot re-checked against `pi-ai` 0.83.0 `dist/providers/data/openai.json` + `openai-codex.json`; no registry drift)
 
 This repo hardcodes a small set of "featured" and "preferred" model patterns for sorting and default selection. Static built-in models come from Pi AI, while custom and extension providers can add cached, dynamically discovered catalogues at runtime.
 
 This doc describes how to update:
 
 - the **Pi dependency versions** we ship (`@earendil-works/pi-ai`, `@earendil-works/pi-agent-core`)
-- the **model ordering/default-selection behavior** in the add-in (`src/models/model-ordering.ts`, `src/models/featured-models.ts`, `src/taskpane/default-model.ts`)
+- the **model ordering/default-selection behavior** in the add-in (`src/models/model-ordering.ts`, `src/models/featured-models.ts`, `src/taskpane/default-model.ts`), including the app-wide remembered model (`src/models/last-used-model.ts`)
 - the **thinking-level UI** that reflects registry capabilities (`src/models/thinking-levels.ts`, `src/taskpane/thinking-display.ts`)
 - the browser-native runtime and dynamic catalogue path (`src/models/browser-model-runtime.ts`, `src/storage/local/model-catalogs-store.ts`)
 
@@ -24,7 +24,7 @@ Do not use Pi coding-agent's Node/file `ModelRuntime` directly in the Office Web
 
 ### Current GPT-5.6 registry snapshot (`pi-ai` 0.83.0)
 
-Upstream exposes exactly three IDs on both `openai` and `openai-codex`; there is deliberately no bare `gpt-5.6` alias:
+Upstream exposes exactly three **GPT-5.6** IDs on both `openai` and `openai-codex`; there is deliberately no bare `gpt-5.6` alias (older families such as `gpt-5.5` remain in the registry):
 
 | ID | Display name | Standard input / output | Cache read / write | Above 272k input / output | Above 272k cache read / write |
 | --- | --- | ---: | ---: | ---: | ---: |
@@ -120,10 +120,12 @@ Files:
 - `src/models/model-ordering.ts` (provider/family priority + version/recency scoring)
 - `src/models/featured-models.ts` (featured-model ordering used by the model picker)
 - `src/taskpane/default-model.ts` (default-model selection rules)
+- `src/models/last-used-model.ts` (app-wide remembered model: `model.lastUsed.v1`)
 - `src/models/thinking-levels.ts` (registry-driven thinking capabilities)
 - `src/taskpane/thinking-display.ts` (localized thinking labels/hints/colors)
 - `src/ui/model-selector-dialog.ts` (first-party model picker UI)
 - `tests/model-ordering.test.ts` (metadata + behavior regressions; run `npm run test:models` — requires Node 22.19+)
+- `tests/last-used-model.test.ts` (remembered-model normalization/resolution + `init.ts` wiring pins)
 
 We intentionally avoid pinning exact versioned IDs now. Instead we:
 
@@ -158,6 +160,7 @@ We intentionally avoid pinning exact versioned IDs now. Instead we:
   - Anthropic is a small special-case: latest Opus by default while Fable is in the registry but unavailable; Sonnet and Fable remain fallbacks if Opus is absent.
   - OpenAI (`openai` + `openai-codex`) prefers the newest general GPT-5 when it is at least as new as Codex, with Codex as fallback; current GPT-5.6 default is Sol
   - otherwise `DEFAULT_MODEL_RULES` + `pickLatestMatchingModel()` (uses the injected `Models` runtime to find the newest available ID)
+  - **the computed default is only a fallback**: at startup `resolveInitialRuntimeModel()` in `src/taskpane/init.ts` prefers the app-wide remembered model (`model.lastUsed.v1`, written by `applyModelSelection`) when it still resolves in the registry and its provider is usable, then `pickDefaultModel(...)`. A remembered model that left the registry, or whose provider is signed out, falls back silently — so registry updates never need to know about it. See `docs/upstream-divergences.md` §9.
 
 - Populate thinking controls from `getSupportedThinkingLevels()` instead of provider-specific hardcoded lists. This keeps model-level maps authoritative and ensures `xhigh` and `max` remain distinct.
 

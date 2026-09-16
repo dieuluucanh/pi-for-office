@@ -35,7 +35,7 @@
     "check": "npm run check:css-theme && npm run check:theme-utility-overrides && npm run check:builtins-inline-style && npm run check:landing-connect-copy && npm run check:pi-lockstep && npm run check:version-sync && npm run check:boundary-casts && npm run check:eslint-comments && npm run check:innerhtml && npm run check:return-types && npm run lint && npm run typecheck",
     "lint": "eslint \"*.ts\" \"src/**/*.ts\" \"tests/**/*.ts\"",
     "lint:fix": "eslint \"*.ts\" \"src/**/*.ts\" \"tests/**/*.ts\" --fix",
-    "test:models": "node --test --experimental-strip-types --import ./scripts/register-test-ts-loader.mjs tests/model-ordering.test.ts tests/runtime-model-reconcile.test.ts tests/browser-model-runtime.test.ts",
+    "test:models": "node --test --experimental-strip-types --import ./scripts/register-test-ts-loader.mjs tests/model-ordering.test.ts tests/runtime-model-reconcile.test.ts tests/browser-model-runtime.test.ts tests/last-used-model.test.ts",
     "test:pi-bridge": "node --test --experimental-strip-types --import ./scripts/register-test-ts-loader.mjs tests/pi-bridge-card-model.test.ts tests/pi-bridge-manager.test.ts tests/pi-bridge-document-identity.test.ts tests/pane-focus.test.ts tests/pi-bridge-probe.test.ts tests/extensions-hub-pi-bridge.test.ts tests/bridge-catalog-parity.test.ts tests/local-service-defaults.test.ts",
     "test:word": "node --test --experimental-strip-types --import ./scripts/register-test-ts-loader.mjs tests/word-tools.test.ts",
     "test:excel": "node --test --experimental-strip-types --import ./scripts/register-test-ts-loader.mjs tests/format-cells.test.ts tests/conditional-format.test.ts tests/excel-capability-gates.test.ts",
