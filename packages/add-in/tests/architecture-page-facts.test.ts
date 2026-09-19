@@ -60,14 +60,24 @@ function captureInt(source: string, pattern: RegExp, label: string): number {
 function countMatches(source: string, pattern: RegExp, label: string): number {
   const matches = [...source.matchAll(pattern)];
   if (matches.length === 0) {
-    throw new Error(`Fact guard: counted 0 matches for ${label} (pattern ${String(pattern)}).`);
+    throw new Error(
+      `Fact guard: counted 0 matches for ${label} (pattern ${String(pattern)}).`,
+    );
   }
   return matches.length;
 }
 
-function requireSnippets(source: string, snippets: readonly string[], label: string): void {
+function requireSnippets(
+  source: string,
+  snippets: readonly string[],
+  label: string,
+): void {
   const missing = snippets.filter((snippet) => !source.includes(snippet));
-  assert.equal(missing.length, 0, `${label} is missing expected entries: ${missing.join(", ")}`);
+  assert.equal(
+    missing.length,
+    0,
+    `${label} is missing expected entries: ${missing.join(", ")}`,
+  );
 }
 
 /** Thousands separators, matching the page's display format. */
@@ -95,7 +105,10 @@ const BUILTIN_EXTRA_TOOL_FACTORIES: readonly string[] = [
 ];
 
 /** Keyboard-shortcut matchers and the label the page must document for each. */
-const SHORTCUT_CONTRACT: readonly (readonly [matcher: string, pageLabel: string])[] = [
+const SHORTCUT_CONTRACT: readonly (readonly [
+  matcher: string,
+  pageLabel: string,
+])[] = [
   ["isCreateTabShortcut", "⌘/Ctrl+T"],
   ["isCloseActiveTabShortcut", "⌘/Ctrl+W"],
   ["isUndoCloseTabShortcut", "⌘/Ctrl+Z"],
@@ -113,23 +126,41 @@ const FORBIDDEN_PATTERNS: readonly (readonly [RegExp, string])[] = [
   [/nicobailon/i, "the visual-explainer credit was removed"],
   [/whimsical/i, "the whimsical.ts credit was removed"],
   [/Armin Ronacher/u, "the whimsical.ts credit was removed"],
-  [/v0\.(?:9|10)\.\d+-pre/u, "the page must not assert a version (dropped by decision)"],
-  [/18[-\s]capabilit/iu, "the extension capability count is derived (currently 20)"],
+  [
+    /v0\.(?:9|10)\.\d+-pre/u,
+    "the page must not assert a version (dropped by decision)",
+  ],
+  [
+    /18[-\s]capabilit/iu,
+    "the extension capability count is derived (currently 20)",
+  ],
   [/11[-\s]overlay/iu, "the overlay count is derived (currently 12)"],
   [/\b100 test files\b/iu, "the test-file count is derived (currently 147)"],
   [/\b3 suites\b/iu, "the test-suite count is derived (currently 9)"],
-  [/\b5 snapshot kinds\b/iu, "the recovery snapshot-kind count is derived (currently 6)"],
+  [
+    /\b5 snapshot kinds\b/iu,
+    "the recovery snapshot-kind count is derived (currently 6)",
+  ],
   [/\b24 (?:built-in )?tools\b/iu, "the tool counts are derived"],
-  [/256\s*KB limit/iu, "the extension HTTP response cap is 1 MB (see data-fact extensions.httpBody)"],
+  [
+    /256\s*KB limit/iu,
+    "the extension HTTP response cap is 1 MB (see data-fact extensions.httpBody)",
+  ],
   [/1,221 lines/u, "do not print source line counts (they drift continuously)"],
-  [/href="\//u, "internal links must be relative so they work under the GitHub Pages subpath"],
+  [
+    /href="\//u,
+    "internal links must be relative so they work under the GitHub Pages subpath",
+  ],
 ];
 
 async function countTestFiles(): Promise<number> {
   const entries = await readdir(new URL("../tests/", import.meta.url));
   // The fact guard is a repo check, not part of the app's test suites.
-  return entries.filter((name) => /\.test\.(?:ts|mjs)$/u.test(name) && name !== "architecture-page-facts.test.ts")
-    .length;
+  return entries.filter(
+    (name) =>
+      /\.test\.(?:ts|mjs)$/u.test(name) &&
+      name !== "architecture-page-facts.test.ts",
+  ).length;
 }
 
 async function countCheckScripts(): Promise<number> {
@@ -150,14 +181,22 @@ async function countBuiltinCommandNames(): Promise<number> {
 
   // `/tools` is registered through TOOLS_COMMAND_NAME rather than a literal.
   const naming = await readSource("src/integrations/naming.ts");
-  const constantName = capture(naming, /TOOLS_COMMAND_NAME = "([^"]+)"/u, "TOOLS_COMMAND_NAME");
+  const constantName = capture(
+    naming,
+    /TOOLS_COMMAND_NAME = "([^"]+)"/u,
+    "TOOLS_COMMAND_NAME",
+  );
 
   return literalNames + (constantName.length > 0 ? 1 : 0);
 }
 
 async function countTestSuiteScripts(): Promise<number> {
   const packageJson = await readSource("package.json");
-  const testScript = capture(packageJson, /\n\s*"test": "([^"]+)"/u, "the aggregate test script");
+  const testScript = capture(
+    packageJson,
+    /\n\s*"test": "([^"]+)"/u,
+    "the aggregate test script",
+  );
   return [...testScript.matchAll(/test:[a-z-]+/gu)].length;
 }
 
@@ -209,7 +248,11 @@ async function deriveExpectedFacts(): Promise<Record<string, string>> {
     /CORE_TOOL_NAMES = \[([\s\S]*?)\] as const/u,
     "CORE_TOOL_NAMES",
   );
-  requireSnippets(toolsIndex, BUILTIN_EXTRA_TOOL_FACTORIES, "src/tools/index.ts");
+  requireSnippets(
+    toolsIndex,
+    BUILTIN_EXTRA_TOOL_FACTORIES,
+    "src/tools/index.ts",
+  );
 
   const sharedCoreBlock = capture(
     toolsIndex,
@@ -223,7 +266,9 @@ async function deriveExpectedFacts(): Promise<Record<string, string>> {
     "WPS_CORE_TOOL_EXECUTE_OVERRIDES",
   );
 
-  const integrationToolNames = [...integrationsCatalog.matchAll(/toolNames: \[([^\]]*)\]/gu)]
+  const integrationToolNames = [
+    ...integrationsCatalog.matchAll(/toolNames: \[([^\]]*)\]/gu),
+  ]
     .flatMap((match) => (match[1] ?? "").split(","))
     .filter((entry) => entry.trim().length > 0);
 
@@ -274,85 +319,194 @@ async function deriveExpectedFacts(): Promise<Record<string, string>> {
     "MAX_EXTENSION_HTTP_BODY_BYTES",
   );
   const toolOutputFloorBytes =
-    captureInt(windowBudgets, /MIN_TOOL_OUTPUT_MAX_BYTES = ([\d_]+)/u, "MIN_TOOL_OUTPUT_MAX_BYTES (KB factor)") *
-    captureInt(windowBudgets, /MIN_TOOL_OUTPUT_MAX_BYTES = [\d_]+ \* ([\d_]+)/u, "MIN_TOOL_OUTPUT_MAX_BYTES");
+    captureInt(
+      windowBudgets,
+      /MIN_TOOL_OUTPUT_MAX_BYTES = ([\d_]+)/u,
+      "MIN_TOOL_OUTPUT_MAX_BYTES (KB factor)",
+    ) *
+    captureInt(
+      windowBudgets,
+      /MIN_TOOL_OUTPUT_MAX_BYTES = [\d_]+ \* ([\d_]+)/u,
+      "MIN_TOOL_OUTPUT_MAX_BYTES",
+    );
 
   const expected: Record<string, string> = {
     "tools.core": String((coreToolBlock.match(/"[a-z_]+"/gu) ?? []).length),
     "tools.builtinExtra": String(BUILTIN_EXTRA_TOOL_FACTORIES.length),
-    "tools.word": String(countMatches(toolsIndex, /createWord[A-Za-z]+Tool\(/gu, "Word tool factories")),
+    "tools.word": String(
+      countMatches(
+        toolsIndex,
+        /createWord[A-Za-z]+Tool\(/gu,
+        "Word tool factories",
+      ),
+    ),
     "tools.powerpoint": String(
-      countMatches(toolsIndex, /createPowerPoint[A-Za-z]+Tool\(/gu, "PowerPoint tool factories"),
+      countMatches(
+        toolsIndex,
+        /createPowerPoint[A-Za-z]+Tool\(/gu,
+        "PowerPoint tool factories",
+      ),
     ),
     "tools.integrations": String(integrationToolNames.length),
 
-    "hosts.coreShared": String((sharedCoreBlock.match(/"[a-z_]+"/gu) ?? []).length),
+    "hosts.coreShared": String(
+      (sharedCoreBlock.match(/"[a-z_]+"/gu) ?? []).length,
+    ),
     "hosts.wpsOverrides": String(
       (wpsOverrideBlock.match(/^\s+[a-z_]+:/gmu) ?? []).length,
     ),
 
-    "extensions.capabilities": String((capabilityBlock.match(/\{ capability: "/gu) ?? []).length),
-    "extensions.trustTypes": String((trustBlock.match(/"[a-z-]+"/gu) ?? []).length),
+    "extensions.capabilities": String(
+      (capabilityBlock.match(/\{ capability: "/gu) ?? []).length,
+    ),
+    "extensions.trustTypes": String(
+      (trustBlock.match(/"[a-z-]+"/gu) ?? []).length,
+    ),
     "extensions.storage": formatMegabytes(storageBytes),
     "extensions.httpBody": formatMegabytes(httpBytes),
 
-    "ui.overlays": String(countMatches(overlayIds, /_OVERLAY_ID = "/gu, "overlay ids")),
+    "ui.overlays": String(
+      countMatches(overlayIds, /_OVERLAY_ID = "/gu, "overlay ids"),
+    ),
     "ui.commands": String(await countBuiltinCommandNames()),
     "ui.locales": String((supportedLanguages.match(/"[^"]+"/gu) ?? []).length),
 
-    "model.oauthProviders": String(countMatches(oauthProviderBlock, /^\s*\[/gmu, "OAuth providers")),
-    "model.payloadSnapshots": String(captureInt(streamProxy, /MAX_PAYLOAD_SNAPSHOTS = ([\d_]+)/u, "MAX_PAYLOAD_SNAPSHOTS")),
-    "model.sessionContexts": String(captureInt(streamProxy, /MAX_SESSION_CONTEXTS = ([\d_]+)/u, "MAX_SESSION_CONTEXTS")),
+    "model.oauthProviders": String(
+      countMatches(oauthProviderBlock, /^\s*\[/gmu, "OAuth providers"),
+    ),
+    "model.payloadSnapshots": String(
+      captureInt(
+        streamProxy,
+        /MAX_PAYLOAD_SNAPSHOTS = ([\d_]+)/u,
+        "MAX_PAYLOAD_SNAPSHOTS",
+      ),
+    ),
+    "model.sessionContexts": String(
+      captureInt(
+        streamProxy,
+        /MAX_SESSION_CONTEXTS = ([\d_]+)/u,
+        "MAX_SESSION_CONTEXTS",
+      ),
+    ),
 
     "compaction.largePercent": String(
       Math.round(
         Number.parseFloat(
-          capture(compactionDefaults, /LARGE_CONTEXT_HARD_RATIO = ([\d.]+)/u, "LARGE_CONTEXT_HARD_RATIO"),
+          capture(
+            compactionDefaults,
+            /LARGE_CONTEXT_HARD_RATIO = ([\d.]+)/u,
+            "LARGE_CONTEXT_HARD_RATIO",
+          ),
         ) * 100,
       ),
     ),
     "compaction.xlPercent": String(
       Math.round(
         Number.parseFloat(
-          capture(compactionDefaults, /XL_CONTEXT_HARD_RATIO = ([\d.]+)/u, "XL_CONTEXT_HARD_RATIO"),
+          capture(
+            compactionDefaults,
+            /XL_CONTEXT_HARD_RATIO = ([\d.]+)/u,
+            "XL_CONTEXT_HARD_RATIO",
+          ),
         ) * 100,
       ),
     ),
 
     "budget.toolOutputKb": `${toolOutputFloorBytes / 1024} KB`,
     "budget.toolOutputLines": String(
-      captureInt(windowBudgets, /MIN_TOOL_OUTPUT_MAX_LINES = ([\d_]+)/u, "MIN_TOOL_OUTPUT_MAX_LINES"),
+      captureInt(
+        windowBudgets,
+        /MIN_TOOL_OUTPUT_MAX_LINES = ([\d_]+)/u,
+        "MIN_TOOL_OUTPUT_MAX_LINES",
+      ),
     ),
 
-    "recovery.kinds": String((recoveryKindBlock.match(/"[a-z_]+"/gu) ?? []).length),
+    "recovery.kinds": String(
+      (recoveryKindBlock.match(/"[a-z_]+"/gu) ?? []).length,
+    ),
     "recovery.maxEntries": String(
-      captureInt(recoveryConstants, /MAX_RECOVERY_ENTRIES = ([\d_]+)/u, "MAX_RECOVERY_ENTRIES"),
+      captureInt(
+        recoveryConstants,
+        /MAX_RECOVERY_ENTRIES = ([\d_]+)/u,
+        "MAX_RECOVERY_ENTRIES",
+      ),
     ),
     "recovery.maxCells": formatInt(
-      captureInt(recoveryConstants, /MAX_RECOVERY_CELLS = ([\d_]+)/u, "MAX_RECOVERY_CELLS"),
+      captureInt(
+        recoveryConstants,
+        /MAX_RECOVERY_CELLS = ([\d_]+)/u,
+        "MAX_RECOVERY_CELLS",
+      ),
     ),
-    "audit.maxEntries": String(captureInt(auditLog, /MAX_AUDIT_ENTRIES = ([\d_]+)/u, "MAX_AUDIT_ENTRIES")),
+    "audit.maxEntries": String(
+      captureInt(
+        auditLog,
+        /MAX_AUDIT_ENTRIES = ([\d_]+)/u,
+        "MAX_AUDIT_ENTRIES",
+      ),
+    ),
     "save.pollSeconds": String(
-      captureInt(saveBoundaryMonitor, /DEFAULT_POLL_INTERVAL_MS = ([\d_]+)/u, "DEFAULT_POLL_INTERVAL_MS") / 1000,
+      captureInt(
+        saveBoundaryMonitor,
+        /DEFAULT_POLL_INTERVAL_MS = ([\d_]+)/u,
+        "DEFAULT_POLL_INTERVAL_MS",
+      ) / 1000,
     ),
-    "storage.stores": String((storageStoresBlock.match(/get(?:Metadata)?Config\(\)/gu) ?? []).length),
+    "storage.stores": String(
+      (storageStoresBlock.match(/get(?:Metadata)?Config\(\)/gu) ?? []).length,
+    ),
 
     "tests.files": String(await countTestFiles()),
     "tests.suites": String(await countTestSuiteScripts()),
     "checks.scripts": String(await countCheckScripts()),
 
-    "bridge.pi.prodPort": capture(serviceDefaults, /BRIDGE_PROD_PORT = ([\d_]+)/u, "BRIDGE_PROD_PORT"),
-    "bridge.pi.devPort": capture(serviceDefaults, /BRIDGE_DEV_PORT = ([\d_]+)/u, "BRIDGE_DEV_PORT"),
-    "bridge.python.prodPort": capture(serviceDefaults, /PYTHON_PROD_PORT = ([\d_]+)/u, "PYTHON_PROD_PORT"),
-    "bridge.python.devPort": capture(serviceDefaults, /PYTHON_DEV_PORT = ([\d_]+)/u, "PYTHON_DEV_PORT"),
-    "bridge.tmux.prodPort": capture(serviceDefaults, /TMUX_PROD_PORT = ([\d_]+)/u, "TMUX_PROD_PORT"),
-    "bridge.tmux.devPort": capture(serviceDefaults, /TMUX_DEV_PORT = ([\d_]+)/u, "TMUX_DEV_PORT"),
-    "bridge.proxy.prodPort": capture(serviceDefaults, /PROXY_PROD_PORT = ([\d_]+)/u, "PROXY_PROD_PORT"),
-    "bridge.proxy.devPort": capture(serviceDefaults, /PROXY_DEV_PORT = ([\d_]+)/u, "PROXY_DEV_PORT"),
+    "bridge.pi.prodPort": capture(
+      serviceDefaults,
+      /BRIDGE_PROD_PORT = ([\d_]+)/u,
+      "BRIDGE_PROD_PORT",
+    ),
+    "bridge.pi.devPort": capture(
+      serviceDefaults,
+      /BRIDGE_DEV_PORT = ([\d_]+)/u,
+      "BRIDGE_DEV_PORT",
+    ),
+    "bridge.python.prodPort": capture(
+      serviceDefaults,
+      /PYTHON_PROD_PORT = ([\d_]+)/u,
+      "PYTHON_PROD_PORT",
+    ),
+    "bridge.python.devPort": capture(
+      serviceDefaults,
+      /PYTHON_DEV_PORT = ([\d_]+)/u,
+      "PYTHON_DEV_PORT",
+    ),
+    "bridge.tmux.prodPort": capture(
+      serviceDefaults,
+      /TMUX_PROD_PORT = ([\d_]+)/u,
+      "TMUX_PROD_PORT",
+    ),
+    "bridge.tmux.devPort": capture(
+      serviceDefaults,
+      /TMUX_DEV_PORT = ([\d_]+)/u,
+      "TMUX_DEV_PORT",
+    ),
+    "bridge.proxy.prodPort": capture(
+      serviceDefaults,
+      /PROXY_PROD_PORT = ([\d_]+)/u,
+      "PROXY_PROD_PORT",
+    ),
+    "bridge.proxy.devPort": capture(
+      serviceDefaults,
+      /PROXY_DEV_PORT = ([\d_]+)/u,
+      "PROXY_DEV_PORT",
+    ),
   };
 
   return Object.fromEntries(
-    Object.entries(expected).map(([key, value]) => [key, value.replaceAll("_", "")]),
+    Object.entries(expected).map(([key, value]) => [
+      key,
+      value.replaceAll("_", ""),
+    ]),
   );
 }
 
@@ -372,26 +526,35 @@ function extractPageFacts(page: string): Map<string, string[]> {
 }
 
 void test("architecture page facts match the codebase", async () => {
-  const [page, expected] = await Promise.all([readPage(), deriveExpectedFacts()]);
+  const [page, expected] = await Promise.all([
+    readPage(),
+    deriveExpectedFacts(),
+  ]);
   const actual = extractPageFacts(page);
   const problems: string[] = [];
 
   for (const [key, expectedValue] of Object.entries(expected)) {
     const actualValues = actual.get(key);
     if (actualValues === undefined) {
-      problems.push(`missing marker: data-fact="${key}" (code says "${expectedValue}")`);
+      problems.push(
+        `missing marker: data-fact="${key}" (code says "${expectedValue}")`,
+      );
       continue;
     }
     for (const actualValue of actualValues) {
       if (actualValue !== expectedValue) {
-        problems.push(`stale value: data-fact="${key}" is "${actualValue}", code says "${expectedValue}"`);
+        problems.push(
+          `stale value: data-fact="${key}" is "${actualValue}", code says "${expectedValue}"`,
+        );
       }
     }
   }
 
   for (const key of actual.keys()) {
     if (expected[key] === undefined) {
-      problems.push(`unknown marker: data-fact="${key}" has no derivation in the guard`);
+      problems.push(
+        `unknown marker: data-fact="${key}" has no derivation in the guard`,
+      );
     }
   }
 
@@ -422,9 +585,15 @@ void test("architecture page uses no retired terminology", async () => {
 void test("architecture page internal links and TOC anchors resolve", async () => {
   const page = await readPage();
 
-  const ids = new Set([...page.matchAll(/\bid="([^"]+)"/gu)].map((match) => match[1]));
-  const anchorTargets = [...page.matchAll(/href="#([^"]+)"/gu)].map((match) => match[1]);
-  const missingAnchors = anchorTargets.filter((target) => target !== undefined && !ids.has(target));
+  const ids = new Set(
+    [...page.matchAll(/\bid="([^"]+)"/gu)].map((match) => match[1]),
+  );
+  const anchorTargets = [...page.matchAll(/href="#([^"]+)"/gu)].map(
+    (match) => match[1],
+  );
+  const missingAnchors = anchorTargets.filter(
+    (target) => target !== undefined && !ids.has(target),
+  );
 
   assert.equal(
     missingAnchors.length,
@@ -434,7 +603,13 @@ void test("architecture page internal links and TOC anchors resolve", async () =
 
   requireSnippets(
     page,
-    ['href="../"', 'href="../#install"', 'href="../#connect"', 'href="./"', 'class="nav-mark"'],
+    [
+      'href="../"',
+      'href="../#install"',
+      'href="../#connect"',
+      'href="./"',
+      'class="nav-mark"',
+    ],
     "Architecture page nav",
   );
 });
@@ -445,11 +620,21 @@ void test("architecture page documents the implemented keyboard shortcuts", asyn
     readSource("src/taskpane/keyboard-shortcuts/matchers.ts"),
   ]);
 
-  const missingMatchers = SHORTCUT_CONTRACT.map(([matcher]) => matcher)
-    .filter((matcher) => !matchers.includes(matcher));
-  const missingLabels = SHORTCUT_CONTRACT.map(([, label]) => label)
-    .filter((label) => !page.includes(label));
+  const missingMatchers = SHORTCUT_CONTRACT.map(([matcher]) => matcher).filter(
+    (matcher) => !matchers.includes(matcher),
+  );
+  const missingLabels = SHORTCUT_CONTRACT.map(([, label]) => label).filter(
+    (label) => !page.includes(label),
+  );
 
-  assert.equal(missingMatchers.length, 0, `Shortcut matchers not found: ${missingMatchers.join(", ")}`);
-  assert.equal(missingLabels.length, 0, `Shortcut labels missing from the page: ${missingLabels.join(", ")}`);
+  assert.equal(
+    missingMatchers.length,
+    0,
+    `Shortcut matchers not found: ${missingMatchers.join(", ")}`,
+  );
+  assert.equal(
+    missingLabels.length,
+    0,
+    `Shortcut labels missing from the page: ${missingLabels.join(", ")}`,
+  );
 });

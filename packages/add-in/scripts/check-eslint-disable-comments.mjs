@@ -17,7 +17,9 @@ function collectFiles(dir, out = []) {
 }
 
 function disableDirectiveBeforeReason(line) {
-  const match = line.match(/eslint-disable(?:-next-line|-line)?\s*([^\n]*?)(?:\s--\s|\*\/|$)/u);
+  const match = line.match(
+    /eslint-disable(?:-next-line|-line)?\s*([^\n]*?)(?:\s--\s|\*\/|$)/u,
+  );
   return match?.[1]?.trim() ?? "";
 }
 
@@ -32,14 +34,22 @@ for (const dir of searchRoots) {
       if (!line.includes("eslint-disable")) continue;
       const ruleList = disableDirectiveBeforeReason(line);
       const hasSpecificRule = ruleList.length > 0 && !ruleList.startsWith("--");
-      const reason = line.split(/\s--\s/u)[1]?.replace(/\*\//u, "").trim() ?? "";
+      const reason =
+        line
+          .split(/\s--\s/u)[1]
+          ?.replace(/\*\//u, "")
+          .trim() ?? "";
 
       if (!hasSpecificRule) {
-        offenders.push(`${rel}:${index + 1} disables ESLint without naming a specific rule`);
+        offenders.push(
+          `${rel}:${index + 1} disables ESLint without naming a specific rule`,
+        );
         continue;
       }
       if (reason.length < 12) {
-        offenders.push(`${rel}:${index + 1} eslint-disable needs a concrete reason after \`--\``);
+        offenders.push(
+          `${rel}:${index + 1} eslint-disable needs a concrete reason after \`--\``,
+        );
       }
     }
   }
@@ -47,7 +57,9 @@ for (const dir of searchRoots) {
 
 if (offenders.length > 0) {
   console.error("ESLint-disable comment check failed.");
-  console.error("Suppressions must be narrow and explain the local safety/interop invariant for future agents.");
+  console.error(
+    "Suppressions must be narrow and explain the local safety/interop invariant for future agents.",
+  );
   for (const offender of offenders) console.error(`- ${offender}`);
   process.exit(1);
 }

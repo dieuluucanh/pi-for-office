@@ -864,7 +864,9 @@ export async function renderConnectionsTab(args: {
     piBridgeStatus.textContent = model.statusText;
     if (model.detail !== undefined) {
       piBridgeStatusDetail.textContent = model.detail;
-      piBridgeStatusDetail.classList.remove("pi-hub-bridge-setup__hint--hidden");
+      piBridgeStatusDetail.classList.remove(
+        "pi-hub-bridge-setup__hint--hidden",
+      );
     } else {
       piBridgeStatusDetail.textContent = "";
       piBridgeStatusDetail.classList.add("pi-hub-bridge-setup__hint--hidden");
