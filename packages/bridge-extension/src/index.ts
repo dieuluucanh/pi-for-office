@@ -406,6 +406,18 @@ export default function (pi: ExtensionAPI): void {
           // triggers a turn; if a turn is running it is queued until it settles.
           pi.sendUserMessage(sentText, { deliverAs: "followUp" });
         },
+        // Protocol v3: a pane's Stop button asks us to abort the run that is
+        // answering its prompt. Only honoured while a pane prompt is actually
+        // in flight (never to kill a TUI-initiated turn) and, when the pane
+        // named a promptId, only for that prompt.
+        onAbortRequest: (promptId, pane) => {
+          const prompt = panePrompts.active();
+          if (!prompt || prompt.pane !== pane) return;
+          if (promptId !== undefined && promptId !== prompt.promptId) return;
+          clearDeltaState();
+          currentCtx?.abort();
+          updateStatus();
+        },
         // Keep the TUI status line live and the active tool set in sync:
         // opening an app activates that host's office tools; closing it
         // deactivates them.
@@ -444,6 +456,7 @@ export default function (pi: ExtensionAPI): void {
   pi.on("session_shutdown", async () => {
     currentCtx = null;
     panePrompts.clear();
+    clearDeltaState();
     if (panesChangedTimer !== null) {
       clearTimeout(panesChangedTimer);
       panesChangedTimer = null;
@@ -465,6 +478,72 @@ export default function (pi: ExtensionAPI): void {
     return { systemPrompt: event.systemPrompt + block };
   });
 
+  // Protocol v3: stream partial assistant text to a pane that can render it.
+  // Deltas are display-only (the final message replaces the live buffer), so
+  // chunks are coalesced into ~frame-sized batches instead of one frame per
+  // token. Only `text_delta` is forwarded — thinking and tool-call deltas are
+  // not part of the pane's reply text.
+  function deltaTextFromEvent(event: { assistantMessageEvent?: unknown }): string | null {
+    const update = event.assistantMessageEvent as
+      | { type?: unknown; delta?: unknown }
+      | null
+      | undefined;
+    if (!update || typeof update !== "object") return null;
+    if (update.type !== "text_delta") return null;
+    return typeof update.delta === "string" && update.delta.length > 0
+      ? update.delta
+      : null;
+  }
+
+  function clearDeltaState(): void {
+    deltaBuffer = "";
+    deltaPane = null;
+    deltaPromptId = null;
+    if (deltaTimer !== null) {
+      clearTimeout(deltaTimer);
+      deltaTimer = null;
+    }
+  }
+
+  /** Send whatever partial text is buffered, then drop it. Safe anytime. */
+  function flushDeltas(): void {
+    if (deltaTimer !== null) {
+      clearTimeout(deltaTimer);
+      deltaTimer = null;
+    }
+    const pane = deltaPane;
+    const text = deltaBuffer;
+    const promptId = deltaPromptId;
+    deltaBuffer = "";
+    if (pane === null || text.length === 0) return;
+    if (!server?.isRunning) return;
+    server.sendToPane(pane, {
+      type: "agent_message",
+      kind: "delta",
+      text,
+      promptId: promptId ?? undefined,
+    });
+  }
+
+  const DELTA_FLUSH_MS = 60;
+  let deltaBuffer = "";
+  let deltaTimer: ReturnType<typeof setTimeout> | null = null;
+  let deltaPane: AttachedPane | null = null;
+  let deltaPromptId: string | null = null;
+
+  function queueDelta(pane: AttachedPane, promptId: string, text: string): void {
+    // A new pane prompt started: never leak the previous prompt's tail into it.
+    if (deltaPane !== null && deltaPane !== pane) flushDeltas();
+    deltaPane = pane;
+    deltaPromptId = promptId;
+    deltaBuffer += text;
+    if (deltaTimer !== null) return;
+    deltaTimer = setTimeout(() => {
+      deltaTimer = null;
+      flushDeltas();
+    }, DELTA_FLUSH_MS);
+  }
+
   // Bind a delivered user message to the pane prompt that produced it. The Pi
   // `input` event fires at enqueue time and queued follow-ups skip
   // `before_agent_start`, so delivery (`message_start`) is the reliable point.
@@ -472,6 +551,17 @@ export default function (pi: ExtensionAPI): void {
     if (event.message.role !== "user") return;
     const text = flattenTextContent(event.message.content);
     if (text) panePrompts.bindDeliveredUserMessage(text);
+  });
+
+  pi.on("message_update", (event, _ctx) => {
+    if (!server?.isRunning) return;
+    const prompt = panePrompts.active();
+    if (!prompt) return;
+    // A v2 pane cannot render a delta; the final reply is all it gets.
+    if (prompt.pane.protocolVersion < 3) return;
+    const text = deltaTextFromEvent(event);
+    if (text === null) return;
+    queueDelta(prompt.pane, prompt.promptId, text);
   });
 
   // Forward the final assistant reply to the pane that prompted it — never to
@@ -483,6 +573,9 @@ export default function (pi: ExtensionAPI): void {
     if (!prompt) return;
 
     const text = flattenTextContent(event.message.content);
+    // Flush the buffered tail first so the pane shows the end of the reply
+    // before the authoritative final replaces its live buffer.
+    flushDeltas();
     panePrompts.complete();
     if (!text) return;
     // SAFETY: assistant messages may carry an id that the Pi event type does

@@ -18,6 +18,8 @@ import type { AddressInfo } from "node:net";
 
 import {
   BRIDGE_PROTOCOL_VERSION,
+  MIN_SUPPORTED_PROTOCOL_VERSION,
+  isProtocolVersionSupported,
   CATALOG_VERSION,
   LEGACY_V1_OPS,
   OFFICE_CATALOG_BY_OP,
@@ -37,6 +39,12 @@ export interface AttachedPane {
   host: OfficeHostApp;
   paneId: string;
   clientName: string;
+  /**
+   * Protocol version the pane declared in `hello` (validated at the handshake).
+   * v3+ panes receive streamed `agent_message` deltas; v2 panes get final
+   * replies only, because they would drop a delta.
+   */
+  protocolVersion: number;
   connectedAt: number;
   lastSeen: number;
   model?: string;
@@ -77,6 +85,12 @@ export interface AttachedPane {
 export interface BridgeServerHandlers {
   /** A user typed a prompt in the add-in sidebar. */
   onUserMessage(text: string, pane: AttachedPane): void;
+  /**
+   * A pane asked to abort the run answering `promptId` (or whatever run is in
+   * flight for that pane when it is omitted). Protocol v3; optional so a host
+   * without an abort path still compiles.
+   */
+  onAbortRequest?(promptId: string | undefined, pane: AttachedPane): void;
   /**
    * A pane attached or detached. Lets the host (Pi) refresh its status line
    * immediately instead of waiting for the next session event.
@@ -127,8 +141,16 @@ interface PendingCall {
 }
 
 export class OfficeBridgeServer {
-  /** Capabilities advertised in `welcome` and `GET /health`. */
-  static readonly CAPABILITIES: readonly BridgeCapability[] = ["http-health"];
+  /**
+   * Capabilities advertised in `welcome` and `GET /health`. These describe the
+   * **server**, so they are advertised to every client regardless of the
+   * protocol version the pane declared.
+   */
+  static readonly CAPABILITIES: readonly BridgeCapability[] = [
+    "http-health",
+    "agent-deltas",
+    "client-abort",
+  ];
 
   private readonly port: number;
   private readonly handlers: BridgeServerHandlers;
@@ -421,6 +443,7 @@ export class OfficeBridgeServer {
         provider: p.provider,
         ops: p.ops,
         catalogVersion: p.catalogVersion,
+        protocolVersion: p.protocolVersion,
         opsIgnoredCount: p.opsIgnoredCount,
       }));
 
@@ -661,11 +684,12 @@ export class OfficeBridgeServer {
 
       switch (msg.type) {
         case "hello": {
-          if (msg.protocolVersion !== BRIDGE_PROTOCOL_VERSION) {
+          if (!isProtocolVersionSupported(msg.protocolVersion)) {
             this.sendError(
               ws,
               "protocol_mismatch",
-              `bridge: client protocol v${msg.protocolVersion} does not match server v${BRIDGE_PROTOCOL_VERSION}`,
+              `bridge: client protocol v${msg.protocolVersion} is not supported ` +
+                `(server v${BRIDGE_PROTOCOL_VERSION}, accepting v${MIN_SUPPORTED_PROTOCOL_VERSION}–v${BRIDGE_PROTOCOL_VERSION})`,
             );
             ws.close(1008, "protocol mismatch");
             return;
@@ -675,6 +699,7 @@ export class OfficeBridgeServer {
             host: msg.host,
             paneId: msg.paneId,
             clientName: msg.clientName,
+            protocolVersion: msg.protocolVersion,
             connectedAt: Date.now(),
             lastSeen: Date.now(),
             // Normalize advertised ops against the server catalog: entries the
@@ -712,6 +737,17 @@ export class OfficeBridgeServer {
         }
         case "ping": {
           this.sendToPane(ws, { type: "pong", ts: msg.ts });
+          break;
+        }
+        case "abort": {
+          // Protocol v3: the pane's Stop button. Only meaningful after a hello
+          // (there is no pane to attribute the request to before that).
+          if (!pane) {
+            this.sendError(ws, "bad_message", "bridge: abort before hello");
+            return;
+          }
+          pane.lastSeen = Date.now();
+          this.handlers.onAbortRequest?.(msg.promptId, pane);
           break;
         }
         case "tool_result": {

@@ -75,7 +75,7 @@ async function main() {
   if (!Array.isArray(healthBody.panes) || healthBody.panes.length !== 0) {
     throw new Error("expected zero panes before any hello");
   }
-  if (healthBody.protocolVersion !== 2) throw new Error("bad protocolVersion");
+  if (healthBody.protocolVersion !== 3) throw new Error("bad protocolVersion");
   if (healthBody.serverVersion !== "0.2.0-test")
     throw new Error(
       `health missing serverVersion: ${JSON.stringify(healthBody.serverVersion)}`,
