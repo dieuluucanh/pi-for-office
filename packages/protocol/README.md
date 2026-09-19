@@ -11,7 +11,7 @@ same format at runtime.
 
 ## Messages
 
-- **Client → Server:** `hello`, `ping`, `tool_result`, `user_message`, `status`, `pane_state`
+- **Client → Server:** `hello`, `ping`, `tool_result`, `user_message`, `status`, `pane_state`, `abort`
 - **Server → Client:** `welcome`, `pong`, `tool_call`, `agent_message` (delta/final), `tool_activity`, `error`
 
 ## Protocol v2 (breaking)
@@ -35,14 +35,41 @@ documents of the same host app:
 A v1 client is rejected at the handshake with `protocol_mismatch`; update both
 halves together (protocol 0.4.0, bridge 0.4.0).
 
+## Protocol v3 (additive)
+
+v3 makes a pane prompt feel live and interruptible. It is **additive**: a v2
+pane is still accepted and simply receives final replies only.
+
+- `agent_message` **delta** frames are now actually produced: while the agent
+  answers a pane prompt the server streams
+  `{ type: "agent_message", kind: "delta", text, promptId?, messageId? }`,
+  coalesced to stay under `MAX_TEXT_CHARS`. Deltas are **display-only**: the
+  concatenation is not guaranteed to equal the final text, so the pane replaces
+  its live buffer with `kind: "final"` when it arrives.
+- `abort` (client → server) — `{ type: "abort", promptId? }` stops the run
+  answering that prompt (or whatever run is in flight for this pane when
+  `promptId` is omitted). A v2 server ignores the frame, so a Stop button must
+  stay usable if the reply keeps arriving.
+- `MIN_SUPPORTED_PROTOCOL_VERSION = 2` and `isProtocolVersionSupported()` — the
+  server accepts the whole `[MIN_SUPPORTED_PROTOCOL_VERSION, BRIDGE_PROTOCOL_VERSION]`
+  window instead of demanding an exact match.
+- Deltas are only sent to panes whose `hello.protocolVersion >= 3`; the server
+  never sends a delta to a v2 pane (which would drop it).
+
+Update both halves together on a breaking change; an additive change may ship
+protocol-first (protocol 0.5.0, bridge 0.5.0).
+
 ## Version & capabilities
 
 `BRIDGE_PROTOCOL_VERSION` is bumped only on **breaking** message-shape changes.
 Additive fields keep both halves compatible:
 
 - `welcome.serverVersion?: string` — the bridge extension's package version.
-- `welcome.capabilities?: BridgeCapability[]` — currently `"http-health"`,
-  meaning the server answers `GET /health` with JSON metadata.
+- `welcome.capabilities?: BridgeCapability[]` — currently `"http-health"`
+  (the server answers `GET /health` with JSON metadata), `"agent-deltas"`
+  (the server streams `agent_message` deltas), and `"client-abort"` (the server
+  honours the `abort` frame). Prefer a capability check over a version
+  comparison so a peer's features are discoverable at runtime.
 
 Both are **optional**. An absent `capabilities` array (or absent
 `serverVersion`) means the peer is a legacy 0.1.0 bridge: clients must degrade

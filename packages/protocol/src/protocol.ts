@@ -26,7 +26,17 @@
  * own catalog. Panes report focus/visibility changes with `pane_state` frames
  * so `document: "active"` can resolve to the document the user is looking at.
  *
- * Protocol v2 is breaking: a v1 client is rejected with `protocol_mismatch`.
+ * Protocol versions:
+ *
+ * - **v2** is breaking against v1: a v1 client is rejected with
+ *   `protocol_mismatch`.
+ * - **v3** is additive: it adds streamed `agent_message` deltas (correlated by
+ *   `promptId`) and a client `abort` frame. A v2 client is still accepted — the
+ *   server never sends it deltas and ignores `abort` — so old panes keep
+ *   working unchanged. Clients advertise nothing; the version they send in
+ *   `hello` decides the behaviour. `welcome.capabilities` additionally reports
+ *   `agent-deltas` / `client-abort` so a pane can detect the features at
+ *   runtime instead of hard-coding a version check.
  *
  * The office op catalog is exported via the `@dieulc/pi-office-protocol/office-catalog`
  * subpath (kept out of this entry so Node loads this raw-TS file without a
@@ -36,8 +46,27 @@
 /** Default TCP port the bridge server listens on (loopback only). */
 export const BRIDGE_DEFAULT_PORT = 38617;
 
-/** Protocol version. Bump on breaking message-shape changes (v2 = document identity). */
-export const BRIDGE_PROTOCOL_VERSION = 2;
+/**
+ * Protocol version. Bump on breaking message-shape changes
+ * (v2 = document identity, v3 = streaming deltas + client abort).
+ */
+export const BRIDGE_PROTOCOL_VERSION = 3;
+
+/**
+ * Oldest client protocol version the server still accepts. v3 is additive, so
+ * v2 panes keep working; anything older is rejected with `protocol_mismatch`.
+ */
+export const MIN_SUPPORTED_PROTOCOL_VERSION = 2;
+
+/** True when `version` is a client protocol version this server accepts. */
+export function isProtocolVersionSupported(version: unknown): boolean {
+ return (
+  typeof version === "number" &&
+  Number.isInteger(version) &&
+  version >= MIN_SUPPORTED_PROTOCOL_VERSION &&
+  version <= BRIDGE_PROTOCOL_VERSION
+ );
+}
 
 /**
  * Tool-argument key that selects the target document for every `office_*` tool.
@@ -137,13 +166,27 @@ export interface PaneStateMessage {
  activeAt?: number;
 }
 
+/**
+ * Ask the server to abort the run that is answering `promptId` (or whatever
+ * run is in flight for this pane when `promptId` is omitted).
+ *
+ * Added in protocol v3. A v2 server ignores the frame; the pane's Stop button
+ * must therefore stay usable when the reply keeps arriving.
+ */
+export interface ClientAbortMessage {
+ type: "abort";
+ /** Correlation id of the pane prompt to abort, when the pane has one. */
+ promptId?: string;
+}
+
 export type ClientMessage =
  | HelloMessage
  | PingMessage
  | ToolResultMessage
  | UserMessageMessage
  | ClientStatusMessage
- | PaneStateMessage;
+ | PaneStateMessage
+ | ClientAbortMessage;
 
 /* ── Server → Client ─────────────────────────────────────────────────── */
 
@@ -152,8 +195,14 @@ export type ClientMessage =
  * absent `capabilities` array as "legacy bridge" and degrade gracefully.
  *
  * - `http-health` — the server answers `GET /health` with JSON metadata.
+ * - `agent-deltas` — the server streams `agent_message` deltas while it
+ *   answers a pane prompt (protocol v3). Absent means final replies only.
+ * - `client-abort` — the server honours the `abort` client frame (protocol v3).
  */
-export type BridgeCapability = "http-health";
+export type BridgeCapability =
+ | "http-health"
+ | "agent-deltas"
+ | "client-abort";
 
 export interface WelcomeMessage {
  type: "welcome";
@@ -190,11 +239,25 @@ export interface ToolCallMessage {
  documentId?: string;
 }
 
-/** A chunk of the assistant's reply (streamed, display-only). */
+/**
+ * A chunk of the assistant's reply (streamed, display-only).
+ *
+ * Protocol v3. Sent only to panes that declared `protocolVersion >= 3`, and
+ * only for replies to a pane-initiated prompt. Concatenating every delta of one
+ * reply yields less than the final text (the server coalesces and may drop
+ * chunks to respect `MAX_TEXT_CHARS`); the final message is authoritative.
+ */
 export interface AgentDeltaMessage {
  type: "agent_message";
  kind: "delta";
  text: string;
+ /** Correlation id of the pane prompt this chunk belongs to, when there is one. */
+ promptId?: string;
+ /**
+  * Id of the assistant message being streamed, stable across the deltas of one
+  * reply (the same id appears on the final message when the SDK provides one).
+  */
+ messageId?: string;
 }
 
 /** Final assistant reply for a pane-initiated prompt. */
@@ -322,6 +385,13 @@ export function parseClientMessage(raw: string): ClientMessage {
     (typeof m.activeAt !== "number" || !Number.isFinite(m.activeAt))
    ) {
     throw new Error("bridge: pane_state.activeAt must be a finite number");
+   }
+   return m;
+  }
+  case "abort": {
+   const m = data as ClientAbortMessage;
+   if (m.promptId !== undefined && typeof m.promptId !== "string") {
+    throw new Error("bridge: abort.promptId must be a string when present");
    }
    return m;
   }

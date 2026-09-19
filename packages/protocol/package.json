@@ -1,6 +1,6 @@
 {
   "name": "@dieulc/pi-office-protocol",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Shared bridge wire protocol + office op catalog between the pi-office-bridge Pi extension and the pi-for-office task-pane add-in.",
   "type": "module",
   "license": "MIT",
@@ -24,6 +24,6 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit",
-    "test": "node --test --experimental-strip-types tests/office-catalog.test.ts"
+    "test": "node --test --experimental-strip-types tests/office-catalog.test.ts tests/protocol.test.ts"
   }
 }
