@@ -6,6 +6,10 @@ Native-Pi, open-source, and **zero changes to Pi core**.
 > **Status:** Working build. `packages/add-in` is a fork of
 > [pi-for-excel](https://github.com/tmustier/pi-for-excel) (MIT) being generalized
 > from Excel-only to a unified multi-host Office add-in.
+>
+> **Desktop app:** [Pi Desktop](https://github.com/dieuluucanh/pi-desktop)
+> installs this bridge as an optional integration (Extensions → Integrations) and
+> provides the attached-documents panel and `#document` mentions.
 
 ## Packages
 
