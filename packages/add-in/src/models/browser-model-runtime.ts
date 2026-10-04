@@ -33,7 +33,42 @@ import {
  * the OpenCode inference tables; custom gateways share the same convention.
  */
 const DEFAULT_DISCOVERED_CONTEXT_WINDOW = OPENCODE_FALLBACK_CONTEXT_WINDOW;
-const DEFAULT_DISCOVERED_MAX_TOKENS = 4_096;
+/**
+ * Default output budget for gateway/discovered models without registry
+ * metadata.
+ *
+ * Reasoning models spend this budget on thinking alone (pi-ai's
+ * `openai-completions` path applies no thinking headroom), so the default is
+ * sized for long reasoning chains rather than plain completions. Requests are
+ * still clamped to the context window at request time
+ * (`clampMaxTokensToContext`), so an over-cap value is safe.
+ */
+export const DEFAULT_DISCOVERED_MAX_TOKENS = 32_768;
+
+/**
+ * The previous default. Persisted models clamped by the old default are
+ * re-derived to `DEFAULT_DISCOVERED_MAX_TOKENS` on restore so catalogs and
+ * custom providers written by older builds pick up the raised budget without
+ * waiting for a re-discovery. Explicitly stored values are preserved.
+ */
+const LEGACY_DEFAULT_DISCOVERED_MAX_TOKENS = 4_096;
+
+/**
+ * Re-derive a persisted model's output budget when it was clamped by the
+ * legacy default.
+ *
+ * Returns `min(DEFAULT_DISCOVERED_MAX_TOKENS, contextWindow)` when the stored
+ * value equals the legacy default (treated as "clamped by the old default"),
+ * and the stored value unchanged otherwise.
+ */
+export function reInferDefaultMaxTokens(
+  maxTokens: number,
+  contextWindow: number,
+): number {
+  return maxTokens === LEGACY_DEFAULT_DISCOVERED_MAX_TOKENS
+    ? Math.min(DEFAULT_DISCOVERED_MAX_TOKENS, contextWindow)
+    : maxTokens;
+}
 const MODEL_DISCOVERY_TIMEOUT_MS = 8_000;
 const MAX_MODEL_DISCOVERY_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_DISCOVERED_MODELS = 2_000;
@@ -246,7 +281,12 @@ function sanitizeCatalogEntry(
             reasoning: model.reasoning,
             input: model.input,
             contextWindow: model.contextWindow,
-            maxTokens: model.maxTokens,
+            // Catalogs written by older builds may carry the legacy default
+            // output budget; re-derive those on restore.
+            maxTokens: reInferDefaultMaxTokens(
+              model.maxTokens,
+              model.contextWindow,
+            ),
           },
         }),
       );
@@ -657,7 +697,6 @@ function createRegisteredProvider(
     baselineModels.map((m) => m.api as BrowserProviderApi),
   );
   const hasMixedApis = uniqueApis.size > 1;
-  const providerApiValue = hasMixedApis ? undefined : registration.api;
 
   const modelsUrlRaw =
     registration.modelsUrl ?? deriveModelsUrl(baseUrl, registration.api);
@@ -738,7 +777,8 @@ function createRegisteredProvider(
       ? (Object.fromEntries(
           Array.from(uniqueApis).map((a) => [a, streamsForApi(a)]),
         ) as Partial<Record<BrowserProviderApi, ProviderStreams>>)
-      : streamsForApi(providerApiValue!),
+      // Single-api registration: no assertion needed — the api is the registration's.
+      : streamsForApi(registration.api),
   });
 }
 
@@ -770,7 +810,12 @@ function customProviderRegistrations(
       reasoning: model.reasoning,
       input: model.input,
       contextWindow: model.contextWindow,
-      maxTokens: model.maxTokens,
+      // Custom providers persisted by older builds may carry the legacy
+      // default output budget; re-derive those on restore.
+      maxTokens: reInferDefaultMaxTokens(
+        model.maxTokens,
+        model.contextWindow,
+      ),
     });
     modelsByProvider.set(model.provider, definitions);
   }

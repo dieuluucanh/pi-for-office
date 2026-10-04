@@ -12,8 +12,10 @@ import type {
 import {
   classifyRunFailure,
   findTrailingContextOverflowError,
+  isBudgetUnsupportedError,
   isPrematureStreamEnd,
   isRecoverableLength,
+  isStalledOutput,
 } from "../src/compaction/failure-classification.ts";
 
 const EMPTY_USAGE: Usage = {
@@ -296,4 +298,165 @@ void test("isRecoverableLength flags short length stops", () => {
     stopReason: "stop",
   };
   assert.equal(isRecoverableLength(stopped, 4096), false);
+});
+
+function createThinkingOnly(
+  model: Model<Api>,
+  stopReason: "stop" | "length",
+  extra: Partial<AssistantMessage> = {},
+): AssistantMessage {
+  return {
+    role: "assistant",
+    content: [
+      {
+        type: "thinking",
+        thinking: "a long reasoning chain",
+        thinkingSignature: "sig",
+      },
+    ],
+    api: model.api,
+    provider: model.provider,
+    model: model.id,
+    usage: createUsage(100, stopReason === "length" ? 4_096 : 512),
+    stopReason,
+    timestamp: 3,
+    ...extra,
+  };
+}
+
+void test("isStalledOutput detects thinking-only tails regardless of stop reason", () => {
+  const model = createModel(200_000);
+
+  // The silent-stall signature: reasoning truncated at the output budget
+  // (length) or ended right after reasoning (stop), no visible output.
+  assert.equal(isStalledOutput(createThinkingOnly(model, "length")), true);
+  assert.equal(isStalledOutput(createThinkingOnly(model, "stop")), true);
+
+  // At-budget truncation: usage.output === desired would slip past
+  // isRecoverableLength — the shape check is what catches it.
+  const atBudget = createThinkingOnly(model, "length", {
+    usage: createUsage(100, 4_096),
+  });
+  assert.equal(isRecoverableLength(atBudget, 4_096), false);
+  assert.equal(isStalledOutput(atBudget), true);
+
+  // Empty or whitespace-only content counts as stalled too.
+  assert.equal(
+    isStalledOutput(
+      createThinkingOnly(model, "stop", { content: [{ type: "text", text: "" }] }),
+    ),
+    true,
+  );
+  assert.equal(
+    isStalledOutput(
+      createThinkingOnly(model, "stop", {
+        content: [{ type: "text", text: "   " }],
+      }),
+    ),
+    true,
+  );
+  assert.equal(
+    isStalledOutput(createThinkingOnly(model, "stop", { content: [] })),
+    true,
+  );
+});
+
+void test("isStalledOutput rejects real output and non-settled stops", () => {
+  const model = createModel(200_000);
+
+  // Real text output → a normal turn end.
+  assert.equal(
+    isStalledOutput(
+      createThinkingOnly(model, "stop", {
+        content: [
+          { type: "thinking", thinking: "chain", thinkingSignature: "sig" },
+          { type: "text", text: "the answer" },
+        ],
+      }),
+    ),
+    false,
+  );
+
+  // Tool calls → the loop continues normally.
+  assert.equal(
+    isStalledOutput(
+      createThinkingOnly(model, "stop", {
+        content: [
+          { type: "thinking", thinking: "chain", thinkingSignature: "sig" },
+          { type: "toolCall", id: "t1", name: "excel_read", arguments: {} },
+        ],
+      }),
+    ),
+    false,
+  );
+
+  // Length stop with real (truncated) text → recoverable-length, not stalled.
+  const truncatedText = createThinkingOnly(model, "length", {
+    content: [{ type: "text", text: "partial answer" }],
+  });
+  assert.equal(isStalledOutput(truncatedText), false);
+
+  // Error/aborted runs are handled by other branches.
+  const errored = createAssistantError(model, STREAM_END_ERROR, 3);
+  assert.equal(isStalledOutput(errored), false);
+  assert.equal(
+    isStalledOutput({ ...createThinkingOnly(model, "stop"), stopReason: "aborted" as const }),
+    false,
+  );
+});
+
+void test("classifyRunFailure reports stalled for thinking-only tails before recoverable-length", () => {
+  const model = createModel(200_000);
+  const stalled = createThinkingOnly(model, "length");
+
+  const result = classifyRunFailure({
+    state: stateFor(model, [createUser("hi", 1), stalled]),
+    maxOutputTokens: 4_096,
+  });
+  assert.equal(result.kind, "stalled");
+  assert.equal(result.message, stalled);
+});
+
+void test("isBudgetUnsupportedError matches provider rejections of the output limit", () => {
+  assert.equal(
+    isBudgetUnsupportedError(
+      "400 max_tokens too large: requested 32768, maximum supported is 8192",
+    ),
+    true,
+  );
+  assert.equal(
+    isBudgetUnsupportedError(
+      "max_completion_tokens must be between 1 and 4096, but got 32768",
+    ),
+    true,
+  );
+  assert.equal(
+    isBudgetUnsupportedError("max_tokens is not supported for this model"),
+    true,
+  );
+
+  // Transport and unrelated errors must not match.
+  assert.equal(isBudgetUnsupportedError(STREAM_END_ERROR), false);
+  assert.equal(isBudgetUnsupportedError("401 unauthorized"), false);
+  assert.equal(
+    // The LiteLLM context-overflow error mentions "output tokens" but not the
+    // output *limit* — it must stay overflow, not budget-unsupported.
+    isBudgetUnsupportedError(LITELLM_OVERFLOW_ERROR),
+    false,
+  );
+});
+
+void test("classifyRunFailure reports budget-unsupported for output-limit rejections", () => {
+  const model = createModel(65_536);
+  const rejection = createAssistantError(
+    model,
+    "400 max_tokens too large: requested 32768, maximum supported is 8192",
+    3,
+  );
+
+  const result = classifyRunFailure({
+    state: stateFor(model, [createUser("hi", 1), rejection]),
+  });
+  assert.equal(result.kind, "budget-unsupported");
+  assert.equal(result.message, rejection);
 });

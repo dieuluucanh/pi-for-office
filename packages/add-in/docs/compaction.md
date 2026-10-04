@@ -12,7 +12,11 @@ Auto-compaction (enabled by default, `compaction.enabled`) uses the shared hard 
 2. **Mid-turn, between tool-loop continuations** — after each completed tool batch, so a single tool-heavy turn can’t overflow a small context window before the next between-prompt check. The in-flight run continues from the compacted history.
 3. **Post-run recovery (Pi parity)** — when a run settles in an error tail:
    - **context overflow** (error text, silent usage overflow like z.ai, MiMo length-stop, or a stream-end at high usage) → drop the failed assistant message, compact, retry **once**;
+   - **stalled runs** (thinking-only tail — no text, no tool calls) → drop the tail and continue, up to 2 attempts; when the stall ended on `length`, the output budget escalates ×2 per attempt (capped; restored on settle). This is the silent-stall fix for reasoning gateways — see [reasoning-stalls.md](reasoning-stalls.md);
+   - **budget-unsupported errors** (400-style rejections of the output limit) → halve the output budget and retry (bounded); the reduction persists for the session;
    - **transient stream failures** (e.g. `Stream ended without finish_reason`, which pi-ai classifies as retryable via the `ended without` pattern) → drop the failed message, exponential-backoff retry (`retry.enabled`, `retry.maxRetries`, `retry.baseDelayMs`; defaults true / 3 / 2000, mirroring pi coding-agent).
+
+   Recovery is decoupled from auto-compaction: stall, budget-unsupported, and transient recovery always run — only the compaction step of overflow-like failures is gated by the auto-compact setting.
 
 Deterministic quota/billing errors are never retried (`isRetryableAssistantError` already excludes them). When budgets are exhausted, the error stays in the transcript with an actionable banner offering **Retry / Compact & retry / New session**.
 

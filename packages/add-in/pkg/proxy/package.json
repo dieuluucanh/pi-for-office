@@ -16,10 +16,11 @@
     "prepack": "node ../../scripts/sync-proxy-package.mjs"
   },
   "dependencies": {
+    "undici": "^7.29.1",
     "ws": "8.21.0"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.18.1"
   },
   "license": "MIT"
 }

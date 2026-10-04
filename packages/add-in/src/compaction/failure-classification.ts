@@ -3,11 +3,16 @@
  *
  * Decides what a settled agent run needs next after it ends in an assistant
  * error/length tail:
- * - `overflow`           → drop the failed message, compact, retry once
- * - `recoverable-length` → same compact-and-retry path (output cut short)
- * - `transient`          → drop the failed message, backoff, retry (Pi parity)
- * - `fatal`              → non-retryable (quota/billing/unknown) — surface error
- * - `none`               → clean settle, nothing to do
+ * - `overflow`             → drop the failed message, compact, retry once
+ * - `stalled`              → thinking-only tail (no text, no tool calls): the
+ *   run ended without doing anything — drop the tail and continue (bounded;
+ *   covers output-budget truncation of long reasoning chains)
+ * - `recoverable-length`   → same compact-and-retry path (output cut short)
+ * - `transient`            → drop the failed message, backoff, retry (Pi parity)
+ * - `budget-unsupported`   → provider rejected the output limit (400-style):
+ *   bounded halve-and-retry
+ * - `fatal`                → non-retryable (quota/billing/unknown) — surface error
+ * - `none`                 → clean settle, nothing to do
  *
  * This replaces the stopReason-gated overflow check (`findTrailingContextOverflowError`)
  * so silent-overflow (z.ai) and length-stop (MiMo) branches actually fire.
@@ -27,8 +32,10 @@ import {
 
 export type RunFailureKind =
  | "overflow"
+ | "stalled"
  | "recoverable-length"
  | "transient"
+ | "budget-unsupported"
  | "fatal"
  | "none";
 
@@ -69,15 +76,74 @@ export function isPrematureStreamEnd(errorMessage: string): boolean {
 }
 
 /**
+ * Provider rejections of the output limit itself (400-style):
+ * "max_tokens too large", "max_completion_tokens must be between...",
+ * "max_tokens is not supported", "exceeds the maximum" — raised when a raised
+ * output budget is rejected by a gateway that caps `max_tokens` lower.
+ */
+const BUDGET_UNSUPPORTED_PATTERNS = [
+ /max[_ ]?(completion_)?tokens/i,
+ /max[_ ]?output[_ ]?tokens/i,
+];
+const BUDGET_UNSUPPORTED_REASONS = [
+ /invalid/i,
+ /too[_ ]?large/i,
+ /unsupported/i,
+ /not[_ ]?supported/i,
+ /exceed/i,
+ /greater than/i,
+ /must be between/i,
+ /maximum/i,
+];
+
+export function isBudgetUnsupportedError(errorMessage: string): boolean {
+ const mentionsBudget = BUDGET_UNSUPPORTED_PATTERNS.some((pattern) =>
+  pattern.test(errorMessage),
+ );
+ const statesReason = BUDGET_UNSUPPORTED_REASONS.some((pattern) =>
+  pattern.test(errorMessage),
+ );
+ return mentionsBudget && statesReason;
+}
+
+/**
+ * Detect a run that ended without doing anything: the terminal assistant
+ * message carries only thinking (or nothing at all) and no tool calls.
+ *
+ * This is the silent-stall signature for reasoning gateways: the model burns
+ * its entire output budget on a reasoning chain that truncates mid-stream
+ * (`finish_reason: "length"`) or ends with `stop` right after reasoning, and
+ * the agent loop treats the tool-less message as a normal turn end. The UI
+ * shows "thought" and the run settles with no error — recovery must detect
+ * the shape of the output instead of the stop reason or error message.
+ */
+export function isStalledOutput(message: AssistantMessage): boolean {
+ if (message.stopReason !== "stop" && message.stopReason !== "length") {
+  return false;
+ }
+
+ const content = message.content ?? [];
+ for (const block of content) {
+  if (block.type === "toolCall") {
+   return false;
+  }
+  if (block.type === "text" && block.text.trim() !== "") {
+   return false;
+  }
+ }
+ return true;
+}
+
+/**
  * Classify the terminal assistant message of a settled run.
  *
  * Uses pi-ai's `isContextOverflow` (all three branches — error text, silent
  * usage overflow, MiMo length-stop) WITHOUT a `stopReason === "error"` pre-gate,
- * then recoverable length, then retryability. A premature stream end (e.g.
- * "Stream ended without finish_reason") is `transient` at low context usage,
- * but `overflow` (compact-first) when the request-facing estimate is already past
- * the soft-warning threshold — gateways often close the stream silently on
- * overflow instead of returning a proper error.
+ * then the stalled-output shape check, then recoverable length, then
+ * retryability. A premature stream end (e.g. "Stream ended without finish_reason")
+ * is `transient` at low context usage, but `overflow` (compact-first) when the
+ * request-facing estimate is already past the soft-warning threshold — gateways
+ * often close the stream silently on overflow instead of returning a proper error.
  */
 export function classifyRunFailure(args: {
  state: Pick<AgentState, "messages" | "model">;
@@ -108,7 +174,15 @@ export function classifyRunFailure(args: {
   return { kind: "overflow", message: last };
  }
 
- // 2. Length-stop ending below the intended output budget.
+ // 2. Stalled run: thinking-only tail with no visible output. More specific
+ // than recoverable-length — a thinking-only length-stop that hit the output
+ // budget exactly (usage.output === desired) would otherwise fall through to
+ // `none` (isRecoverableLength requires output < desired).
+ if (isStalledOutput(last)) {
+  return { kind: "stalled", message: last };
+ }
+
+ // 3. Length-stop ending below the intended output budget.
  if (
   maxOutputTokens !== undefined &&
   isRecoverableLength(last, maxOutputTokens)
@@ -116,7 +190,7 @@ export function classifyRunFailure(args: {
   return { kind: "recoverable-length", message: last };
  }
 
- // 3. Retryable provider/transport error.
+ // 4. Provider/transport error.
  if (last.stopReason === "error" && last.errorMessage) {
   const resolvedThresholds =
    thresholds ??
@@ -136,6 +210,10 @@ export function classifyRunFailure(args: {
    // Likely a silent overflow: the gateway closed the stream instead of
    // returning a proper context-length error. Compact before retrying.
    return { kind: "overflow", message: last };
+  }
+
+  if (isBudgetUnsupportedError(last.errorMessage)) {
+   return { kind: "budget-unsupported", message: last };
   }
 
   if (isRetryableAssistantError(last)) {

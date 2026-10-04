@@ -27,6 +27,8 @@ import path from "node:path";
 import { lookup as dnsLookup } from "node:dns/promises";
 import { Readable } from "node:stream";
 
+import { Agent as UndiciAgent, fetch as undiciFetch } from "undici";
+
 import {
   bridgeCodexWebSocketToSse,
   CODEX_WEBSOCKET_BRIDGE_HEADER,
@@ -43,6 +45,21 @@ import {
   isAllowedClientAddress,
   parseClientCidrAllowlist,
 } from "./proxy-client-policy.mjs";
+
+/**
+ * Dispatcher for proxied requests.
+ *
+ * SSE/streaming responses can idle arbitrarily long between chunks (long
+ * reasoning stretches produce no deltas), and slow providers can take more
+ * than undici's defaults to send response headers. undici's default
+ * headersTimeout/bodyTimeout (300s each) kill such streams silently — the
+ * browser sees a plain connection close with no error event. Timeouts of 0
+ * disable both limits; the TCP connect timeout keeps its 10s default.
+ */
+const STREAM_DISPATCHER = new UndiciAgent({
+  headersTimeout: 0,
+  bodyTimeout: 0,
+});
 
 const args = new Set(process.argv.slice(2));
 const useHttps =
@@ -817,14 +834,33 @@ const handler = async (req, res) => {
     const hasBody = req.method && !["GET", "HEAD"].includes(req.method);
     const body = hasBody ? Readable.toWeb(req) : undefined;
 
-    const upstream = await fetch(targetUrl.toString(), {
+    // Abort the upstream request when the client goes away, so abandoned
+    // streams (closed tab, aborted agent run) don't linger on the provider.
+    const upstreamAbort = new AbortController();
+    const abortUpstream = () => {
+      upstreamAbort.abort();
+    };
+    req.once("aborted", abortUpstream);
+    res.once("close", () => {
+      if (!res.writableEnded) abortUpstream();
+    });
+
+    const upstreamInit = {
       method: req.method,
       headers,
       body,
-      // Required when using a stream body in Node fetch
-      ...(body ? { duplex: "half" } : {}),
       redirect: "manual",
-    });
+      // Streaming dispatcher: disables undici's default 300s idle limits
+      // (see STREAM_DISPATCHER above).
+      dispatcher: STREAM_DISPATCHER,
+      signal: upstreamAbort.signal,
+    };
+    if (body) {
+      // Required when using a stream body in Node fetch
+      upstreamInit.duplex = "half";
+    }
+
+    const upstream = await undiciFetch(targetUrl.toString(), upstreamInit);
 
     // Log without query string to avoid leaking tokens
     console.log(
@@ -861,11 +897,27 @@ const handler = async (req, res) => {
     }
 
     const nodeStream = Readable.fromWeb(upstream.body);
-    nodeStream.on("error", () => {
-      try {
-        res.end();
-      } catch {
-        // ignore
+    let bytesReceived = 0;
+    nodeStream.on("data", (chunk) => {
+      bytesReceived += chunk.length;
+    });
+    // Surface upstream cuts as real connection errors instead of a silent
+    // clean close: headers are already sent, so the browser can only see the
+    // failure through the dropped connection. Destroying (rather than
+    // ending) makes the webview's fetch reject — pi-ai finalizes the stream
+    // with stopReason "error" and the existing banner + retry path engages.
+    nodeStream.on("error", (err) => {
+      console.error(
+        `[proxy] upstream stream error ${safeTarget} after ${bytesReceived} bytes (${Date.now() - startedAt}ms): ${err instanceof Error ? err.message : String(err)}`,
+      );
+      if (!res.writableEnded) {
+        res.destroy(err instanceof Error ? err : new Error(String(err)));
+      }
+    });
+    res.once("close", () => {
+      // Client disconnected mid-stream: tear down the upstream reader too.
+      if (!nodeStream.readableEnded) {
+        nodeStream.destroy();
       }
     });
     nodeStream.pipe(res);

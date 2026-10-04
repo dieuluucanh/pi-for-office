@@ -4,6 +4,7 @@
 
 import type { Api, Model } from "@earendil-works/pi-ai";
 import type { CustomProvider } from "../storage/local/custom-providers-store.js";
+import { DEFAULT_DISCOVERED_MAX_TOKENS } from "../models/browser-model-runtime.js";
 import type { BrowserProviderApi } from "../models/browser-model-runtime.js";
 
 const OPENAI_GATEWAY_ID_PREFIX = "pi-openai-gateway:";
@@ -12,7 +13,6 @@ export const DEFAULT_GATEWAY_API_TYPE: BrowserProviderApi =
   "openai-completions";
 
 export const DEFAULT_OPENAI_GATEWAY_CONTEXT_WINDOW = 16_384;
-const DEFAULT_OPENAI_GATEWAY_MAX_TOKENS = 4_096;
 
 type StoredModel = NonNullable<CustomProvider["models"]>[number];
 
@@ -233,15 +233,19 @@ function createGatewayModel(args: {
   contextWindow: number;
   apiType: BrowserProviderApi;
 }): Model<Api> {
+  // Shared with the browser model runtime: gateway models get the same
+  // reasoning-sized default output budget (still clamped to the context
+  // window), and persisted models clamped by the legacy default are
+  // re-derived on restore (`reInferDefaultMaxTokens`).
   const maxTokens = Math.min(
-    DEFAULT_OPENAI_GATEWAY_MAX_TOKENS,
+    DEFAULT_DISCOVERED_MAX_TOKENS,
     args.contextWindow,
   );
 
   return {
     id: args.modelId,
     name: args.modelId,
-    api: args.apiType as Api,
+    api: args.apiType,
     provider: args.providerName,
     baseUrl: args.endpointUrl,
     reasoning: false,
@@ -350,7 +354,7 @@ export async function saveOpenAiGatewayConfig(
     provider.apiKey = apiKey;
   }
   if (input.modelApiMap && Object.keys(input.modelApiMap).length > 0) {
-    provider.modelApiMap = input.modelApiMap as Record<string, string>;
+    provider.modelApiMap = input.modelApiMap;
   }
 
   await customProvidersStore.set(provider);

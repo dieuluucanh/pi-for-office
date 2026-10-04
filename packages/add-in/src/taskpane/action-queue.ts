@@ -75,11 +75,29 @@ export function createActionQueue(opts: {
     onRetryState,
   } = opts;
 
-  const actions: QueuedAction[] = [];
-  let running = false;
-  let closed = false;
-  /** Set after a silent-overflow settle — the next turn must compact first. */
-  let pendingCompact = false;
+const actions: QueuedAction[] = [];
+let running = false;
+let closed = false;
+/** Set after a silent-overflow settle — the next turn must compact first. */
+let pendingCompact = false;
+
+/**
+ * Diagnostics line for every settled run: terminal stop reason, output usage,
+ * and the effective output budget. Silent stalls (thinking-only length-stop
+ * endings) are only diagnosable from these values — there is no error message.
+ */
+const logRunSettle = (agent: Agent): void => {
+  const last = agent.state.messages.at(-1);
+  const stopReason =
+    last && last.role === "assistant" ? last.stopReason : "none";
+  const outputTokens =
+    last && last.role === "assistant" ? (last.usage?.output ?? 0) : 0;
+  console.debug(
+    `[pi] Run settled: stopReason=${stopReason} outputTokens=${outputTokens} ` +
+      `outputBudget=${agent.state.model?.maxTokens ?? 0} ` +
+      `model=${agent.state.model?.provider ?? "?"}/${agent.state.model?.id ?? "?"}`,
+  );
+};
 
   const syncDisplay = () => {
     queueDisplay.setActionQueue(
@@ -207,74 +225,111 @@ export function createActionQueue(opts: {
         await agent.prompt(next.text);
 
         if (closed) break;
-        if (autoCompactEnabled) {
-          // Pi-parity recovery loop: transient stream errors (e.g. "Stream
-          // ended without finish_reason") retry with backoff; overflow ends in
-          // one compact-and-retry. Never loops forever — budgets are bounded.
-          const initialWindow = effectiveContextWindow();
-          const recovery = await recoverAfterRun({
-            agent,
-            runCompact: runCompactWithIndicator,
-            retry,
-            callbacks: {
-              onRetryScheduled: (
-                attempt,
-                maxAttempts,
-                delayMs,
-                errorMessage,
-              ) => {
-                sidebar.setBusyIndicator(
-                  t("action-queue.retrying", {
-                    attempt,
-                    maxAttempts,
-                    delayMs: Math.round(delayMs / 1000),
-                  }),
-                  errorMessage,
-                );
-                onRetryState?.({
-                  active: true,
+        // Pi-parity recovery loop — decoupled from auto-compact: stall and
+        // stream-error recovery always run; only the compaction step inside
+        // recovery is gated by the auto-compact setting. Never loops forever —
+        // budgets are bounded.
+        const initialWindow = effectiveContextWindow();
+        const recovery = await recoverAfterRun({
+          agent,
+          runCompact: runCompactWithIndicator,
+          retry,
+          allowCompaction: autoCompactEnabled,
+          callbacks: {
+            onRetryScheduled: (
+              attempt,
+              maxAttempts,
+              delayMs,
+              errorMessage,
+            ) => {
+              sidebar.setBusyIndicator(
+                t("action-queue.retrying", {
                   attempt,
                   maxAttempts,
-                  label: t("action-queue.retrying", {
-                    attempt,
-                    maxAttempts,
-                    delayMs: Math.round(delayMs / 1000),
-                  }),
-                });
-              },
-              onCompactStart: () => {
-                sidebar.setBusyIndicator(
-                  t("action-queue.compacting"),
-                  t("action-queue.compactingHint"),
-                );
-              },
-              onSettled: () => {
-                sidebar.setBusyIndicator(null);
-                onRetryState?.({ active: false });
-              },
+                  delayMs: Math.round(delayMs / 1000),
+                }),
+                errorMessage,
+              );
+              onRetryState?.({
+                active: true,
+                attempt,
+                maxAttempts,
+                label: t("action-queue.retrying", {
+                  attempt,
+                  maxAttempts,
+                  delayMs: Math.round(delayMs / 1000),
+                }),
+              });
             },
+            onStallDetected: (
+              attempt,
+              maxAttempts,
+              info,
+            ) => {
+              const label = t("action-queue.stallRetry", {
+                attempt,
+                maxAttempts,
+              });
+              const hint =
+                info.escalatedTo !== undefined
+                  ? t("action-queue.stallEscalatingHint", {
+                      tokens: info.escalatedTo,
+                    })
+                  : t("action-queue.stallRetryHint");
+              sidebar.setBusyIndicator(label, hint);
+              onRetryState?.({
+                active: true,
+                attempt,
+                maxAttempts,
+                label,
+              });
+            },
+            onBudgetReduced: (newMaxTokens) => {
+              const label = t("action-queue.budgetReduced", {
+                tokens: newMaxTokens,
+              });
+              sidebar.setBusyIndicator(label);
+              onRetryState?.({ active: true, label });
+            },
+            onCompactStart: () => {
+              sidebar.setBusyIndicator(
+                t("action-queue.compacting"),
+                t("action-queue.compactingHint"),
+              );
+            },
+            onSettled: () => {
+              sidebar.setBusyIndicator(null);
+              onRetryState?.({ active: false });
+              logRunSettle(agent);
+            },
+          },
+        });
+
+        // Adaptive window: an exhausted overflow-like failure at high usage
+        // suggests the real provider cap is below `model.contextWindow`. Stall
+        // exhaustion must not shrink the window (stall recovery escalates the
+        // output budget instead — context pressure was not the cause).
+        if (recovery.kind === "exhausted" && recovery.overflowLikeFailure) {
+          const state = agent.state;
+          const { effectiveTokens } = estimateEffectiveRequestTokens({
+            state,
+            tools: state.tools,
+            contextWindow: claimedWindow(),
+            maxOutputTokens: state.model?.maxTokens ?? 0,
           });
+          adaptive.observeFailure({
+            failureIsOverflowLike: true,
+            effectiveTokens,
+            contextWindow: claimedWindow(),
+          });
+        }
 
-          // Adaptive window: an exhausted overflow/stream-end failure at high
-          // usage suggests the real provider cap is below `model.contextWindow`.
-          if (recovery.kind === "exhausted") {
-            const state = agent.state;
-            const { effectiveTokens } = estimateEffectiveRequestTokens({
-              state,
-              tools: state.tools,
-              contextWindow: claimedWindow(),
-              maxOutputTokens: state.model?.maxTokens ?? 0,
-            });
-            adaptive.observeFailure({
-              failureIsOverflowLike: true,
-              effectiveTokens,
-              contextWindow: claimedWindow(),
-            });
-          }
-
+        if (autoCompactEnabled) {
           // Post-success silent-overflow check: if the provider accepted a
           // request whose input exceeded the (effective) window, flag the next
-          // turn to compact first.
+          // turn to compact first. Stays gated by auto-compact: setting
+          // pendingCompact would force compaction even when the user disabled
+          // auto-compact.
           const last = agent.state.messages.at(-1);
           if (last && last.role === "assistant" && last.stopReason === "stop") {
             const inputTokens =

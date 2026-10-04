@@ -26,6 +26,8 @@ class TestAgent extends Agent {
   waitForIdleCalls = 0;
   onPrompt?: (text: string) => void;
   onWaitForIdle?: () => Promise<void>;
+  /** Optional continuation behavior (mutates state / settles the run). */
+  onContinue?: (agent: TestAgent) => void;
 
   constructor(model?: Model<Api>) {
     super({
@@ -40,6 +42,7 @@ class TestAgent extends Agent {
 
   override continue(): Promise<void> {
     this.continueCalls += 1;
+    this.onContinue?.(this);
     return Promise.resolve();
   }
 
@@ -459,4 +462,145 @@ void test("shutdown uninstalls the mid-turn prepareNextTurn hook", () => {
   assert.equal(typeof agent.prepareNextTurn, "function");
   queue.shutdown();
   assert.equal(agent.prepareNextTurn, undefined);
+});
+
+function createStalledAssistant(model: Model<Api>): AgentMessage {
+  return {
+    role: "assistant",
+    content: [
+      {
+        type: "thinking",
+        thinking: "a reasoning chain cut off at the output budget",
+        thinkingSignature: "sig",
+      },
+    ],
+    api: model.api,
+    provider: model.provider,
+    model: model.id,
+    usage: {
+      input: 100,
+      output: 4_096,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 4_196,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
+    stopReason: "length",
+    timestamp: 3,
+  };
+}
+
+void test("stall recovery runs even when auto-compact is disabled", async () => {
+  const model = createSmallContextModel();
+  const agent = new TestAgent(model);
+  agent.onPrompt = (text) => {
+    // Simulate a run that ends in a thinking-only length stall.
+    agent.state.messages = [
+      createUserMessage(text, 1),
+      createStalledAssistant(model),
+    ];
+  };
+
+  const busyIndicators: Array<{ label: string | null; hint: string | null }> =
+    [];
+  let compactRuns = 0;
+  const queue = createActionQueue({
+    agent,
+    autoCompactEnabled: false,
+    runCompact: () => {
+      compactRuns += 1;
+      return Promise.resolve(compactedOutcome());
+    },
+    sidebar: {
+      setBusyIndicator: (label, hint) => {
+        busyIndicators.push({ label, hint });
+      },
+    },
+    queueDisplay: {
+      setActionQueue: () => {
+        // no-op
+      },
+    },
+  });
+
+  queue.enqueuePrompt("analyze this data");
+
+  await waitForCondition(() => agent.continueCalls === 1 && !queue.isBusy());
+
+  // Recovery is decoupled from auto-compact: stall auto-continue ran even
+  // with compaction disabled, and compaction itself never ran.
+  assert.equal(agent.continueCalls, 1);
+  assert.equal(compactRuns, 0);
+  // The thinking-only tail was dropped before the continue.
+  assert.equal(
+    agent.state.messages.some((message) => message.role === "assistant"),
+    false,
+  );
+  // The stall attempt reported the busy indicator with the stall label.
+  assert.ok(
+    busyIndicators.some((indicator) =>
+      String(indicator.label).includes("Output truncated"),
+    ),
+  );
+  // The indicator was cleared on settle (the clear call passes no hint).
+  assert.deepEqual(busyIndicators.at(-1), { label: null, hint: undefined });
+
+  queue.shutdown();
+});
+
+void test("stall exhaustion keeps the failure visible without shrinking the window", async () => {
+  const model = createSmallContextModel();
+  const agent = new TestAgent(model);
+  agent.onPrompt = (text) => {
+    agent.state.messages = [
+      createUserMessage(text, 1),
+      createStalledAssistant(model),
+    ];
+  };
+  // Every continuation stalls again — the recovery exhausts.
+  agent.onContinue = (self) => {
+    self.state.messages = [
+      createUserMessage("analyze this data", 1),
+      createStalledAssistant(model),
+    ];
+  };
+
+  let compactRuns = 0;
+  const queue = createActionQueue({
+    agent,
+    autoCompactEnabled: false,
+    runCompact: () => {
+      compactRuns += 1;
+      return Promise.resolve(compactedOutcome());
+    },
+    sidebar: {
+      setBusyIndicator: () => {
+        // no-op
+      },
+    },
+    queueDisplay: {
+      setActionQueue: () => {
+        // no-op
+      },
+    },
+  });
+
+  queue.enqueuePrompt("analyze this data");
+
+  await waitForCondition(
+    () => agent.continueCalls === 2 && !queue.isBusy(),
+  );
+
+  // Bounded at 2 stall attempts, then exhausted; the last thinking-only
+  // failure stays visible in the transcript.
+  assert.equal(agent.continueCalls, 2);
+  assert.equal(compactRuns, 0);
+  assert.ok(
+    agent.state.messages.some(
+      (message) =>
+        message.role === "assistant" && message.stopReason === "length",
+    ),
+  );
+
+  queue.shutdown();
 });

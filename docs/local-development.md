@@ -48,7 +48,7 @@ cd packages/add-in && npm run python:bridge:dev:https
 cd packages/add-in && npm run tmux:bridge:dev:https
 
 # Terminal 4 — CORS proxy (only if testing OAuth/provider features)
-cd packages/add-in && npm run proxy:dev
+cd packages/add-in && ALLOW_ALL_TARGET_HOSTS=1 npm run proxy:dev
 
 # Terminal 5 — add-in dev server
 cd packages/add-in && npm run dev

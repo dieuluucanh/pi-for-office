@@ -324,6 +324,7 @@ Users install by downloading `manifest.prod.xml` and uploading it in Excel — t
 | [docs/security-threat-model.md](docs/security-threat-model.md) | Security threat model |
 | [docs/architecture-page.md](docs/architecture-page.md) | Maintaining the public architecture page (+ its fact guard) |
 | [docs/compaction.md](docs/compaction.md) | Session compaction (`/compact`) |
+| [docs/reasoning-stalls.md](docs/reasoning-stalls.md) | Troubleshooting: agent stops after a thinking block (reasoning gateways) |
 | [src/tools/DECISIONS.md](src/tools/DECISIONS.md) | Tool behavior decisions log |
 | [src/ui/README.md](src/ui/README.md) | UI architecture + design tokens |
 

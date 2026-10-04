@@ -548,4 +548,62 @@ void test("OpenCode discovery re-infers persisted windows on restore", async () 
     runtime.models.getModels("opencode-go").map((model) => [model.id, model]),
   );
   assert.equal(byId.get("omen-alpha")?.contextWindow, 500_000);
+  // Persisted models clamped by the legacy output budget are re-derived to
+  // the current default on restore (reInferDefaultMaxTokens).
+  assert.equal(byId.get("omen-alpha")?.maxTokens, 32_768);
+});
+
+void test("gateway models get the reasoning-sized default output budget", async () => {
+  const runtime = createRuntime();
+  await runtime.syncCustomProviders([gatewayProvider()]);
+
+  const configured = runtime.models
+    .getModels("Gateway · Acme")
+    .find((model) => model.id === "configured-model");
+  // Explicitly stored values are preserved (fixture stores 8_192).
+  assert.equal(configured?.maxTokens, 8_192);
+});
+
+void test("legacy 4096 budgets are re-derived on custom provider restore", async () => {
+  const legacyProvider: CustomProvider = {
+    ...gatewayProvider(),
+    models: [
+      {
+        ...gatewayProvider().models[0],
+        // Stored by an older build clamped to the legacy default.
+        maxTokens: 4_096,
+        contextWindow: 65_536,
+      },
+    ],
+  };
+  const runtime = createRuntime();
+  await runtime.syncCustomProviders([legacyProvider]);
+
+  const restored = runtime.models
+    .getModels("Gateway · Acme")
+    .find((model) => model.id === "configured-model");
+  assert.equal(restored?.maxTokens, 32_768);
+});
+
+void test("registration models without metadata get the default output budget", async () => {
+  const runtime = createRuntime();
+  const registration: BrowserProviderRegistration = {
+    id: "ext.budget-default",
+    name: "Budget default provider",
+    api: "openai-completions",
+    baseUrl: "https://budget-default.example.com/v1",
+    models: [
+      // No maxTokens in the definition — createModel falls back to the
+      // discovered default (32_768), clamped by the context window.
+      { id: "no-budget-model", contextWindow: 131_072 },
+    ],
+    resolveApiKey: () => Promise.resolve("test-key"),
+  };
+  runtime.registerExtensionProvider("ext.budget-default", registration);
+  await runtime.refresh({ allowNetwork: false });
+
+  const model = runtime.models
+    .getModels("ext.budget-default")
+    .find((entry) => entry.id === "no-budget-model");
+  assert.equal(model?.maxTokens, 32_768);
 });
