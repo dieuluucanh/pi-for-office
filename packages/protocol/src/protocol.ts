@@ -198,11 +198,15 @@ export type ClientMessage =
  * - `agent-deltas` — the server streams `agent_message` deltas while it
  *   answers a pane prompt (protocol v3). Absent means final replies only.
  * - `client-abort` — the server honours the `abort` client frame (protocol v3).
+ * - `manual-lifecycle` — the bridge stays off until `/office connect` (bridge
+ *   0.6+). A client that needs to start/stop the bridge must check this
+ *   capability or the server version, never assume the command exists.
  */
 export type BridgeCapability =
  | "http-health"
  | "agent-deltas"
- | "client-abort";
+ | "client-abort"
+ | "manual-lifecycle";
 
 export interface WelcomeMessage {
  type: "welcome";

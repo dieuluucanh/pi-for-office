@@ -7,8 +7,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  OFFICE_LIST_TOOL,
   activeOfficeToolNames,
+  isBridgeToolName,
   isOfficeToolName,
+  reconcileBridgeToolActivation,
   reconcileOfficeToolActivation,
 } from "../dist/active-tools.js";
 import { OFFICE_TOOL_NAMES } from "../dist/office-tools.js";
@@ -138,4 +141,54 @@ test("reconcile does not add tools for a legacy pane beyond v1", () => {
   );
   const office = next.filter((n) => isOfficeToolName(n));
   assert.deepEqual(office.sort(), [...LEGACY_WORD_TOOLS].sort());
+});
+
+test("isBridgeToolName covers the catalogue and the discovery tool", () => {
+  for (const name of OFFICE_TOOL_NAMES) {
+    assert.equal(isBridgeToolName(name), true, name);
+  }
+  assert.equal(isBridgeToolName(OFFICE_LIST_TOOL), true);
+  assert.equal(isBridgeToolName("bash"), false);
+  assert.equal(isOfficeToolName(OFFICE_LIST_TOOL), false);
+});
+
+test("bridge off removes every bridge tool and preserves the rest", () => {
+  const next = reconcileBridgeToolActivation(
+    ["bash", "office_excel_read_range", OFFICE_LIST_TOOL, "read"],
+    { enabled: false, panes: [] },
+  );
+  assert.deepEqual(next, ["bash", "read"]);
+});
+
+test("bridge on with no pane activates only the discovery tool", () => {
+  const next = reconcileBridgeToolActivation(["bash", "read"], {
+    enabled: true,
+    panes: [],
+  });
+  assert.deepEqual(next, ["bash", "read", OFFICE_LIST_TOOL]);
+});
+
+test("bridge on with a pane activates discovery + advertised ops", () => {
+  const next = reconcileBridgeToolActivation(["bash"], {
+    enabled: true,
+    panes: [{ host: "excel", ops: ["excel.read_range"] }],
+  });
+  assert.deepEqual(next, [
+    "bash",
+    "office_excel_read_range",
+    OFFICE_LIST_TOOL,
+  ]);
+});
+
+test("bridge reconciliation is idempotent", () => {
+  const panes = [{ host: "word", ops: ["word.insert_text"] }];
+  const first = reconcileBridgeToolActivation(["bash"], {
+    enabled: true,
+    panes,
+  });
+  const second = reconcileBridgeToolActivation(first, {
+    enabled: true,
+    panes,
+  });
+  assert.deepEqual(second, first);
 });

@@ -82,11 +82,18 @@ async function main() {
     );
   if (
     !Array.isArray(healthBody.capabilities) ||
-    !healthBody.capabilities.includes("http-health")
+    !healthBody.capabilities.includes("http-health") ||
+    !healthBody.capabilities.includes("manual-lifecycle")
   ) {
     throw new Error(
       `health missing capabilities: ${JSON.stringify(healthBody.capabilities)}`,
     );
+  }
+  if (!healthBody.owner || healthBody.owner.pid !== process.pid) {
+    throw new Error(`health owner missing/wrong: ${JSON.stringify(healthBody.owner)}`);
+  }
+  if (typeof healthBody.startedAt !== "number" || healthBody.uptimeMs < 0) {
+    throw new Error("health startedAt/uptimeMs missing");
   }
   console.log(
     `[ok] GET /health → 200 (panes=${healthBody.panes.length}, svc=${healthBody.service}, v=${healthBody.serverVersion})`,
@@ -157,7 +164,8 @@ async function main() {
   }
   if (
     !Array.isArray(welcome.capabilities) ||
-    !welcome.capabilities.includes("http-health")
+    !welcome.capabilities.includes("http-health") ||
+    !welcome.capabilities.includes("manual-lifecycle")
   ) {
     throw new Error(
       `welcome capabilities=${JSON.stringify(welcome.capabilities)}`,

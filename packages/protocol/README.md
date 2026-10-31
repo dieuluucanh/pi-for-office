@@ -57,7 +57,7 @@ pane is still accepted and simply receives final replies only.
   never sends a delta to a v2 pane (which would drop it).
 
 Update both halves together on a breaking change; an additive change may ship
-protocol-first (protocol 0.5.0, bridge 0.5.0).
+protocol-first (protocol 0.5.1, bridge 0.6.0).
 
 ## Version & capabilities
 
@@ -67,8 +67,10 @@ Additive fields keep both halves compatible:
 - `welcome.serverVersion?: string` — the bridge extension's package version.
 - `welcome.capabilities?: BridgeCapability[]` — currently `"http-health"`
   (the server answers `GET /health` with JSON metadata), `"agent-deltas"`
-  (the server streams `agent_message` deltas), and `"client-abort"` (the server
-  honours the `abort` frame). Prefer a capability check over a version
+  (the server streams `agent_message` deltas), `"client-abort"` (the server
+  honours the `abort` frame), and `"manual-lifecycle"` (the bridge stays off
+  until `/office connect`; a client must not assume the 0.6 commands exist on a
+  bridge without this capability). Prefer a capability check over a version
   comparison so a peer's features are discoverable at runtime.
 
 Both are **optional**. An absent `capabilities` array (or absent

@@ -34,9 +34,23 @@ export type { CATALOG_VERSION };
 /** Office tool names from the catalog, as a set for O(1) membership. */
 const OFFICE_TOOL_NAME_SET: ReadonlySet<string> = new Set(OFFICE_TOOL_NAMES);
 
+/** The host-agnostic discovery tool, active only while the bridge is on. */
+export const OFFICE_LIST_TOOL = "office_list_documents";
+
+/** Every tool this extension owns, including the discovery tool. */
+const BRIDGE_TOOL_NAME_SET: ReadonlySet<string> = new Set([
+ ...OFFICE_TOOL_NAMES,
+ OFFICE_LIST_TOOL,
+]);
+
 /** True when the name is one of the catalog's office_* tools. */
 export function isOfficeToolName(name: string): boolean {
  return OFFICE_TOOL_NAME_SET.has(name);
+}
+
+/** True when the name is any tool this extension activates (catalogue or list). */
+export function isBridgeToolName(name: string): boolean {
+ return BRIDGE_TOOL_NAME_SET.has(name);
 }
 
 /**
@@ -73,6 +87,37 @@ export function reconcileOfficeToolActivation(
  return [...new Set([...next, ...toAdd])].sort((a, b) => {
   const aOffice = isOfficeToolName(a) ? 1 : 0;
   const bOffice = isOfficeToolName(b) ? 1 : 0;
+  if (aOffice !== bOffice) return aOffice - bOffice;
+  return a.localeCompare(b);
+ });
+}
+
+export interface BridgeToolActivationOptions {
+ /** The bridge server is listening. When false, every bridge tool is inactive. */
+ enabled: boolean;
+ /** Panes currently attached to the server. */
+ panes: readonly PaneCapability[];
+}
+
+/**
+ * Lifecycle-aware reconciliation used by the extension.
+ *
+ * The discovery tool is active as soon as the bridge is on (so the agent can
+ * ask what is attached even with zero panes), and every catalogue tool is active
+ * only for the ops an attached pane advertises. When the bridge is off, the
+ * whole bridge tool family is removed from the active set.
+ */
+export function reconcileBridgeToolActivation(
+ currentActive: readonly string[],
+ options: BridgeToolActivationOptions,
+): string[] {
+ const next = currentActive.filter((name) => !isBridgeToolName(name));
+ const toAdd = options.enabled
+  ? [OFFICE_LIST_TOOL, ...activeOfficeToolNames(options.panes)]
+  : [];
+ return [...new Set([...next, ...toAdd])].sort((a, b) => {
+  const aOffice = isBridgeToolName(a) ? 1 : 0;
+  const bOffice = isBridgeToolName(b) ? 1 : 0;
   if (aOffice !== bOffice) return aOffice - bOffice;
   return a.localeCompare(b);
  });

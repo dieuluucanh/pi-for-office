@@ -9,6 +9,11 @@
  *  - Injects pane-typed prompts into the Pi session and streams the assistant
  *    reply back to the pane.
  *
+ * The server is **off by default**: a session never claims the port until the
+ * user runs `/office connect` (or an explicit `--office-bridge-autostart`).
+ * That is what lets several terminal/Desktop sessions coexist without silently
+ * fighting over 38617.
+ *
  * Pure extension: uses only the public extension API — Pi core is never
  * touched, so Pi can be updated freely.
  */
@@ -16,21 +21,15 @@
 import type {
   AgentToolResult,
   ExtensionAPI,
-  ExtensionCommandContext,
   ExtensionContext,
-  RegisteredCommand,
 } from "@earendil-works/pi-coding-agent";
 import { Type, type Static } from "typebox";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import {
-  CATALOG_VERSION,
-  BRIDGE_DEFAULT_PORT,
-  nextCallId,
-} from "./protocol.js";
-import type { AttachedPane } from "./bridge-server.js";
+import { CATALOG_VERSION, nextCallId } from "./protocol.js";
+import type { AttachedPane, BridgeServerHandlers } from "./bridge-server.js";
 import { OfficeBridgeServer } from "./bridge-server.js";
 import { PanePromptTracker, formatDocumentTag } from "./pane-replies.js";
 import {
@@ -46,21 +45,26 @@ import {
 } from "./office-tools.js";
 import type { OfficeToolDescriptor } from "./office-tools.js";
 import {
-  reconcileOfficeToolActivation,
+  OFFICE_LIST_TOOL,
+  reconcileBridgeToolActivation,
   type PaneCapability,
 } from "./active-tools.js";
+import { createBridgeController, type BridgeController } from "./lifecycle.js";
+import {
+  officeCommandCompletions,
+  officeCommandHelp,
+  parseOfficeCommand,
+} from "./commands.js";
+import {
+  FLAG_AUTOSTART,
+  FLAG_PORT,
+  resolveBridgeAutostart,
+  resolveBridgePort,
+} from "./config.js";
 
-const FLAG_PORT = "office-bridge-port";
-
-/** Which Pi version we run inside (shown in the pane's welcome frame). */
+/** Which Pi version we run inside (shown in the pane's `welcome` frame). */
 function piVersion(): string | null {
-  try {
-    // The coding-agent package exposes its version via package.json at runtime.
-    // Fall back to process env when unavailable.
-    return process.env.PI_VERSION ?? null;
-  } catch {
-    return null;
-  }
+  return process.env.PI_VERSION ?? null;
 }
 
 /**
@@ -81,9 +85,45 @@ function serverVersion(): string {
   }
 }
 
-export default function (pi: ExtensionAPI): void {
-  let server: OfficeBridgeServer | null = null;
+export interface OfficeBridgeExtensionDeps {
+  /** Test seam: build the server (the real factory is the default). */
+  createServer?: (
+    port: number,
+    handlers: BridgeServerHandlers,
+  ) => OfficeBridgeServer;
+  /** Test seam: deterministic timestamps in the lifecycle state. */
+  now?: () => number;
+  /** Test seam: environment used for port/autostart precedence. */
+  env?: Record<string, string | undefined>;
+}
+
+/**
+ * Builds the extension. Exported so the test harness can drive a fake Pi API
+ * without loading a real session.
+ */
+export function createOfficeBridgeExtension(
+  pi: ExtensionAPI,
+  deps: OfficeBridgeExtensionDeps = {},
+): void {
+  const env = deps.env ?? process.env;
   let currentCtx: ExtensionContext | null = null;
+  let controller: BridgeController<OfficeBridgeServer> | null = null;
+
+  const createServer =
+    deps.createServer ??
+    ((port, handlers) =>
+      new OfficeBridgeServer({
+        port,
+        serverName: "pi-office-bridge",
+        serverVersion: serverVersion(),
+        piVersion: piVersion(),
+        handlers,
+      }));
+
+  const activeServer = (): OfficeBridgeServer | null =>
+    controller?.server() ?? null;
+  const bridgeIsOn = (): boolean =>
+    controller?.snapshot().state === "on" && activeServer() !== null;
 
   /**
    * Pane prompts injected into the shared conversation, bound to the turn
@@ -116,35 +156,42 @@ export default function (pi: ExtensionAPI): void {
   }
 
   pi.registerFlag(FLAG_PORT, {
-    description: `Port for the pi-office bridge server (default ${BRIDGE_DEFAULT_PORT})`,
+    description: `Port for the pi-office bridge server (default 38617)`,
     type: "string",
+  });
+  pi.registerFlag(FLAG_AUTOSTART, {
+    description:
+      "Start the pi-office bridge when the session opens (default: off; also PI_OFFICE_BRIDGE_AUTOSTART=1)",
+    type: "boolean",
+    default: false,
   });
 
   function resolvePort(): number {
-    const raw = pi.getFlag(FLAG_PORT);
-    if (typeof raw === "string" && raw.trim() !== "") {
-      const parsed = Number.parseInt(raw.trim(), 10);
-      if (Number.isFinite(parsed) && parsed > 0 && parsed < 65536)
-        return parsed;
-    }
-    const env = process.env.PI_OFFICE_BRIDGE_PORT;
-    if (env) {
-      const parsed = Number.parseInt(env, 10);
-      if (Number.isFinite(parsed) && parsed > 0 && parsed < 65536)
-        return parsed;
-    }
-    return BRIDGE_DEFAULT_PORT;
+    return resolveBridgePort((name) => pi.getFlag(name), env);
+  }
+
+  function resolveAutostart(): boolean {
+    return resolveBridgeAutostart((name) => pi.getFlag(name), env);
   }
 
   function updateStatus(): void {
     const ui = currentCtx?.ui;
     if (!ui) return;
-    const panes = server?.attachedPanes() ?? [];
-    if (!server?.isRunning) {
+    const snapshot = controller?.snapshot();
+    if (!snapshot || snapshot.state === "off") {
       ui.setStatus("office-bridge", undefined);
       return;
     }
-    const port = server.actualPort ?? resolvePort();
+    const port = snapshot.actualPort ?? snapshot.port;
+    if (snapshot.state === "starting") {
+      ui.setStatus("office-bridge", `office bridge starting on :${port}…`);
+      return;
+    }
+    if (snapshot.state === "closing") {
+      ui.setStatus("office-bridge", "office bridge closing…");
+      return;
+    }
+    const panes = activeServer()?.attachedPanes() ?? [];
     if (panes.length === 0) {
       ui.setStatus(
         "office-bridge",
@@ -197,6 +244,13 @@ export default function (pi: ExtensionAPI): void {
     return parts.join("\n").trim();
   }
 
+  function offlineToolError(): Error {
+    return new Error(
+      "office-bridge: server is not running. Run /office connect (or Connect in " +
+        "the Documents panel), then try again.",
+    );
+  }
+
   function registerOfficeTool(descriptor: OfficeToolDescriptor): void {
     type Params = Static<typeof descriptor.parameters>;
 
@@ -219,12 +273,8 @@ export default function (pi: ExtensionAPI): void {
         // `descriptor.parameters` (always an object); the bridge forwards it
         // verbatim as the Office.js args record, so this widening is sound.
         const args = params as unknown as Record<string, unknown>;
-        const active = server;
-        if (!active?.isRunning) {
-          throw new Error(
-            `office-bridge: server is not running. Check the Pi extension loaded, then open the add-in.`,
-          );
-        }
+        const active = activeServer();
+        if (!bridgeIsOn() || active === null) throw offlineToolError();
         const result = await active.callOfficeTool(
           descriptor.host,
           descriptor.op,
@@ -247,9 +297,8 @@ export default function (pi: ExtensionAPI): void {
 
   /**
    * Discovery tool: lists the documents currently attached to the bridge so the
-   * agent can choose a `document` target. Registered once per session; it is
-   * host-agnostic and not part of the reconciled catalog, so it stays active
-   * whenever the extension is loaded.
+   * agent can choose a `document` target. It is active only while the bridge is
+   * on, so an offline session does not advertise an Office capability.
    */
   function registerOfficeListDocumentsTool(): void {
     const parameters = Type.Object({
@@ -263,7 +312,7 @@ export default function (pi: ExtensionAPI): void {
     type Params = Static<typeof parameters>;
 
     pi.registerTool({
-      name: "office_list_documents",
+      name: OFFICE_LIST_TOOL,
       label: "List Open Office Documents",
       description:
         "List every Office document attached to the bridge (Excel, Word, PowerPoint) " +
@@ -279,12 +328,8 @@ export default function (pi: ExtensionAPI): void {
         _onUpdate,
         _ctx,
       ): Promise<AgentToolResult<unknown>> {
-        const active = server;
-        if (!active?.isRunning) {
-          throw new Error(
-            "office-bridge: server is not running. Check the Pi extension loaded, then open the add-in.",
-          );
-        }
+        const active = activeServer();
+        if (!bridgeIsOn() || active === null) throw offlineToolError();
         const all = active.attachedPanes();
         const host = typeof params.host === "string" ? params.host : undefined;
         const panes = all.filter((p) => host === undefined || p.host === host);
@@ -320,26 +365,28 @@ export default function (pi: ExtensionAPI): void {
   }
 
   /**
-   * Reconcile the Pi active tool set with the currently attached panes: only
-   * the office ops the attached panes advertise stay active; everything else
-   * (user/other-extension tools) is preserved. Called on attach/detach.
+   * Reconcile the Pi active tool set with the lifecycle and the attached panes.
+   * Off removes the whole bridge family (including the discovery tool); on adds
+   * the discovery tool and exactly the ops the attached panes advertise.
    */
-  function reconcileActiveTools(panes: readonly AttachedPane[]): void {
+  function reconcileActiveTools(): void {
+    const panes: readonly AttachedPane[] = activeServer()?.attachedPanes() ?? [];
     const capabilities: PaneCapability[] = panes.map((pane) => ({
       host: pane.host,
       ops: pane.ops,
     }));
-    const next = reconcileOfficeToolActivation(
-      pi.getActiveTools(),
-      capabilities,
-    );
+    const next = reconcileBridgeToolActivation(pi.getActiveTools(), {
+      enabled: bridgeIsOn(),
+      panes: capabilities,
+    });
     pi.setActiveTools(next);
   }
 
   /** Stable per-turn pane-awareness block appended to the system prompt. */
   function paneContextBlock(): string | null {
-    const active = server;
-    if (!active?.isRunning) return null;
+    if (!bridgeIsOn()) return null;
+    const active = activeServer();
+    if (active === null) return null;
     const panes = active.attachedPanes();
     if (panes.length === 0) return null;
 
@@ -368,6 +415,94 @@ export default function (pi: ExtensionAPI): void {
     );
   }
 
+  /* ── server handlers ───────────────────────────────────────────────── */
+
+  const handlers: BridgeServerHandlers = {
+    onUserMessage: (text, pane) => {
+      if (!currentCtx) return;
+      const promptId = nextCallId("prompt");
+      const sentText = `${formatDocumentTag(pane)}\n${text}`;
+      panePrompts.enqueue({ pane, promptId, sentText });
+      updateStatus();
+      // followUp: if Pi is idle the message is delivered immediately and
+      // triggers a turn; if a turn is running it is queued until it settles.
+      pi.sendUserMessage(sentText, { deliverAs: "followUp" });
+    },
+    // Protocol v3: a pane's Stop button asks us to abort the run that is
+    // answering its prompt. Only honoured while a pane prompt is actually in
+    // flight (never to kill a TUI-initiated turn) and, when the pane named a
+    // promptId, only for that prompt.
+    onAbortRequest: (promptId, pane) => {
+      const prompt = panePrompts.active();
+      if (!prompt || prompt.pane !== pane) return;
+      if (promptId !== undefined && promptId !== prompt.promptId) return;
+      clearDeltaState();
+      currentCtx?.abort();
+      updateStatus();
+    },
+    // Keep the TUI status line live and the active tool set in sync:
+    // opening an app activates that host's office tools; closing it
+    // deactivates them.
+    onPanesChanged: () => {
+      scheduleStatusUpdate();
+      reconcileActiveTools();
+    },
+  };
+
+  function ensureController(): BridgeController<OfficeBridgeServer> {
+    if (controller) return controller;
+    controller = createBridgeController({
+      createServer: (port) => createServer(port, handlers),
+      defaultPort: resolvePort(),
+      ...(deps.now ? { now: deps.now } : {}),
+      onChange: () => {
+        scheduleStatusUpdate();
+        reconcileActiveTools();
+      },
+    });
+    return controller;
+  }
+
+  /** One-line command status, including the owner and the autostart fact. */
+  function statusText(): string {
+    const snapshot = controller?.snapshot();
+    if (!snapshot || snapshot.state === "off") {
+      const lines = [
+        `Office bridge is off (port ${snapshot?.port ?? resolvePort()}). Run /office connect to start it.`,
+      ];
+      if (snapshot?.lastError) lines.push(`Last error: ${snapshot.lastError}`);
+      if (resolveAutostart()) {
+        lines.push("Autostart is enabled (--office-bridge-autostart).");
+      }
+      return lines.join("\n");
+    }
+    if (snapshot.state === "starting") {
+      return `Office bridge is starting on :${snapshot.port}…`;
+    }
+    if (snapshot.state === "closing") return "Office bridge is closing…";
+
+    const port = snapshot.actualPort ?? snapshot.port;
+    const panes = activeServer()?.attachedPanes() ?? [];
+    if (panes.length === 0) {
+      return `Office bridge is listening on :${port} — no app attached yet. (catalog v${CATALOG_VERSION})`;
+    }
+    const lines = panes.map((p) => {
+      const model = p.model ? `, model=${p.model}` : "";
+      const provider = p.provider ? `, provider=${p.provider}` : "";
+      const ago = Math.max(0, Math.round((Date.now() - p.lastSeen) / 1000));
+      const ops =
+        p.ops === null
+          ? "legacy client (v1 ops)"
+          : `${p.ops.length} ops${p.catalogVersion ? ` (catalog v${p.catalogVersion})` : ""}`;
+      const ignored =
+        p.opsIgnoredCount > 0
+          ? `, ${p.opsIgnoredCount} advertised op(s) ignored (unknown to this server)`
+          : "";
+      return `- ${paneDocumentLabel(p)} (${p.clientName}, pane ${p.paneId.slice(0, 8)})${model}${provider}, seen ${ago}s ago — ${ops}${ignored}`;
+    });
+    return `Office bridge on :${port} (catalog v${CATALOG_VERSION})\n${lines.join("\n")}`;
+  }
+
   /* ── lifecycle ─────────────────────────────────────────────────────── */
 
   pi.on("session_start", async (_event, ctx) => {
@@ -375,81 +510,35 @@ export default function (pi: ExtensionAPI): void {
     registerAllOfficeTools();
     registerOfficeListDocumentsTool();
 
-    // TUI `#` document mentions. Registered before the early return below so a
-    // session rebind (which rebuilds Pi's autocomplete provider stack)
-    // re-registers it. Read the panes live so the dropdown is never stale.
+    // TUI `#` document mentions. Registered on every session_start so a session
+    // rebind (which rebuilds Pi's autocomplete provider stack) re-registers it.
+    // Read the panes live so the dropdown is never stale.
     ctx.ui.addAutocompleteProvider((current) =>
       createDocumentMentionProvider(current as MentionProvider, () => {
-        const panes = server?.attachedPanes() ?? [];
+        const panes = activeServer()?.attachedPanes() ?? [];
         return panes.map((pane) => toMentionTarget(pane, panes));
       }),
     );
 
-    if (server?.isRunning) {
-      updateStatus();
-      return;
-    }
+    const bridge = ensureController();
+    reconcileActiveTools();
+    updateStatus();
 
-    const port = resolvePort();
-    const bridge = new OfficeBridgeServer({
-      port,
-      serverName: "pi-office-bridge",
-      serverVersion: serverVersion(),
-      piVersion: piVersion(),
-      handlers: {
-        onUserMessage: (text, pane) => {
-          const promptId = nextCallId("prompt");
-          const sentText = `${formatDocumentTag(pane)}\n${text}`;
-          panePrompts.enqueue({ pane, promptId, sentText });
-          updateStatus();
-          // followUp: if Pi is idle the message is delivered immediately and
-          // triggers a turn; if a turn is running it is queued until it settles.
-          pi.sendUserMessage(sentText, { deliverAs: "followUp" });
-        },
-        // Protocol v3: a pane's Stop button asks us to abort the run that is
-        // answering its prompt. Only honoured while a pane prompt is actually
-        // in flight (never to kill a TUI-initiated turn) and, when the pane
-        // named a promptId, only for that prompt.
-        onAbortRequest: (promptId, pane) => {
-          const prompt = panePrompts.active();
-          if (!prompt || prompt.pane !== pane) return;
-          if (promptId !== undefined && promptId !== prompt.promptId) return;
-          clearDeltaState();
-          currentCtx?.abort();
-          updateStatus();
-        },
-        // Keep the TUI status line live and the active tool set in sync:
-        // opening an app activates that host's office tools; closing it
-        // deactivates them.
-        onPanesChanged: (panes) => {
-          scheduleStatusUpdate();
-          reconcileActiveTools(panes);
-        },
-      },
-    });
-
+    if (!resolveAutostart()) return;
+    if (bridge.snapshot().state !== "off") return;
     try {
-      await bridge.start();
-      server = bridge;
+      const snapshot = await bridge.connect();
       ctx.ui.notify(
-        `Office bridge listening on ws://127.0.0.1:${port}`,
+        `Office bridge listening on ws://127.0.0.1:${snapshot.actualPort ?? snapshot.port}`,
         "info",
       );
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const code = (error as NodeJS.ErrnoException | null)?.code;
-      if (code === "EADDRINUSE") {
-        ctx.ui.notify(
-          `Office bridge: port ${port} is already in use — another Pi process ` +
-            `is running the bridge. Start this one on a free port with ` +
-            `--${FLAG_PORT} <port> or PI_OFFICE_BRIDGE_PORT=<port>.`,
-          "error",
-        );
-      } else {
-        ctx.ui.notify(`Office bridge failed to start: ${message}`, "error");
-      }
-      console.error(`[office-bridge] start failed: ${message}`);
+      ctx.ui.notify(
+        error instanceof Error ? error.message : String(error),
+        "error",
+      );
     }
+    reconcileActiveTools();
     updateStatus();
   });
 
@@ -461,10 +550,15 @@ export default function (pi: ExtensionAPI): void {
       clearTimeout(panesChangedTimer);
       panesChangedTimer = null;
     }
-    const active = server;
-    server = null;
+    const active = controller;
     if (active) {
-      await active.stop();
+      await active.close().catch((error: unknown) => {
+        console.error(
+          `[office-bridge] shutdown close failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      });
     }
   });
 
@@ -516,8 +610,9 @@ export default function (pi: ExtensionAPI): void {
     const promptId = deltaPromptId;
     deltaBuffer = "";
     if (pane === null || text.length === 0) return;
-    if (!server?.isRunning) return;
-    server.sendToPane(pane, {
+    const active = activeServer();
+    if (!bridgeIsOn() || active === null) return;
+    active.sendToPane(pane, {
       type: "agent_message",
       kind: "delta",
       text,
@@ -554,7 +649,7 @@ export default function (pi: ExtensionAPI): void {
   });
 
   pi.on("message_update", (event, _ctx) => {
-    if (!server?.isRunning) return;
+    if (!bridgeIsOn()) return;
     const prompt = panePrompts.active();
     if (!prompt) return;
     // A v2 pane cannot render a delta; the final reply is all it gets.
@@ -568,7 +663,7 @@ export default function (pi: ExtensionAPI): void {
   // every pane, and never for a TUI-initiated turn.
   pi.on("message_end", async (event, _ctx) => {
     if (event.message.role !== "assistant") return;
-    if (!server?.isRunning) return;
+    if (!bridgeIsOn()) return;
     const prompt = panePrompts.active();
     if (!prompt) return;
 
@@ -581,7 +676,7 @@ export default function (pi: ExtensionAPI): void {
     // SAFETY: assistant messages may carry an id that the Pi event type does
     // not surface; read it through a narrow shape check before using it.
     const maybeId = (event.message as unknown as { id?: unknown }).id;
-    server.sendToPane(prompt.pane, {
+    activeServer()?.sendToPane(prompt.pane, {
       type: "agent_message",
       kind: "final",
       text,
@@ -595,15 +690,16 @@ export default function (pi: ExtensionAPI): void {
   // to the next, unrelated turn.
   pi.on("agent_settled", () => {
     panePrompts.complete();
+    clearDeltaState();
   });
 
   // Forward progress of non-office tools while a pane is awaiting a reply.
   pi.on("tool_execution_start", async (event) => {
-    if (!server?.isRunning) return;
+    if (!bridgeIsOn()) return;
     const prompt = panePrompts.active();
     if (!prompt) return;
     if (hostForToolName(event.toolName) !== null) return;
-    server.sendToPane(prompt.pane, {
+    activeServer()?.sendToPane(prompt.pane, {
       type: "tool_activity",
       tool: event.toolName,
       status: "start",
@@ -612,11 +708,11 @@ export default function (pi: ExtensionAPI): void {
   });
 
   pi.on("tool_execution_end", async (event) => {
-    if (!server?.isRunning) return;
+    if (!bridgeIsOn()) return;
     const prompt = panePrompts.active();
     if (!prompt) return;
     if (hostForToolName(event.toolName) !== null) return;
-    server.sendToPane(prompt.pane, {
+    activeServer()?.sendToPane(prompt.pane, {
       type: "tool_activity",
       tool: event.toolName,
       status: event.isError ? "error" : "end",
@@ -628,54 +724,61 @@ export default function (pi: ExtensionAPI): void {
 
   /* ── commands ──────────────────────────────────────────────────────── */
 
-  const officeCommand: Omit<RegisteredCommand, "name" | "sourceInfo"> = {
+  pi.registerCommand("office", {
     description:
-      "Show the pi-office bridge status: server port and attached Office apps (Excel/Word/PowerPoint).",
-    handler: async (_args: string, ctx: ExtensionCommandContext) => {
-      const active = server;
-      if (!active?.isRunning) {
-        ctx.ui.notify("Office bridge is not running.", "warning");
+      "Control the pi-office bridge: status, connect, close or restart it.",
+    getArgumentCompletions: (prefix) => officeCommandCompletions(prefix),
+    handler: async (args, ctx) => {
+      const command = parseOfficeCommand(args);
+      if (command.kind === "help") {
+        ctx.ui.notify(officeCommandHelp(), "info");
         return;
       }
-      const port = active.actualPort ?? resolvePort();
-      const panes = active.attachedPanes();
-      if (panes.length === 0) {
+      if (command.kind === "error") {
+        throw new Error(command.message);
+      }
+      if (command.kind === "status") {
+        ctx.ui.notify(statusText(), "info");
+        return;
+      }
+
+      const bridge = ensureController();
+      if (command.kind === "connect") {
+        const snapshot = await bridge.connect(command.port);
         ctx.ui.notify(
-          `Office bridge is listening on :${port} — no app attached yet.`,
+          `Office bridge listening on ws://127.0.0.1:${snapshot.actualPort ?? snapshot.port}. Open the Pi for Office add-in, or run /office status.`,
           "info",
         );
-        return;
+      } else if (command.kind === "close") {
+        await bridge.close();
+        ctx.ui.notify(
+          "Office bridge closed. The add-in is disconnected; run /office connect to resume.",
+          "info",
+        );
+      } else if (command.kind === "restart") {
+        const snapshot = await bridge.restart(command.port);
+        ctx.ui.notify(
+          `Office bridge restarted on ws://127.0.0.1:${snapshot.actualPort ?? snapshot.port}.`,
+          "info",
+        );
       }
-      const lines = panes.map((p) => {
-        const model = p.model ? `, model=${p.model}` : "";
-        const provider = p.provider ? `, provider=${p.provider}` : "";
-        const ago = Math.max(0, Math.round((Date.now() - p.lastSeen) / 1000));
-        const ops =
-          p.ops === null
-            ? "legacy client (v1 ops)"
-            : `${p.ops.length} ops${p.catalogVersion ? ` (catalog v${p.catalogVersion})` : ""}`;
-        const ignored =
-          p.opsIgnoredCount > 0
-            ? `, ${p.opsIgnoredCount} advertised op(s) ignored (unknown to this server)`
-            : "";
-        return `- ${paneDocumentLabel(p)} (${p.clientName}, pane ${p.paneId.slice(0, 8)})${model}${provider}, seen ${ago}s ago — ${ops}${ignored}`;
-      });
-      ctx.ui.notify(
-        `Office bridge on :${port} (catalog v${CATALOG_VERSION})\n${lines.join("\n")}`,
-        "info",
-      );
+      reconcileActiveTools();
+      updateStatus();
     },
-  };
+  });
 
-  pi.registerCommand("office", officeCommand);
-
-  // Also list every office tool we exposed so users can confirm them:
+  // Also list every office tool we exposed so users can confirm them.
   pi.registerCommand("office-tools", {
     description:
       "List the office tools registered by the pi-office bridge extension.",
-    handler: async (_args: string, ctx: ExtensionCommandContext) => {
+    handler: async (_args, ctx) => {
+      const active = new Set(pi.getActiveTools());
+      const names = [...OFFICE_TOOL_NAMES, OFFICE_LIST_TOOL];
+      const lines = names.map(
+        (name) => `${active.has(name) ? "[on] " : "[off]"} ${name}`,
+      );
       ctx.ui.notify(
-        `Office tools (${OFFICE_TOOL_NAMES.length}, catalog v${CATALOG_VERSION}):\n${OFFICE_TOOL_NAMES.join("\n")}`,
+        `Office tools (${OFFICE_TOOL_NAMES.length} catalogue + discovery, catalog v${CATALOG_VERSION}):\n${lines.join("\n")}`,
         "info",
       );
     },
@@ -696,4 +799,8 @@ function summarizeArgs(tool: string, args: unknown): string {
     if (typeof path === "string") return path;
   }
   return tool;
+}
+
+export default function (pi: ExtensionAPI): void {
+  createOfficeBridgeExtension(pi);
 }

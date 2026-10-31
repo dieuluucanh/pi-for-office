@@ -82,6 +82,21 @@ export interface AttachedPane {
   visible: boolean;
 }
 
+/**
+ * Who owns this bridge process. Published on `/health` so a client (Pi Desktop)
+ * can map the live bridge to a tab or report a terminal/foreign owner instead
+ * of guessing from a tab kind. Additive: legacy bridges omit it.
+ */
+export interface BridgeOwner {
+  pid: number;
+  /** Pi Desktop's host session id, when the bridge runs inside that host. */
+  sessionId: string | null;
+  /** "desktop" when the host env identifies a Pi Desktop session. */
+  client: "desktop" | "cli";
+  /** The host process working directory (useful for a terminal owner label). */
+  cwd: string;
+}
+
 export interface BridgeServerHandlers {
   /** A user typed a prompt in the add-in sidebar. */
   onUserMessage(text: string, pane: AttachedPane): void;
@@ -150,6 +165,7 @@ export class OfficeBridgeServer {
     "http-health",
     "agent-deltas",
     "client-abort",
+    "manual-lifecycle",
   ];
 
   private readonly port: number;
@@ -157,7 +173,8 @@ export class OfficeBridgeServer {
   private readonly serverName: string;
   private readonly serverVersion: string;
   private readonly piVersion: string | null;
-  private readonly startedAt = Date.now();
+  private readonly owner: BridgeOwner;
+  private startedAt = Date.now();
 
   private httpServer: HttpServer | null = null;
   private wss: WebSocketServer | null = null;
@@ -178,6 +195,13 @@ export class OfficeBridgeServer {
     this.serverVersion = options.serverVersion ?? "unknown";
     this.piVersion = options.piVersion ?? null;
     this.handlers = options.handlers;
+    const sessionId = process.env.PI_DESKTOP_SESSION_ID?.trim() || null;
+    this.owner = {
+      pid: process.pid,
+      sessionId,
+      client: sessionId === null ? "cli" : "desktop",
+      cwd: process.cwd(),
+    };
   }
 
   get isRunning(): boolean {
@@ -219,6 +243,10 @@ export class OfficeBridgeServer {
     return new Promise((resolve, reject) => {
       const onError = (error: Error) => {
         cleanup();
+        // A failed bind must not leave `isRunning` true or a reusable half-open
+        // server behind. The controller creates a fresh server on retry.
+        this.httpServer = null;
+        this.wss = null;
         reject(error);
       };
       const cleanup = () => {
@@ -227,6 +255,7 @@ export class OfficeBridgeServer {
       };
       const onListening = () => {
         cleanup();
+        this.startedAt = Date.now();
         this.startHeartbeat();
         resolve();
       };
@@ -458,8 +487,10 @@ export class OfficeBridgeServer {
           protocolVersion: BRIDGE_PROTOCOL_VERSION,
           piVersion: this.piVersion,
           port: this.actualPort,
+          startedAt: this.startedAt,
           uptimeMs: Date.now() - this.startedAt,
           catalogVersion: CATALOG_VERSION,
+          owner: this.owner,
           panes,
         },
         req,

@@ -19,6 +19,11 @@ local Pi process  (this extension)
    • injects pane prompts into the Pi session
 ```
 
+**The server is off until you ask for it (bridge 0.6+).** Opening a Pi session no
+longer claims the bridge port. Run `/office connect` in the session you want to
+use, or click **Connect this session** in Pi Desktop's Documents rail. Every new
+session starts off; `/office close` releases the port for another session.
+
 Two flows:
 
 1. **Tool proxy (Pi → pane):** the Pi agent calls `office_excel_read_range`,
@@ -124,9 +129,14 @@ blocked) instead of reporting a bare failure — see
 Every `welcome` frame (and `GET /health`) advertises additive server
 metadata:
 
-- `serverVersion` — this package's version (e.g. `"0.2.0"`).
-- `capabilities` — `["http-health"]` means the HTTP `/health` surface is
-  served.
+- `serverVersion` — this package's version (e.g. `"0.6.0"`).
+- `capabilities` — `http-health`, `agent-deltas`, `client-abort` and
+  `manual-lifecycle`. `manual-lifecycle` means the bridge stays off until
+  `/office connect`; a client that needs to start or stop it must check this
+  capability (or the version), never assume the 0.6 commands exist.
+- `GET /health` also carries `owner` — `{ pid, sessionId, client, cwd }` — so
+  Pi Desktop can map the live bridge to a tab or report a terminal owner. It is
+  null/absent on older bridges.
 
 Clients (the add-in card) treat an absent `capabilities` as “legacy bridge
 (< 0.2.0)” and tell the user to update instead of claiming the bridge is
@@ -137,16 +147,49 @@ attaches or detaches (`onPanesChanged`).
 
 | Command | Description |
 |---------|-------------|
-| `/office` | Show bridge status: port + attached apps (Excel/Word/PowerPoint) |
-| `/office-tools` | List every `office_*` tool registered |
+| `/office` | Status (same as `/office status`) |
+| `/office status` | Show state, port, owner and attached apps |
+| `/office connect [port]` | Start the bridge; the port defaults to the configured port |
+| `/office close` | Stop the bridge and disconnect the add-in |
+| `/office restart [port]` | Stop, then start (optionally on another port) |
+| `/office help` | Show the command list |
+| `/office-tools` | List every `office_*` tool and whether it is active |
+
+Aliases: `on`/`start` = `connect`; `stop`/`off`/`disconnect` = `close`;
+`info` = `status`.
+
+## Lifecycle (bridge 0.6+)
+
+```text
+/office connect → listening → /office close → off
+```
+
+- Only one Pi session can own the port. A second `/office connect` fails with a
+  message naming the port and telling you to close the owner (or connect on a
+  different port).
+- The status line shows the bound port and the attached apps while on; it is
+  cleared when the bridge is off.
+- Office tools are registered at `session_start` but **inactive while off**. The
+  discovery tool `office_list_documents` becomes active as soon as the bridge is
+  on; catalogue tools activate only for the ops the attached pane advertises.
+- `session_shutdown` always stops the bridge. `/new`, `/resume`, `/reload` and a
+  Desktop host restart therefore start off; reconnect explicitly. Keeping a
+  server across Pi's extension re-instantiation would orphan it.
+- The bridge never auto-connects just because a session opened. The opt-in
+  `--office-bridge-autostart` / `PI_OFFICE_BRIDGE_AUTOSTART=1` restores the old
+  behaviour for scripts and power users.
 
 ## Configuration
 
 - **Port** — flag `--office-bridge-port <port>` or env `PI_OFFICE_BRIDGE_PORT`
-  (default `38617`). The add-in connects to the same default; change both if you
-  override it (the add-in's bridge card has a **Bridge URL** row that both the
-  WebSocket client and the probe use). If the port is already taken by another
-  Pi process, the extension reports `EADDRINUSE` with the override hint.
+  (default `38617`). `/office connect <port>` overrides both for one run. The
+  add-in connects to the same default; change both if you override it (the
+  add-in's bridge card has a **Bridge URL** row that both the WebSocket client
+  and the probe use). If the port is already taken by another Pi process, the
+  extension reports `EADDRINUSE` with the owner/close hint.
+- **Autostart** — off by default. `--office-bridge-autostart` or
+  `PI_OFFICE_BRIDGE_AUTOSTART=1` starts the bridge in `session_start` (the old
+  pre-0.6 behaviour). There is no persisted GUI setting.
 - **Allowed origins** — env `PI_OFFICE_BRIDGE_ALLOWED_ORIGINS` (comma-separated)
   extends the browser origins allowed to read `GET /health`. Defaults cover the
   dev Vite server (`https://localhost:3141`) and the hosted GitHub Pages add-in
@@ -168,16 +211,24 @@ registry (`packages/add-in/src/bridge/`) there. Op ids are namespaced by host:
 | PowerPoint | `get_overview`, `read_slide`, `add_slide`, `add_text_box`, `format_slide` |
 
 Plus the host-agnostic discovery tool **`office_list_documents`** (id, name,
-host, focused, windows), always active while the extension is loaded.
+host, focused, windows). It is active only while the bridge is on.
 
 ### Active-tool reconciliation
 
-The office tools are registered at `session_start` from the catalog, but only
-**the ops the currently attached pane advertises are kept active** in the Pi
-session (`pi.setActiveTools()`). Opening an app activates that host's tools;
-closing it deactivates them; everything else stays untouched. Panes that don't
-advertise an `ops` list (legacy 0.2.x clients) are given only the v1 op set.
-This keeps the agent's prompt small and focused on the app actually open.
+The office tools are registered at `session_start` from the catalog, but the
+active set follows the lifecycle and the attached panes
+(`pi.setActiveTools()`):
+
+| State | Catalogue tools | `office_list_documents` |
+| --- | --- | --- |
+| bridge off | inactive | inactive |
+| bridge on, no pane | inactive | active |
+| bridge on, pane attached | exactly the pane's advertised ops | active |
+
+Opening an app activates that host's tools; closing it deactivates them;
+closing the bridge deactivates the whole family. Everything else stays
+untouched. Panes that don't advertise an `ops` list (legacy 0.2.x clients) are
+given only the v1 op set.
 
 ### Capability handshake
 
@@ -232,9 +283,10 @@ the strongest proof the two halves agree on the wire format.
 ## Protocol
 
 The wire protocol is shared in `@dieulc/pi-office-protocol`
-(`packages/protocol`). It is currently at **v2** (document identity + targeting);
-bump `BRIDGE_PROTOCOL_VERSION` on breaking changes. See
-[`packages/protocol/README.md`](../protocol/README.md) for the v2 changelog.
+(`packages/protocol`). It is currently at **v3** (streamed deltas + pane abort);
+bump `BRIDGE_PROTOCOL_VERSION` on breaking changes. The lifecycle commands and
+the `/health` owner are additive and do not change the wire version. See
+[`packages/protocol/README.md`](../protocol/README.md) for the changelog.
 
 ## License
 
