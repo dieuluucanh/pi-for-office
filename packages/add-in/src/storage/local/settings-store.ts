@@ -32,6 +32,11 @@ export class SettingsStore extends Store {
     return this.getBackend().keys("settings");
   }
 
+  /** Keys under a prefix, without loading values (association tables). */
+  async listWithPrefix(prefix: string): Promise<string[]> {
+    return this.getBackend().keys("settings", prefix);
+  }
+
   async clear(): Promise<void> {
     await this.getBackend().clear("settings");
   }

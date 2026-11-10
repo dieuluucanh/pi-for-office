@@ -36,6 +36,12 @@ export interface StorageBackend {
   /** Get all keys from a specific store, optionally filtered by prefix. */
   keys(storeName: string, prefix?: string): Promise<string[]>;
   /**
+   * Get every value in a store, unordered. Used for full-store scans
+   * (diagnostics, repair, and the metadata fallback path) that must not depend
+   * on an index existing.
+   */
+  getAll<T = DynamicValue>(storeName: string): Promise<T[]>;
+  /**
    * Get all values from a specific store, ordered by an index.
    * @param storeName - The store to query
    * @param indexName - The index to use for ordering

@@ -4,6 +4,7 @@
 
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import { t } from "../language/index.js";
+import { createDismissControl } from "../ui/dismiss-control.js";
 
 import type { StatusContextWarningSeverity } from "./status-context.js";
 import { getThinkingLevelHint, getThinkingLevelLabel } from "./thinking-display.js";
@@ -185,6 +186,38 @@ function createDescriptionBlock(text: string): HTMLParagraphElement {
   return description;
 }
 
+export interface StatusPopoverHeader {
+  header: HTMLDivElement;
+  title: HTMLHeadingElement;
+}
+
+/**
+ * Popover header with an explicit close control.
+ *
+ * Escape and outside-click still work; the × makes the popover dismissable for
+ * touch and pointer users who do not discover either. Exported so the header is
+ * testable without mounting a positioned popover.
+ */
+export function createStatusPopoverHeader(titleText: string): StatusPopoverHeader {
+  const header = document.createElement("div");
+  header.className = "pi-status-popover__header";
+
+  const title = document.createElement("h3");
+  title.className = "pi-status-popover__title";
+  title.textContent = titleText;
+
+  const close = createDismissControl({
+    onDismiss: () => {
+      closeStatusPopover();
+    },
+    label: t("status-popovers.close"),
+    className: "pi-status-popover__close",
+  });
+
+  header.append(title, close);
+  return { header, title };
+}
+
 export function toggleThinkingPopover(opts: ThinkingPopoverOptions): void {
   if (shouldToggle("thinking", opts.anchor)) {
     closeStatusPopover();
@@ -193,9 +226,7 @@ export function toggleThinkingPopover(opts: ThinkingPopoverOptions): void {
 
   const popover = createPopoverBase("thinking");
 
-  const title = document.createElement("h3");
-  title.className = "pi-status-popover__title";
-  title.textContent = t("status-popovers.thinkingLevel");
+  const { header } = createStatusPopoverHeader(t("status-popovers.thinkingLevel"));
 
   const description = createDescriptionBlock(opts.description);
 
@@ -237,7 +268,7 @@ export function toggleThinkingPopover(opts: ThinkingPopoverOptions): void {
     list.appendChild(button);
   }
 
-  popover.append(title, description, list);
+  popover.append(header, description, list);
   mountPopover("thinking", opts.anchor, popover);
 }
 
@@ -278,9 +309,7 @@ export function toggleContextPopover(opts: ContextPopoverOptions): void {
 
   const popover = createPopoverBase("context");
 
-  const title = document.createElement("h3");
-  title.className = "pi-status-popover__title";
-  title.textContent = t("status-popovers.contextUsage");
+  const { header } = createStatusPopoverHeader(t("status-popovers.contextUsage"));
 
   const description = createDescriptionBlock(opts.description);
 
@@ -288,9 +317,9 @@ export function toggleContextPopover(opts: ContextPopoverOptions): void {
     const detail = document.createElement("p");
     detail.className = "pi-status-popover__token-detail";
     detail.textContent = opts.tokenDetail;
-    popover.append(title, description, detail);
+    popover.append(header, description, detail);
   } else {
-    popover.append(title, description);
+    popover.append(header, description);
   }
 
   if (opts.warning) {

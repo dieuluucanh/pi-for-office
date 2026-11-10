@@ -1,14 +1,35 @@
 /* ═══════════════════════════════════════════════════════
-   8. TOAST
+   8. TOASTS
+   Host + flex-item toasts. See docs/ui-layout.md.
+
+   Deliberately NOT `position: fixed; left: 50%; transform: translateX(-50%)`
+   on `.pi-toast`: an abspos box with `left: 50%` and `width: auto` can only
+   grow to half the pane, and a `nowrap` action button then squeezed the
+   message to one character per line in a ~350px taskpane. The host spans the
+   pane and each toast is a normal flex item.
    ═══════════════════════════════════════════════════════ */
 
-.pi-toast {
+.pi-toast-host {
   position: fixed;
-  top: 56px;
-  left: 50%;
-  transform: translateX(-50%) translateY(-4px);
-  z-index: 200;
-  padding: 6px 14px;
+  /* Both edges — the toast grows into the pane instead of half of it. */
+  left: 8px;
+  right: 8px;
+  top: var(--pi-toast-offset);
+  z-index: var(--pi-z-toast);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.pi-toast {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: min(var(--pi-toast-max), 100%);
+  padding: 8px 8px 8px 14px;
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
   background: oklch(0.18 0 0 / 0.88);
@@ -19,14 +40,20 @@
   -webkit-backdrop-filter: var(--glass-blur-dropdown);
   box-shadow: 0 4px 12px var(--alpha-15);
   opacity: 0;
-  transition: opacity var(--duration-normal), transform var(--duration-normal), background var(--duration-fast), border-color var(--duration-fast);
-  pointer-events: none;
-  max-width: calc(100vw - 24px);
+  transform: translateY(-4px);
+  transition:
+    opacity var(--duration-normal),
+    transform var(--duration-normal),
+    background var(--duration-fast),
+    border-color var(--duration-fast);
+  /* Every toast is clickable so its × works; the host stays transparent to
+     input so the gaps between toasts do not block the page. */
+  pointer-events: auto;
 }
 
 .pi-toast.visible {
   opacity: 1;
-  transform: translateX(-50%) translateY(0);
+  transform: translateY(0);
 }
 
 .pi-toast--error {
@@ -35,26 +62,34 @@
   box-shadow: 0 6px 16px oklch(0.20 0.10 25 / 0.38);
 }
 
+/* Action/undo toasts keep the same input behaviour as plain ones; the class is
+   kept for the button styling hook below. */
 .pi-toast--action {
   pointer-events: auto;
 }
 
 .pi-toast__content {
-  display: inline-flex;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
   gap: 8px;
-  max-width: min(560px, calc(100vw - 48px));
+  flex: 1 1 auto;
+  min-width: 0;
   text-align: left;
 }
 
 .pi-toast__message {
+  /* Never shrink below a readable measure: 12ch is the floor, the action wraps
+     underneath instead of eating the text column. */
+  flex: 1 1 12ch;
+  min-width: 0;
   white-space: normal;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
 
 .pi-toast__action {
+  flex: 0 0 auto;
   border: 1px solid oklch(1 0 0 / 0.35);
   /* Intentional pill shape for floating action toast. */
   border-radius: var(--radius-full);
@@ -65,10 +100,8 @@
   font-size: var(--text-sm);
   font-weight: 600;
   cursor: pointer;
-  white-space: nowrap;
-  /* Overlap the toast's vertical padding so action toasts keep the same
-     height as plain message toasts. */
-  margin-block: -3px;
+  /* Wraps rather than forcing the message to one character per line. */
+  white-space: normal;
 }
 
 .pi-toast__action:hover {
@@ -80,4 +113,33 @@
   background: oklch(1 0 0 / 0.16);
 }
 
+.pi-toast__close {
+  inline-size: 20px;
+  block-size: 20px;
+  flex-shrink: 0;
+  align-self: flex-start;
+  font-size: var(--text-md);
+  /* White glyph on the dark toast; the base .pi-overlay-close colours assume a
+     light surface. */
+  color: white;
+  background: oklch(1 0 0 / 0.1);
+  border-color: oklch(1 0 0 / 0.22);
+}
 
+.pi-toast__close:hover {
+  color: white;
+  background: oklch(1 0 0 / 0.22);
+  border-color: oklch(1 0 0 / 0.35);
+}
+
+.pi-toast__close:focus,
+.pi-toast__close:focus-visible {
+  box-shadow: 0 0 0 2px oklch(1 0 0 / 0.45);
+}
+
+/* Narrow taskpane: give the message the full first line. */
+@media (max-width: 420px) {
+  .pi-toast__message {
+    flex-basis: 100%;
+  }
+}

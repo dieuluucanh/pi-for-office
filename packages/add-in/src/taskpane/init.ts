@@ -11,7 +11,6 @@ function isTaskpaneInitPayloadShape(
  * sidebar mount, slash commands, keyboard shortcuts).
  */
 
-import { html, render } from "lit";
 import { Agent } from "@earendil-works/pi-agent-core";
 import type { RetryPolicy } from "@earendil-works/pi-ai";
 import { getAppStorage } from "../storage/local/app-storage.js";
@@ -123,7 +122,12 @@ import { PI_SKILLS_CHANGED_EVENT } from "../skills/events.js";
 import { createSkillReadCache } from "../skills/read-cache.js";
 import { initLanguage, t } from "../language/index.js";
 import { initAppStorage } from "../storage/init-app-storage.js";
-import { renderError } from "../ui/loading.js";
+import { ensurePersistentStorage } from "../storage/local/persistence-request.js";
+import { repairSessionStorage, formatRepairReport } from "../storage/local/repair.js";
+import {
+  listWorkbookIdentityObservedIds,
+  resolveWorkbookIdentity,
+} from "../workbook/identity.js";
 import { showFilesWorkspaceDialog } from "../ui/files-dialog.js";
 
 import {
@@ -137,6 +141,10 @@ import {
 } from "../ui/confirm-dialog.js";
 import { TOOL_APPROVAL_OVERLAY_ID } from "../ui/overlay-ids.js";
 import { showActionToast, showToast } from "../ui/toast.js";
+import {
+  mountErrorBanner,
+  clearErrorBanner as clearErrorBannerElement,
+} from "../ui/error-banner.js";
 import { PiSidebar, type EmptyHint } from "../ui/pi-sidebar.js";
 import { createProxyBanner } from "../ui/proxy-banner.js";
 import { setActiveProviders } from "../models/active-providers.js";
@@ -182,13 +190,14 @@ import { createQueueDisplay } from "./queue-display.js";
 import { createActionQueue } from "./action-queue.js";
 import { maybeStartBackgroundVerificationBridge } from "./background-verification-bridge.js";
 import {
-  RecentlyClosedStack,
   type RecentlyClosedItem,
 } from "./recently-closed.js";
+import { createRecentlyClosedController } from "./recently-closed-store.js";
 import { setupSessionPersistence } from "./sessions.js";
 import {
   loadWorkbookTabLayout,
   saveWorkbookTabLayout,
+  tabLayoutSignature,
   type WorkbookTabLayout,
 } from "./tab-layout.js";
 import { createTabLayoutPersistence } from "./tab-layout-persistence.js";
@@ -235,11 +244,11 @@ function showErrorBanner(
     variant?: "ok" | "cancel";
   }[],
 ): void {
-  render(renderError(message, actions), errorRoot);
+  mountErrorBanner(errorRoot, actions ? { message, actions } : { message });
 }
 
 function clearErrorBanner(errorRoot: HTMLElement): void {
-  render(html``, errorRoot);
+  clearErrorBannerElement(errorRoot);
 }
 
 interface ProxySettingsStore {
@@ -358,8 +367,20 @@ export async function initTaskpane(opts: {
   const detectedApp = detectOfficeAppFromGlobals();
 
   // 1. Storage
-  const { providerKeys, sessions, settings, customProviders, modelCatalogs } =
-    initAppStorage();
+  const {
+    providerKeys,
+    sessions,
+    settings,
+    customProviders,
+    modelCatalogs,
+    backend,
+  } = initAppStorage();
+
+  // Ask once for persistent storage: without a grant the WebView may evict the
+  // session store under pressure, which presents as "my sessions vanished".
+  void ensurePersistentStorage({ backend, settings }).catch((error: DynamicValue) => {
+    console.warn("[pi] Persistent storage request failed:", error);
+  });
 
   // Initialize language from storage
   try {
@@ -375,6 +396,38 @@ export async function initTaskpane(opts: {
   // Dev builds: rewrite stored prod-default service URLs to the dev ports so
   // the pane targets the dev local services (mirrors ensureDefaultProxyUrl).
   await applyDevServiceDefaultMigrations(settings, IS_DEV_BUILD);
+
+  // 1a. One-time session-storage repair (idempotent, marker-guarded).
+  // Fixes metadata rows that were never written, timestamps that keep a row out
+  // of the `lastModified` index, links written under an observed URL/path hash,
+  // and blank records the old restore path created. Runs before any runtime
+  // exists so the tab-layout restore sees the repaired store.
+  try {
+    const identity = await resolveWorkbookIdentity({
+      host: spreadsheetHost,
+      settings,
+    });
+    const observedIds = identity.canonicalWorkbookId
+      ? await listWorkbookIdentityObservedIds(settings, identity.canonicalWorkbookId)
+      : [];
+
+    const repairReport = await repairSessionStorage({
+      sessions,
+      settings,
+      backend,
+      canonicalWorkbookId: identity.canonicalWorkbookId,
+      observedIds: [
+        ...observedIds,
+        ...(identity.observedWorkbookId ? [identity.observedWorkbookId] : []),
+      ],
+    });
+
+    if (repairReport) {
+      console.log("[pi] Session storage repair:", formatRepairReport(repairReport));
+    }
+  } catch (error) {
+    console.warn("[pi] Session storage repair skipped:", error);
+  }
 
   // Migrate legacy web-search API keys to the connection store schema.
   try {
@@ -641,10 +694,28 @@ export async function initTaskpane(opts: {
     );
   };
 
-  const resolveWorkbookContext = async (): Promise<WorkbookContext> => {
+  /** Workbook context is stable per document; re-read at most every 5s. */
+  const WORKBOOK_CONTEXT_CACHE_TTL_MS = 5000;
+  let workbookContextCache: { context: WorkbookContext; at: number } | null = null;
+
+  const resolveWorkbookContext = async (optsForResolve?: {
+    refresh?: boolean;
+  }): Promise<WorkbookContext> => {
+    const now = Date.now();
+    if (
+      !optsForResolve?.refresh &&
+      workbookContextCache &&
+      now - workbookContextCache.at < WORKBOOK_CONTEXT_CACHE_TTL_MS
+    ) {
+      return workbookContextCache.context;
+    }
+
     try {
-      return await spreadsheetHost.getWorkbookContext();
+      const context = await spreadsheetHost.getWorkbookContext();
+      workbookContextCache = { context, at: now };
+      return context;
     } catch {
+      workbookContextCache = null;
       return {
         workbookId: null,
         workbookName: null,
@@ -758,7 +829,27 @@ export async function initTaskpane(opts: {
   const abortedAgents = new WeakSet<Agent>();
   const runtimeCapabilityRefreshers = new Map<string, () => Promise<void>>();
   const runtimeActiveIntegrationIds = new Map<string, string[]>();
-  const recentlyClosed = new RecentlyClosedStack(10);
+  const recentlyClosed = createRecentlyClosedController(settings, {
+    limit: 10,
+    warn: (message, error) => {
+      console.warn(message, error);
+    },
+  });
+  await recentlyClosed.hydrate();
+
+  /**
+   * Surface a session save failure once per pane.
+   *
+   * Saves used to fail into `console.warn`, so the user kept working on a
+   * transcript that was never written. A single non-blocking toast is enough:
+   * the diagnostics readout carries the detail.
+   */
+  let sessionSaveFailureReported = false;
+  const reportSessionSaveFailure = (error: string): void => {
+    if (sessionSaveFailureReported) return;
+    sessionSaveFailureReported = true;
+    showToast(t("session.toast.saveFailed", { error }));
+  };
 
   const getActiveRuntime = () => runtimeManager.getActiveRuntime();
   const getActiveAgent = () => getActiveRuntime()?.agent ?? null;
@@ -995,10 +1086,66 @@ export async function initTaskpane(opts: {
 
   let previousActiveRuntimeId: string | null = null;
   let suppressNextInputAutofocus = false;
+  let lastPersistedTabLayoutSignature: string | null = null;
+  let streamingTabLayoutTimer: ReturnType<typeof setTimeout> | null = null;
 
+  /**
+   * Persist the tab layout only when its structure actually changes.
+   *
+   * `runtimeManager.subscribe` fires on **every** agent event (including each
+   * streaming delta), and the persistence controller resolves the workbook
+   * identity before deduping — a SHA-256 per token. The structural signature
+   * makes the hot path allocation-only, and streaming is deferred to a trailing
+   * timer so a long turn cannot cause a storage write per token.
+   */
   const maybePersistTabLayout = (): void => {
-    tabLayoutPersistence.persist(snapshotRuntimeTabLayout());
+    const layout = snapshotRuntimeTabLayout();
+    const signature = tabLayoutSignature(layout);
+    if (signature === lastPersistedTabLayoutSignature) return;
+
+    const isStreaming = runtimeManager
+      .listRuntimes()
+      .some((runtime) => runtime.agent.state.isStreaming);
+
+    if (isStreaming) {
+      if (streamingTabLayoutTimer === null) {
+        streamingTabLayoutTimer = setTimeout(() => {
+          streamingTabLayoutTimer = null;
+          maybePersistTabLayout();
+        }, 1000);
+      }
+      return;
+    }
+
+    lastPersistedTabLayoutSignature = signature;
+    tabLayoutPersistence.persist(layout);
   };
+
+  /**
+   * Best-effort durable flush of every runtime, bounded so teardown can never
+   * hold the host hostage.
+   */
+  const flushSessionsBeforeTeardown = (): void => {
+    const flushAll = async (): Promise<void> => {
+      const runtimes = runtimeManager.listRuntimes();
+      await Promise.all(
+        runtimes.map((runtime) =>
+          runtime.persistence.flush().catch(() => undefined),
+        ),
+      );
+      await tabLayoutPersistence.flush().catch(() => undefined);
+      await recentlyClosed.flush().catch(() => undefined);
+    };
+
+    void Promise.race([
+      flushAll(),
+      new Promise<void>((resolve) => {
+        setTimeout(resolve, 150);
+      }),
+    ]);
+  };
+
+  window.addEventListener("pagehide", flushSessionsBeforeTeardown);
 
   const focusChatInput = (): void => {
     if (doesOverlayClaimEscape(document.activeElement)) {
@@ -1106,7 +1253,7 @@ export async function initTaskpane(opts: {
   });
 
   const refreshWorkbookState = async () => {
-    await resolveWorkbookContext();
+    await resolveWorkbookContext({ refresh: true });
     sidebar.requestUpdate();
 
     await refreshCapabilitiesForAllRuntimes();
@@ -1122,6 +1269,8 @@ export async function initTaskpane(opts: {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
       void refreshWorkbookState();
+    } else {
+      flushSessionsBeforeTeardown();
     }
   });
 
@@ -1482,6 +1631,9 @@ export async function initTaskpane(opts: {
 
     let observedSessionId = runtimeSessionId;
     const unsubscribeSessionCapabilitySync = persistence.subscribe(() => {
+      const saveError = persistence.getLastSaveError();
+      if (saveError) reportSessionSaveFailure(saveError);
+
       const nextSessionId = persistence.getSessionId();
       if (nextSessionId === observedSessionId) return;
 
@@ -1720,6 +1872,28 @@ export async function initTaskpane(opts: {
       getRecentlyClosedItems: () => recentlyClosed.snapshot(),
       onReopenRecentlyClosed: async (item) => {
         return reopenRecentlyClosedById(item.id);
+      },
+      onSessionDeleted: (sessionId: string) => {
+        recentlyClosed.removeBySessionId(sessionId);
+      },
+    });
+  };
+
+  /**
+   * Strict-restore dead end after a saved tab layout was restored: every tab
+   * is blank and this workbook has no non-empty session. A silent blank pane
+   * looked like data loss, so offer the session history once.
+   *
+   * Not used for a plain blank start — that path relies on the empty-state
+   * action instead of a toast on every load.
+   */
+  const notifyNothingToRestore = (): void => {
+    showActionToast({
+      message: t("init.nothingToRestore"),
+      actionLabel: t("init.openResume"),
+      duration: 8000,
+      onAction: () => {
+        void openResumePicker("new_tab");
       },
     });
   };
@@ -2407,8 +2581,25 @@ export async function initTaskpane(opts: {
 
   // Bootstrap from persisted tab layout; fallback to legacy single-runtime restore.
   const restoredRuntime = await restorePersistedTabLayout();
-  if (!restoredRuntime) {
-    await createRuntime({ activate: true, autoRestoreLatest: true });
+  if (restoredRuntime) {
+    const hasContent = runtimeManager
+      .listRuntimes()
+      .some((runtime) => runtime.agent.state.messages.length > 0);
+
+    if (!hasContent) {
+      // The saved layout referenced records that no longer exist (or only blank
+      // tabs). Still try this workbook's latest non-empty session; if there is
+      // none, say so instead of silently starting blank.
+      const restored = await restoredRuntime.persistence.restoreLatestSession();
+      if (!restored) notifyNothingToRestore();
+    }
+  } else {
+    // No toast when a fresh pane starts blank: the persistent "Open session
+    // history" action in the empty state is the entry point (docs/ui-layout.md).
+    await createRuntime({
+      activate: true,
+      autoRestoreLatest: true,
+    });
   }
 
   tabLayoutPersistence.enable();

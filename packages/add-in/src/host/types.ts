@@ -19,8 +19,28 @@ export type SpreadsheetHostReadyCallback = (info: SpreadsheetHostReadyInfo) => v
 export interface SpreadsheetHostSessionStorage {
   getSessionWorkbookId(settings: SettingsStore, sessionId: string): Promise<string | null>;
   linkSessionToWorkbook(settings: SettingsStore, sessionId: string, workbookId: string): Promise<void>;
+  /** Correct an existing link (alias migration / explicit user action). */
+  relinkSessionToWorkbook(settings: SettingsStore, sessionId: string, workbookId: string): Promise<void>;
+  /** Remove a link without deleting the session. */
+  forgetSessionWorkbook(settings: SettingsStore, sessionId: string): Promise<void>;
   setLatestSessionForWorkbook(settings: SettingsStore, workbookId: string, sessionId: string): Promise<void>;
   getLatestSessionForWorkbook(settings: SettingsStore, workbookId: string): Promise<string | null>;
+  /** Batched link read for history rendering (one settings scan). */
+  readSessionWorkbookLinks(settings: SettingsStore): Promise<Map<string, string>>;
+  migrateAliasesToCanonical(
+    settings: SettingsStore,
+    args: {
+      canonicalId: string;
+      observedIds: string[];
+      resolveSessionLastModified?: (sessionId: string) => Promise<string | null>;
+    },
+  ): Promise<{ relinked: number; latestMoved: boolean }>;
+  markSessionWorkbookPending(
+    settings: SettingsStore,
+    sessionId: string,
+    args: { workbookName: string | null; at: string },
+  ): Promise<void>;
+  clearSessionWorkbookPending(settings: SettingsStore, sessionId: string): Promise<void>;
   partitionSessionIdsByWorkbook(
     settings: SettingsStore,
     sessionIds: string[],
@@ -41,6 +61,24 @@ export interface SpreadsheetHost {
 
   /** Privacy-preserving workbook identity. Never expose or persist raw document URLs. */
   getWorkbookContext(): Promise<WorkbookContext>;
+
+  /**
+   * A stable, document-scoped identifier (a UUID the add-in stores *inside*
+   * the document), or null when the host cannot provide one.
+   *
+   * This is the canonical workbook identity for session association: unlike a
+   * hash of the document URL/path it survives rename/move, unsaved documents,
+   * guest access in Excel on the web, and platform switches (desktop path vs
+   * cloud URL).
+   */
+  getDocumentScopedId(): Promise<string | null>;
+
+  /**
+   * Persist a document-scoped identifier inside the document.
+   * Resolves false when the host cannot store it durably (read-only,
+   * protected view, unsaved document); the value is still usable in-session.
+   */
+  setDocumentScopedId(id: string): Promise<boolean>;
 
   /** Host theme signal, if available. Returns null when unknown/unsupported. */
   resolveThemeDark(): boolean | null;

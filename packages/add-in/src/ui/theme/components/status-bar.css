@@ -511,6 +511,26 @@
   color: var(--foreground);
 }
 
+.pi-status-popover__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.pi-status-popover__header .pi-status-popover__title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pi-status-popover__close {
+  inline-size: 20px;
+  block-size: 20px;
+  flex-shrink: 0;
+  align-self: flex-start;
+  font-size: var(--text-md);
+}
+
 .pi-status-popover__description {
   margin: 0;
   font-family: var(--font-sans);

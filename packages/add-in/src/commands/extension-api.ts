@@ -97,6 +97,7 @@ import {
 } from "../extensions/internal/widget-surface.js";
 import { EXTENSION_OVERLAY_ID } from "../ui/overlay-ids.js";
 import { createOverlayDialogManager } from "../ui/overlay-dialog.js";
+import { showToast } from "../ui/toast.js";
 
 function normalizeIdentifier(kind: "command" | "tool", value: string): string {
   const trimmed = value.trim();
@@ -235,18 +236,10 @@ function defaultRegisterCommand(name: string, cmd: ExtensionCommand): void {
 }
 
 function defaultToast(message: string): void {
-  let toast = document.getElementById("pi-toast");
-  if (!toast) {
-    toast = document.createElement("div");
-    toast.id = "pi-toast";
-    toast.className = "pi-toast";
-    document.body.appendChild(toast);
-  }
-
-  toast.textContent = message;
-  toast.classList.add("visible");
-  const toastEl = toast;
-  setTimeout(() => toastEl.classList.remove("visible"), 2000);
+  // One implementation only (ui/toast.ts). The previous local version wrote
+  // `textContent` into the shared #pi-toast node, wiping the content subtree
+  // that toast.ts holds element references to.
+  showToast(message);
 }
 
 function getDefaultCapabilityErrorMessage(

@@ -174,12 +174,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 260px;
+  /* Fluid: never wider than its row (docs/ui-layout.md). */
+  max-width: min(260px, 100%);
 }
 
 .pi-item-card__config-input {
   flex: 1;
-  max-width: 260px;
+  max-width: min(260px, 100%);
   border: 1px solid var(--alpha-10);
   border-radius: var(--radius-sm);
   padding: 5px 8px;
@@ -390,7 +391,7 @@
   align-items: center;
   flex: 1;
   min-width: 0;
-  max-width: 260px;
+  max-width: min(260px, 100%);
   justify-content: flex-end;
 }
 
@@ -522,7 +523,7 @@
 }
 
 .pi-item-card__config-select {
-  max-width: 180px;
+  max-width: min(180px, 45%);
 }
 
 /* ── Reduced motion ─────────────────────────────────── */

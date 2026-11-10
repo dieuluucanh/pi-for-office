@@ -10,11 +10,16 @@
 }
 
 .pi-resume-dialog {
-  max-height: 80vh;
+  /* Filled by the overlay gutter; the card never exceeds the pane. */
+  max-height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 
 .pi-resume-body {
+  /* The dialog's single scroll region (docs/ui-layout.md). */
+  overflow-y: auto;
+  min-height: 0;
   gap: 10px;
 }
 
@@ -76,9 +81,10 @@
 }
 
 .pi-resume-list {
-  overflow-y: auto;
+  /* Scrolls with the dialog body — no nested scroller. */
+  overflow: visible;
   display: flex;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   min-height: 0;
   flex-direction: column;
   gap: 4px;
@@ -104,20 +110,204 @@
   font-family: var(--font-sans);
   font-size: var(--text-base);
   font-weight: 500;
+  /* A long workbook title must not push the row actions out of the card. */
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 
 .pi-resume-item__meta {
   font-family: var(--font-sans);
   font-size: var(--text-sm);
   color: var(--muted-foreground);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+/* ── Session history: groups, badges, row actions, footer ── */
+
+.pi-resume-search {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.pi-resume-search__input {
+  width: 100%;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--foreground);
+  background: var(--alpha-4);
+  border: 1px solid var(--alpha-10);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+}
+
+.pi-resume-search__input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.pi-resume-groups {
+  display: flex;
+  flex: 0 0 auto;
+  min-height: 0;
+  flex-direction: column;
+  gap: 10px;
+  /* The body scrolls; a second scroller here halved the usable height. */
+  overflow: visible;
+}
+
+.pi-resume-group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pi-resume-group-toggle {
+  margin-left: auto;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+  background: none;
+  border: 0;
+  padding: 2px 4px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.pi-resume-group-toggle:hover {
+  color: var(--foreground);
+}
+
+.pi-resume-item-row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.pi-resume-item-row .pi-resume-item {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pi-resume-item__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.pi-resume-badge {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--alpha-10);
+  color: var(--muted-foreground);
+  background: var(--alpha-4);
+}
+
+.pi-resume-badge--this {
+  color: var(--primary);
+  border-color: var(--alpha-20);
+  background: var(--alpha-6);
+}
+
+.pi-resume-badge--other {
+  color: var(--muted-foreground);
+}
+
+.pi-resume-badge--unlinked {
+  color: var(--muted-foreground);
+  border-style: dashed;
+  background: none;
+}
+
+.pi-resume-item-actions {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.pi-resume-item-action {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  line-height: 1;
+  color: var(--muted-foreground);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  padding: 3px 5px;
+  cursor: pointer;
+}
+
+.pi-resume-item-action:hover {
+  color: var(--foreground);
+  background: var(--alpha-6);
+  border-color: var(--alpha-10);
+}
+
+.pi-resume-item-action--danger:hover {
+  color: var(--destructive);
+  border-color: var(--alpha-20);
+}
+
+.pi-resume-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--alpha-8);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+}
+
+.pi-resume-footer__status {
+  margin-right: auto;
+}
+
+.pi-resume-footer__btn {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+  background: none;
+  border: 1px solid var(--alpha-10);
+  border-radius: var(--radius-xs);
+  padding: 3px 7px;
+  cursor: pointer;
+}
+
+.pi-resume-footer__btn:hover {
+  color: var(--foreground);
+  background: var(--alpha-6);
+}
+
+.pi-resume-diagnostics {
+  flex-shrink: 0;
+  max-height: 160px;
+  overflow: auto;
+  margin: 0;
+  padding: 8px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+  background: var(--alpha-4);
+  border: 1px solid var(--alpha-8);
+  border-radius: var(--radius-xs);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .pi-shortcuts-list {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  overflow-y: auto;
-  max-height: min(520px, 62vh);
+  /* No own height cap: the settings shell body already scrolls. */
   padding-right: 2px;
 }
 

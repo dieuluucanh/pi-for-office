@@ -47,6 +47,17 @@ export class BrowserHost implements SpreadsheetHost {
     return Promise.resolve(createUnknownWorkbookContext());
   }
 
+  /** Browser/UI-gallery runtime has no document to scope an identity to. */
+  getDocumentScopedId(): Promise<string | null> {
+    return Promise.resolve(null);
+  }
+
+  setDocumentScopedId(id: string): Promise<boolean> {
+    // Keep the parameter in the signature for interface parity; nothing to store.
+    void id;
+    return Promise.resolve(false);
+  }
+
   resolveThemeDark(): boolean | null {
     return null;
   }

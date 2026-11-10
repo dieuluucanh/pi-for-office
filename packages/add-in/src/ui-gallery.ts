@@ -18,6 +18,7 @@ import "./boot.js";
 import "./ui/register-components.js";
 
 import { escapeHtml, setSafeInnerHTML } from "./utils/html.js";
+import { createDismissControl } from "./ui/dismiss-control.js";
 
 const galleryRoot = document.getElementById("gallery-root");
 if (!galleryRoot) throw new Error("Missing #gallery-root");
@@ -379,40 +380,98 @@ for (const [label, cls] of [
 }
 buttonsSection.appendChild(btnRow);
 
-/* ── 8. Toast variants ───────────────────────────────── */
+/* ── 8. Toast variants ───────────────────────────────
+ * Rendered through a real `.pi-toast-host` (position overridden so it can sit
+ * in the gallery flow). Every toast carries the × control, and the long
+ * message + action pair is the regression case from a ~350px taskpane. */
 
 const toastSection = section("toasts", "Toast Notifications");
 
-for (const [msg, classes] of [
-  ["Closed Chat 3", "pi-toast visible pi-toast--action"],
-  ["Tab name reset", "pi-toast visible"],
-  ["Could not save", "pi-toast visible pi-toast--error"],
-] as const) {
+function galleryToast(opts: {
+  message: string;
+  variant?: "info" | "error";
+  action?: string;
+}): HTMLDivElement {
   const toast = document.createElement("div");
-  toast.className = classes;
-  toast.style.cssText =
-    "position: relative; top: 0; left: 0; transform: none; opacity: 1; pointer-events: auto; margin-bottom: 8px;";
+  toast.className = "pi-toast visible";
+  if (opts.variant === "error") toast.classList.add("pi-toast--error");
+  if (opts.action) toast.classList.add("pi-toast--action");
+  toast.setAttribute("role", opts.variant === "error" ? "alert" : "status");
+  toast.setAttribute("aria-atomic", "true");
 
   const content = document.createElement("div");
   content.className = "pi-toast__content";
 
   const message = document.createElement("span");
   message.className = "pi-toast__message";
-  message.textContent = msg;
-
+  message.textContent = opts.message;
   content.appendChild(message);
 
-  if (classes.includes("pi-toast--action")) {
+  if (opts.action) {
     const action = document.createElement("button");
     action.type = "button";
     action.className = "pi-toast__action";
-    action.textContent = "Undo";
+    action.textContent = opts.action;
     content.appendChild(action);
   }
 
-  toast.appendChild(content);
-  toastSection.appendChild(toast);
+  const close = createDismissControl({
+    onDismiss: () => {
+      toast.classList.remove("visible");
+    },
+    className: "pi-toast__close",
+  });
+
+  toast.append(content, close);
+  return toast;
 }
+
+function toastHost(): HTMLDivElement {
+  const host = document.createElement("div");
+  host.className = "pi-toast-host";
+  host.style.cssText = "position: static; margin-bottom: 10px;";
+  return host;
+}
+
+const toastStack = toastHost();
+toastStack.style.maxWidth = "360px";
+toastStack.append(
+  galleryToast({ message: "Tab name reset" }),
+  galleryToast({ message: "Closed Chat 3", action: "Undo" }),
+  galleryToast({ message: "Could not save", variant: "error" }),
+);
+toastSection.appendChild(toastStack);
+
+const toastLongLabel = document.createElement("div");
+toastLongLabel.textContent = "Long message + action (pane-width regression)";
+toastLongLabel.style.cssText =
+  "font-size: 11px; color: var(--muted-foreground); margin-bottom: 6px;";
+toastSection.appendChild(toastLongLabel);
+
+const toastLongHost = toastHost();
+toastLongHost.style.maxWidth = "330px";
+toastLongHost.style.alignItems = "stretch";
+toastLongHost.appendChild(
+  galleryToast({
+    message: "No session to restore for this workbook — open session history to pick one.",
+    action: "Open session history",
+  }),
+);
+toastSection.appendChild(toastLongHost);
+
+const toastNarrowLabel = document.createElement("div");
+toastNarrowLabel.textContent = "Narrow pane (220px) — action wraps below";
+toastNarrowLabel.style.cssText =
+  "font-size: 11px; color: var(--muted-foreground); margin: 10px 0 6px;";
+toastSection.appendChild(toastNarrowLabel);
+
+const toastNarrowHost = toastHost();
+toastNarrowHost.style.maxWidth = "220px";
+toastNarrowHost.style.alignItems = "stretch";
+toastNarrowHost.appendChild(
+  galleryToast({ message: "Session moved to this workbook", action: "Undo" }),
+);
+toastSection.appendChild(toastNarrowHost);
 
 /* ── 9. Markdown rendering (font test) ───────────────── */
 
@@ -654,3 +713,213 @@ for (const [label, state] of [
 }
 
 console.log("[ui-gallery] Rendered all sections");
+
+/* ── 11. Dialog cards (fluid sizing) ──────────────────── */
+
+const dialogSection = section("dialogs", "Dialog Cards (fluid sizing)");
+
+const DIALOG_SIZES: Array<{ label: string; className: string; note: string }> = [
+  {
+    label: "--s (confirm / text input)",
+    className: "pi-overlay-card--s",
+    note: "min(100%, 480px)",
+  },
+  {
+    label: "--m (resume history / files)",
+    className: "pi-overlay-card--m",
+    note: "min(100%, 720px)",
+  },
+  {
+    label: "--l (settings shell)",
+    className: "pi-overlay-card--l pi-set-shell",
+    note: "min(100%, 960px)",
+  },
+];
+
+function createDialogCardMock(sizeClass: string): HTMLDivElement {
+  const card = document.createElement("div");
+  card.className = `pi-welcome-card pi-overlay-card ${sizeClass}`;
+
+  const header = document.createElement("div");
+  header.className = "pi-overlay-header";
+  const titleWrap = document.createElement("div");
+  titleWrap.className = "pi-overlay-title-wrap";
+  const title = document.createElement("h2");
+  title.className = "pi-overlay-title";
+  title.textContent = "Session history";
+  const subtitle = document.createElement("p");
+  subtitle.className = "pi-overlay-subtitle";
+  subtitle.textContent = "Pick a session to resume in this workbook.";
+  titleWrap.append(title, subtitle);
+  header.append(
+    titleWrap,
+    createDismissControl({ onDismiss: () => {}, label: "Close dialog" }),
+  );
+
+  const body = document.createElement("div");
+  body.className = "pi-overlay-body";
+  for (let index = 1; index <= 5; index += 1) {
+    const row = document.createElement("div");
+    row.className = "pi-resume-item-row";
+    const main = document.createElement("button");
+    main.type = "button";
+    main.className = "pi-welcome-provider pi-resume-item";
+    const rowTitle = document.createElement("span");
+    rowTitle.className = "pi-resume-item__title";
+    rowTitle.textContent = `Quarterly forecast ${index}`;
+    const meta = document.createElement("span");
+    meta.className = "pi-resume-item__meta";
+    meta.textContent = "48 messages · 2 hours ago";
+    main.append(rowTitle, meta);
+    row.appendChild(main);
+    body.appendChild(row);
+  }
+
+  const footer = document.createElement("div");
+  footer.className = "pi-resume-footer";
+  const status = document.createElement("span");
+  status.className = "pi-resume-footer__status";
+  status.textContent = "10 sessions";
+  footer.appendChild(status);
+  for (const label of ["Storage details", "Export", "Import"]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "pi-resume-footer__btn";
+    button.textContent = label;
+    footer.appendChild(button);
+  }
+
+  card.append(header, body, footer);
+  return card;
+}
+
+for (const size of DIALOG_SIZES) {
+  const caption = document.createElement("div");
+  caption.style.cssText =
+    "font-size: 10px; color: var(--muted-foreground); margin: 0 0 4px; opacity: 0.8;";
+  caption.textContent = `${size.label} — ${size.note}`;
+  dialogSection.appendChild(caption);
+
+  // 360px frame: the real Office taskpane width.
+  const frame = document.createElement("div");
+  frame.className = "pi-welcome-overlay";
+  frame.style.cssText =
+    "position: relative; inset: auto; width: 360px; height: 460px; margin: 0 0 16px; padding: var(--pi-dialog-gutter); box-sizing: border-box;";
+  frame.appendChild(createDialogCardMock(size.className));
+  dialogSection.appendChild(frame);
+}
+
+/* ── 12. Notices (dismiss affordances) ───────────────── */
+
+const noticeSection = section("notices", "Notices (dismiss affordances)");
+
+const errorHost = document.createElement("div");
+const errorFrame = document.createElement("div");
+
+errorFrame.style.cssText = "margin-bottom: 12px;";
+errorFrame.appendChild(errorHost);
+noticeSection.appendChild(errorFrame);
+
+const errorBannerModule = await import("./ui/error-banner.js");
+errorBannerModule.mountErrorBanner(errorHost, {
+  message: "LLM error: rate limited — retrying in 8s.",
+  actions: [
+    { label: "Retry", onClick: () => {} },
+    { label: "New session", variant: "cancel", onClick: () => {} },
+  ],
+});
+
+const proxyModule = await import("./ui/proxy-banner.js");
+const proxyBanner = proxyModule.createProxyBanner();
+proxyBanner.update("not-detected");
+noticeSection.appendChild(proxyBanner.root);
+
+const popoverModule = await import("./taskpane/status-popovers.js");
+const { header: popoverHeader } = popoverModule.createStatusPopoverHeader("Thinking level");
+const popoverMock = document.createElement("div");
+popoverMock.className = "pi-status-popover";
+popoverMock.style.cssText = "position: static; margin-bottom: 12px; width: 100%;";
+const popoverDescription = document.createElement("p");
+popoverDescription.className = "pi-status-popover__description";
+popoverDescription.textContent =
+  "How deeply Pi reasons before answering — higher is slower but more thorough.";
+popoverMock.append(popoverHeader, popoverDescription);
+noticeSection.appendChild(popoverMock);
+
+const disclosureClose = document.createElement("div");
+disclosureClose.className = "pi-disclosure-bar";
+const disclosureHead = document.createElement("div");
+disclosureHead.className = "pi-disclosure-bar__head";
+const disclosureText = document.createElement("div");
+disclosureText.className = "pi-disclosure-bar__text";
+disclosureText.textContent =
+  "Pi can search the web, use extensions, and connect to external services.";
+disclosureHead.append(
+  disclosureText,
+  createDismissControl({
+    onDismiss: () => disclosureClose.remove(),
+    className: "pi-disclosure-bar__close",
+  }),
+);
+disclosureClose.appendChild(disclosureHead);
+noticeSection.appendChild(disclosureClose);
+
+/* ── 13. Layout probe (measured numbers for verification) ─ */
+
+const probeSection = section("layout-probe", "Layout Probe (current viewport)");
+const probeOutput = document.createElement("pre");
+probeOutput.style.cssText =
+  "font: 11px/1.4 var(--font-mono); white-space: pre-wrap; background: var(--alpha-4); padding: 8px; border-radius: var(--radius-sm); margin: 0;";
+probeOutput.textContent = "measuring…";
+probeSection.appendChild(probeOutput);
+
+function measureCard(sizeClass: string): { width: number; height: number } {
+  const overlay = document.createElement("div");
+  overlay.className = "pi-welcome-overlay";
+  overlay.style.cssText = "visibility: hidden; pointer-events: none; z-index: -1;";
+  const card = createDialogCardMock(sizeClass);
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+  const rect = card.getBoundingClientRect();
+  overlay.remove();
+  return { width: Math.round(rect.width), height: Math.round(rect.height) };
+}
+
+function measureToast(): { width: number; height: number; messageWidth: number } {
+  const host = document.createElement("div");
+  host.className = "pi-toast-host";
+  host.style.cssText = "position: static;";
+  const toast = galleryToast({
+    message:
+      "No session to restore for this workbook — open session history to pick one.",
+    action: "Open session history",
+  });
+  host.appendChild(toast);
+  document.body.appendChild(host);
+  const rect = toast.getBoundingClientRect();
+  const messageRect = toast.querySelector(".pi-toast__message")?.getBoundingClientRect();
+  host.remove();
+  return {
+    width: Math.round(rect.width),
+    height: Math.round(rect.height),
+    messageWidth: Math.round(messageRect?.width ?? 0),
+  };
+}
+
+// Let layout settle before measuring, then print machine-readable numbers.
+requestAnimationFrame(() => {
+  const viewport = { width: window.innerWidth, height: window.innerHeight };
+  const cards = DIALOG_SIZES.map((size) => {
+    const measured = measureCard(size.className);
+    return {
+      size: size.className,
+      ...measured,
+      widthPct: Math.round((measured.width / viewport.width) * 100),
+      heightPct: Math.round((measured.height / viewport.height) * 100),
+    };
+  });
+  const toast = measureToast();
+  const report = { viewport, cards, toast };
+  probeOutput.textContent = JSON.stringify(report, null, 2);
+  console.log("[ui-gallery] layout-probe", JSON.stringify(report));
+});

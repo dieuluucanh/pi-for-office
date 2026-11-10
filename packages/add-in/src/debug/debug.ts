@@ -15,7 +15,9 @@ type DebugState = {
 
 function safeGetItem(key: string): string | null {
   try {
-    return window.localStorage.getItem(key);
+    const win = globalThis.window;
+    if (!win) return null;
+    return win.localStorage.getItem(key);
   } catch {
     return null;
   }
@@ -23,7 +25,9 @@ function safeGetItem(key: string): string | null {
 
 function safeSetItem(key: string, value: string): void {
   try {
-    window.localStorage.setItem(key, value);
+    const win = globalThis.window;
+    if (!win) return;
+    win.localStorage.setItem(key, value);
   } catch {
     // ignore (private mode / disabled storage)
   }

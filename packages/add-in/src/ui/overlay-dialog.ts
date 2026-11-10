@@ -10,6 +10,7 @@
 
 import { requestChatInputFocus } from "./input-focus.js";
 import { installOverlayEscapeClose } from "./overlay-escape.js";
+import { createDismissControl } from "./dismiss-control.js";
 
 const overlayClosers = new WeakMap<HTMLElement, () => void>();
 
@@ -69,20 +70,12 @@ export function createOverlayCloseButton(opts: {
   onClose: () => void;
   label?: string;
 }): HTMLButtonElement {
-  const button = document.createElement("button");
-  const label = opts.label ?? "Close dialog";
-
-  button.type = "button";
-  button.className = "pi-overlay-close";
-  button.textContent = "×";
-  button.setAttribute("aria-label", label);
-  button.title = label;
-
-  button.addEventListener("click", () => {
-    opts.onClose();
+  // Delegated so overlay headers, settings shell, toasts and notices all use
+  // one × implementation (see ui/dismiss-control.ts).
+  return createDismissControl({
+    onDismiss: opts.onClose,
+    ...(opts.label !== undefined ? { label: opts.label } : {}),
   });
-
-  return button;
 }
 
 export interface OverlayHeaderOptions {

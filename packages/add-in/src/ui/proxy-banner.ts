@@ -9,6 +9,7 @@
 
 import { resolveProxySetupCommand } from "../config/local-service-defaults.js";
 import { t } from "../language/index.js";
+import { createDismissControl } from "./dismiss-control.js";
 import { AlertTriangle, Check, Copy, lucide } from "./lucide-icons.js";
 
 const PROXY_COMMAND = resolveProxySetupCommand();
@@ -60,7 +61,22 @@ export function createProxyBanner(): ProxyBannerHandle {
   action.className = "pi-proxy-banner__action";
   action.textContent = t("proxy-banner.action");
 
-  topRow.append(text, action);
+  // Dismissal is per pane session: hiding the hint must not silently disable
+  // the feature, and a later outage (detected → not-detected) re-notifies.
+  let dismissed = false;
+  const closeButton = createDismissControl({
+    onDismiss: () => {
+      dismissed = true;
+      root.hidden = true;
+      details.hidden = true;
+      root.classList.remove("is-open");
+      action.textContent = t("proxy-banner.action");
+    },
+    label: t("proxy-banner.dismiss"),
+    className: "pi-proxy-banner__close",
+  });
+
+  topRow.append(text, action, closeButton);
 
   const details = document.createElement("div");
   details.className = "pi-proxy-banner__details";
@@ -148,7 +164,12 @@ export function createProxyBanner(): ProxyBannerHandle {
   root.append(topRow, details);
 
   const update = (state: ProxyBannerState): void => {
-    const shouldShow = state === "not-detected";
+    if (state === "detected") {
+      // Re-arm so the next outage is announced again.
+      dismissed = false;
+    }
+
+    const shouldShow = state === "not-detected" && !dismissed;
     root.hidden = !shouldShow;
 
     if (!shouldShow) {

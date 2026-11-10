@@ -52,7 +52,7 @@ pi-input {
   width: 100%;
   padding: 11px 52px 11px 40px;
   min-height: 40px;
-  max-height: 40vh;
+  max-height: min(40vh, 320px);
   border: none;
   background: transparent;
   color: var(--foreground);
@@ -146,7 +146,7 @@ pi-input {
     min-height: 34px;
     padding: 8px 46px 8px 36px;
     line-height: 1.35;
-    max-height: 28vh;
+    max-height: min(28vh, 220px);
   }
 
   .pi-input-btn {

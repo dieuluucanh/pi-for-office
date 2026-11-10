@@ -29,6 +29,16 @@ type InitializedAppStorage = {
  */
 export const APP_DATABASE_NAME = "pi-for-office";
 
+/**
+ * IndexedDB schema version.
+ *
+ * v3 is the index-repair bump: opening an older database now adds any index the
+ * current store config declares but the existing object store lacks (the
+ * `lastModified` index was missing on databases created before it existed,
+ * which made session listings throw).
+ */
+export const APP_DATABASE_VERSION = 3;
+
 /** Pre-rebrand database name — copied from on first open, then left alone. */
 export const LEGACY_DATABASE_NAME = "pi-for-excel";
 
@@ -48,7 +58,7 @@ export function initAppStorage(
   const backend = new IndexedDBStorageBackend(
     {
       dbName,
-      version: 2,
+      version: APP_DATABASE_VERSION,
       stores: [
         settings.getConfig(),
         providerKeys.getConfig(),

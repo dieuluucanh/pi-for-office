@@ -213,6 +213,11 @@ Directions agreed for design review (mockups via ui-gallery before build-out):
    tap to include in the prompt.
 5. **Inline revert affordance** — surface the recovery/audit story on change
    summaries in the transcript, not only behind `/revert`.
+
+Layout and notification mechanics are documented separately in
+`docs/ui-layout.md` (dialog size tokens, the single-scroll-region rule, the
+cascade-order gotcha, the toast stacking model and the dismiss matrix). Read it
+before touching overlay or toast CSS.
 6. **Visual identity pass** — own type scale, refined Excel-adjacent palette,
    consistent radii/spacing from `theme/tokens.css`, density tuned for 350 px.
 7. **Discoverability** — queued-message chip (Alt+Enter is invisible today),

@@ -1367,6 +1367,20 @@ export class PiSidebar extends LitElement {
             `,
             )}
           </div>
+          ${
+            this.onOpenResumePicker
+              ? html`
+            <button
+              type="button"
+              class="pi-empty__resume"
+              @click=${() => this.onOpenResumePicker?.()}
+            >
+              <span class="pi-empty__resume-label">${t("sidebar.empty.resume")}</span>
+              <span class="pi-empty__resume-hint">${t("sidebar.empty.resumeHint")}</span>
+            </button>
+          `
+              : ""
+          }
         </div>
       </div>
     `;

@@ -44,6 +44,49 @@
   max-width: 260px;
 }
 
+/* Persistent session-history entry point. Replaces the old load-time
+   "nothing to restore" toast (docs/session-persistence.md). */
+.pi-empty__resume {
+  margin-top: 14px;
+  width: 100%;
+  max-width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 12px;
+  font-family: var(--font-sans);
+  color: var(--foreground);
+  text-align: left;
+  background: transparent;
+  border: 1px dashed var(--alpha-12);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast),
+    border-color var(--duration-fast);
+}
+
+.pi-empty__resume:hover {
+  background: var(--white-alpha-45);
+  border-color: var(--alpha-20);
+}
+
+.pi-empty__resume:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--brand-alpha-25);
+}
+
+.pi-empty__resume-label {
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.pi-empty__resume-hint {
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+  line-height: 1.35;
+}
+
 .pi-empty__hint {
   display: flex;
   flex-direction: column;
@@ -166,7 +209,10 @@
 }
 
 .pi-error {
-  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
   font-size: var(--text-sm);
   font-family: var(--font-mono);
   background: oklch(0.55 0.22 25 / 0.08);
@@ -174,10 +220,42 @@
   border-bottom: 1px solid oklch(0.55 0.22 25 / 0.2);
 }
 
+/* Message + close control; the close sits at the top even for multi-line
+   errors so it never drifts out of reach. */
+.pi-error__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.pi-error__message {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.pi-error__close {
+  inline-size: 22px;
+  block-size: 22px;
+  flex-shrink: 0;
+  align-self: flex-start;
+  color: var(--destructive);
+  background: transparent;
+  border-color: oklch(0.55 0.22 25 / 0.3);
+}
+
+.pi-error__close:hover {
+  color: var(--destructive);
+  background: oklch(0.55 0.22 25 / 0.12);
+  border-color: oklch(0.55 0.22 25 / 0.5);
+}
+
 .pi-error__actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  margin-top: 10px;
 }
 
 .pi-error__action {

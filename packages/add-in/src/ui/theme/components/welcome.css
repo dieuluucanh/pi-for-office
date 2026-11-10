@@ -5,10 +5,13 @@
 .pi-welcome-overlay {
   position: fixed;
   inset: 0;
-  z-index: 200;
+  z-index: var(--pi-z-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Gutter instead of 8/10vw: the card fills the pane minus this inset. */
+  box-sizing: border-box;
+  padding: var(--pi-dialog-gutter);
   background: var(--alpha-25);
   backdrop-filter: var(--glass-blur-heavy);
   -webkit-backdrop-filter: var(--glass-blur-heavy);
@@ -18,9 +21,13 @@
   background: var(--glass-bg-solid);
   border-radius: var(--radius-xl);
   border: var(--glass-border);
-  padding: 28px 24px;
-  width: min(340px, 90vw);
-  max-height: min(680px, 86vh);
+  padding: 20px 18px;
+  /* Fluid baseline for cards that do not carry a --pi-dialog-w-* size class
+     (welcome/login). Composite dialogs override the width via
+     .pi-overlay-card--s/m/l. */
+  width: min(100%, var(--pi-dialog-w-prompt));
+  max-height: 100%;
+  min-height: 0;
   box-shadow: var(--glass-shadow-lg);
   position: relative;
   display: flex;
@@ -28,19 +35,11 @@
   overflow: hidden;
 }
 
-@media (max-height: 520px) {
-  .pi-welcome-overlay {
-    align-items: stretch;
-    box-sizing: border-box;
-    padding: 8px;
-  }
-
-  .pi-welcome-card {
-    width: min(340px, 100%);
-    max-height: 100%;
-    padding: 12px 14px;
-    border-radius: var(--radius-lg);
-    overflow-y: auto;
-  }
-}
-
+/*
+ * The old `@media (max-height: 520px)` block lived here and set
+ * `max-height: 100%` + full-width cards for short panes. It never applied:
+ * theme.css imports components.css BEFORE overlays.css, so the
+ * equal-specificity `max-height: min(80vh, 720px)` in overlays/primitives.css
+ * always won. The base rule above now expresses that intent unconditionally —
+ * do not reintroduce a media-query override of a later plain rule.
+ */

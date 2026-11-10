@@ -14,13 +14,14 @@
 
 .pi-proxy-banner__row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  align-items: flex-start;
+  gap: 8px;
 }
 
 .pi-proxy-banner__text {
   margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
   color: var(--foreground);
   font-size: var(--text-sm);
   line-height: 1.35;
@@ -35,6 +36,7 @@
 }
 
 .pi-proxy-banner__action {
+  flex-shrink: 0;
   border: none;
   background: none;
   color: var(--primary);
@@ -48,6 +50,23 @@
 
 .pi-proxy-banner__action:hover {
   text-decoration: underline;
+}
+
+.pi-proxy-banner__close {
+  inline-size: 20px;
+  block-size: 20px;
+  flex-shrink: 0;
+  align-self: flex-start;
+  color: var(--muted-foreground);
+  background: transparent;
+  border-color: var(--amber-alpha-16);
+  font-size: var(--text-md);
+}
+
+.pi-proxy-banner__close:hover {
+  color: var(--foreground);
+  background: var(--white-alpha-70);
+  border-color: var(--amber-alpha-16);
 }
 
 .pi-proxy-banner__details {

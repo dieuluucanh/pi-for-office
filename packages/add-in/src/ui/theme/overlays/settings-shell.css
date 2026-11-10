@@ -4,7 +4,9 @@
    control. See src/ui/settings-shell.ts and src/ui/settings-rows.ts. */
 
 .pi-set-shell {
-  max-height: 82vh;
+  /* Fill the pane: the overlay already supplies --pi-dialog-gutter. */
+  max-height: 100%;
+  min-height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -16,6 +18,7 @@
   align-items: center;
   gap: 8px;
   min-height: 32px;
+  flex-shrink: 0;
 }
 
 .pi-set-shell__back {
@@ -75,7 +78,8 @@
 
 .pi-set-shell__body {
   flex: 1 1 auto;
-  min-height: 120px;
+  /* The single scroll region of the shell (docs/ui-layout.md). */
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   display: flex;

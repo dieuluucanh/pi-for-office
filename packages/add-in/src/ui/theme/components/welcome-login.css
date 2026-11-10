@@ -266,8 +266,8 @@
 /* Prompt overlay used during OAuth code/device flows */
 .pi-prompt-card {
   text-align: left;
-  width: min(420px, 92vw);
-  max-width: min(420px, 92vw);
+  width: min(100%, var(--pi-dialog-w-prompt));
+  max-width: min(100%, var(--pi-dialog-w-prompt));
 }
 
 .pi-prompt-title {

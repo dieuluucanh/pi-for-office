@@ -164,6 +164,26 @@
  --glass-shadow-lg: 0 12px 40px var(--alpha-10), 0 2px 6px var(--alpha-6);
  /* Border: subtle, semi-transparent */
  --glass-border: 1px solid var(--white-alpha-50);
+
+ /* ── Overlay / toast geometry ───────────────────────
+  * Dialogs are fluid: cards fill the pane minus this gutter and are
+  * capped (not fixed) by the per-size widths below. See docs/ui-layout.md.
+  * Plain px (no dvh/svh) so older WebView2/WPS CEF builds keep working. */
+ --pi-dialog-gutter: 8px;
+ --pi-dialog-gap: 10px;
+ --pi-dialog-w-s: 480px;
+ --pi-dialog-w-m: 720px;
+ --pi-dialog-w-l: 960px;
+ --pi-dialog-w-prompt: 420px;
+
+ /* Toast host anchor + max readable width. */
+ --pi-toast-offset: 56px;
+ --pi-toast-max: 480px;
+
+ /* Stacking scale — toasts must sit above overlays (200) and popovers. */
+ --pi-z-popover: 220;
+ --pi-z-overlay: 200;
+ --pi-z-toast: 300;
 }
 
 .dark {

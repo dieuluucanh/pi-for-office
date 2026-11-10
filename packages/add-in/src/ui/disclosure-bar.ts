@@ -6,6 +6,7 @@
  */
 
 import { t } from "../language/index.js";
+import { createDismissControl } from "./dismiss-control.js";
 import { createToggleRow } from "./extensions-hub-components.js";
 
 const ACKNOWLEDGED_KEY = "pi.onboarding.disclosure.acknowledged";
@@ -50,7 +51,12 @@ export function createDisclosureBar(options: DisclosureBarOptions): HTMLElement 
   const text = document.createElement("div");
   text.className = "pi-disclosure-bar__text";
   text.textContent = t("disclosure-bar.text");
-  bar.appendChild(text);
+
+  // One dismiss language: × behaves exactly like "Got it" (persisted ack).
+  const head = document.createElement("div");
+  head.className = "pi-disclosure-bar__head";
+  bar.appendChild(head);
+  head.appendChild(text);
 
   // --- Expandable picker (hidden by default) ---
   const picker = document.createElement("div");
@@ -81,6 +87,14 @@ export function createDisclosureBar(options: DisclosureBarOptions): HTMLElement 
     setAcknowledged();
     bar.remove();
   };
+
+  head.appendChild(
+    createDismissControl({
+      onDismiss: dismiss,
+      label: t("disclosure-bar.dismiss"),
+      className: "pi-disclosure-bar__close",
+    }),
+  );
 
   const gotItBtn = document.createElement("button");
   gotItBtn.className = "pi-overlay-btn pi-overlay-btn--primary pi-overlay-btn--compact";

@@ -11,11 +11,27 @@
   flex-shrink: 0;
 }
 
+.pi-disclosure-bar__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
 .pi-disclosure-bar__text {
   font-size: var(--text-sm);
   color: var(--foreground);
   line-height: 1.45;
-  margin-bottom: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pi-disclosure-bar__close {
+  inline-size: 20px;
+  block-size: 20px;
+  flex-shrink: 0;
+  align-self: flex-start;
+  font-size: var(--text-md);
 }
 
 .pi-disclosure-bar__actions {
@@ -23,6 +39,8 @@
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 6px 8px;
+  /* Keep the actions clear of the close control in the head row. */
+  padding-right: 0;
 }
 
 .pi-disclosure-bar__link {

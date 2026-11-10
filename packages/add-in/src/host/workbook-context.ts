@@ -42,6 +42,37 @@ function stripQueryAndHash(raw: string): string {
   return raw.split(/[?#]/, 1)[0]?.trim() ?? "";
 }
 
+/** `C:\...`, `c:/...` — a Windows drive-qualified path (not a URL). */
+const WINDOWS_DRIVE_PATH = /^[a-zA-Z]:[\\/]/;
+/** `\\server\share\...` — a UNC path (not a URL). */
+const UNC_PATH = /^\\\\[^\\]/;
+
+/** Decode percent-escapes once; unparseable/malformed input falls back to raw. */
+function decodeOnce(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+/** Collapse duplicate separators and drop a trailing slash (keeps `/`). */
+function normalizePathSeparators(pathname: string): string {
+  const collapsed = pathname.replace(/\\/g, "/").replace(/\/{2,}/g, "/");
+  if (collapsed.length > 1 && collapsed.endsWith("/")) {
+    return collapsed.slice(0, -1);
+  }
+  return collapsed;
+}
+
+/** Lowercase only the drive letter — the rest of a path may be case-sensitive. */
+function lowercaseDriveLetter(pathname: string): string {
+  return pathname.replace(
+    /^\/([a-zA-Z]):/u,
+    (_match, drive: string) => `/${drive.toLowerCase()}:`,
+  );
+}
+
 function getWorkbookNameFromUrl(url: string): string | null {
   const readName = (raw: string): string | null => {
     const cleaned = stripQueryAndHash(raw);
@@ -76,14 +107,55 @@ function normalizeWorkbookIdentitySource(url: string): string {
   const trimmed = url.trim();
   if (trimmed.length === 0) return trimmed;
 
+  const stripped = stripQueryAndHash(trimmed);
+  if (stripped.length === 0) return stripped;
+
+  // Windows drive path (Excel desktop often reports a plain path, sometimes a
+  // `file:///` URL for the exact same file — both must hash identically).
+  if (WINDOWS_DRIVE_PATH.test(stripped)) {
+    const decoded = decodeOnce(stripped).replace(/\\/g, "/");
+    const drive = decoded.slice(0, 2).toLowerCase();
+    const rest = normalizePathSeparators(decoded.slice(2));
+    return `file:///${drive}${rest}`;
+  }
+
+  // UNC path: `\\server\share\file.xlsx` or `//server/share/file.xlsx`.
+  if (UNC_PATH.test(stripped) || (stripped.startsWith("//") && !stripped.startsWith("///"))) {
+    const decoded = decodeOnce(stripped).replace(/\\/g, "/");
+    const parts = decoded.replace(/^\/+/, "").split("/");
+    const host = (parts.shift() ?? "").toLowerCase();
+    const rest = normalizePathSeparators(parts.join("/"));
+    return `file://${host}/${rest}`;
+  }
+
+  // Bare POSIX absolute path (WPS/macOS edge cases).
+  if (stripped.startsWith("/")) {
+    return `file://${normalizePathSeparators(decodeOnce(stripped))}`;
+  }
+
   try {
-    const parsed = new URL(trimmed);
-    parsed.search = "";
-    parsed.hash = "";
-    parsed.pathname = parsed.pathname.replace(/\\/g, "/");
-    return parsed.toString();
+    const parsed = new URL(stripped);
+    const protocol = parsed.protocol.toLowerCase();
+
+    if (protocol === "file:") {
+      const host = parsed.host.toLowerCase();
+      const decoded = decodeOnce(parsed.pathname);
+      const path = lowercaseDriveLetter(normalizePathSeparators(decoded));
+      return host ? `file://${host}${path}` : `file://${path}`;
+    }
+
+    // WHATWG already drops default ports from `host`; keeping hostname keeps it
+    // explicit and lowercases only the authority (the path stays as-is).
+    const authority = parsed.host === "" ? "" : parsed.host.toLowerCase();
+    const path = normalizePathSeparators(decodeOnce(parsed.pathname));
+
+    if (protocol === "http:" || protocol === "https:") {
+      return `${protocol}//${authority}${path}`;
+    }
+
+    return authority ? `${protocol}//${authority}${path}` : `${protocol}${path}`;
   } catch {
-    return stripQueryAndHash(trimmed).replace(/\\/g, "/");
+    return stripped.replace(/\\/g, "/");
   }
 }
 

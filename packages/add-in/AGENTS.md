@@ -131,7 +131,13 @@ without needing Excel. It renders mock components with the real CSS theme.
 
 Available gallery sections (use as argument):
 `badges`, `file-items`, `tool-cards`, `tool-groups`, `diff-table`,
-`text-preview`, `buttons`, `toasts`, `markdown`
+`text-preview`, `buttons`, `toasts`, `dialogs`, `notices`, `layout-probe`,
+`markdown`
+
+`layout-probe` prints measured card/toast boxes (width, height, % of viewport)
+as one JSON line on the console (`[ui-gallery] layout-probe {...}`). Use it to
+check that dialogs fill the pane and that a long toast stays wide instead of
+collapsing to one glyph per line — see `docs/ui-layout.md`.
 
 Or use agent-browser directly for interactive inspection:
 

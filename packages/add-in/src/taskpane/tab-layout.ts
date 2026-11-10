@@ -58,6 +58,16 @@ export function normalizeWorkbookTabLayout(layout: WorkbookTabLayout): WorkbookT
   };
 }
 
+/**
+ * Cheap structural signature of a tab layout (session ids + active tab).
+ * Used to skip storage writes for agent events that cannot have changed the
+ * layout — notably every streaming delta.
+ */
+export function tabLayoutSignature(layout: WorkbookTabLayout): string {
+  const normalized = normalizeWorkbookTabLayout(layout);
+  return `${normalized.sessionIds.join("|")}>${normalized.activeSessionId ?? ""}`;
+}
+
 export function parseWorkbookTabLayout(value: DynamicValue): WorkbookTabLayout | null {
   if (!isTaskpaneTabLayoutPayloadShape(value)) return null;
 

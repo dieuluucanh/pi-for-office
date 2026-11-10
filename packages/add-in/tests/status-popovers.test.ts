@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { resolveStatusPopoverLayout } from "../src/taskpane/status-popovers.ts";
+import { installFakeDom } from "./fake-dom.test.ts";
+import {
+  createStatusPopoverHeader,
+  resolveStatusPopoverLayout,
+} from "../src/taskpane/status-popovers.ts";
 
 void test("thinking popover stays inside a 290x400 short taskpane", () => {
   const layout = resolveStatusPopoverLayout({
@@ -48,4 +52,29 @@ void test("status popover CSS constrains the shell and scrolls its choices", () 
     css,
     /\.pi-status-popover__list,[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto;/su,
   );
+  assert.match(
+    css,
+    /\.pi-status-popover__header\s*\{[^}]*display:\s*flex;[^}]*flex-shrink:\s*0;/su,
+  );
+  assert.match(css, /\.pi-status-popover__close\s*\{[^}]*flex-shrink:\s*0;/su);
+});
+
+void test("status popover header exposes an explicit close control", () => {
+  const dom = installFakeDom();
+  try {
+    const { header, title } = createStatusPopoverHeader("Thinking level");
+
+    assert.equal(title.textContent, "Thinking level");
+    assert.ok(header.className.includes("pi-status-popover__header"));
+
+    const close = header.querySelector<HTMLElement>(".pi-status-popover__close");
+    assert.ok(close, "close control present");
+    assert.equal(close.textContent, "×");
+    assert.ok((close.getAttribute("aria-label") ?? "").length > 0);
+
+    // Closing with no mounted popover is a no-op, not a throw.
+    close.dispatchEvent(new Event("click"));
+  } finally {
+    dom.restore();
+  }
 });

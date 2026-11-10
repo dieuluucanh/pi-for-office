@@ -1,23 +1,29 @@
-/* Shared overlay primitives */
+/* Shared overlay primitives
+ *
+ * Sizing rules (docs/ui-layout.md): cards are FLUID with a cap —
+ * `min(100%, var(--pi-dialog-w-*))` inside a padded overlay, and
+ * `max-height: 100%`. Never a fixed px width, never a `vh` ceiling: a fixed
+ * cap wasted most of a wide pane and a `vh` ceiling starved short panes. */
 
 .pi-overlay-card {
   text-align: left;
-  width: min(520px, 92vw);
-  max-height: min(80vh, 720px);
-  gap: 10px;
+  width: min(100%, var(--pi-dialog-w-m));
+  max-height: 100%;
+  min-height: 0;
+  gap: var(--pi-dialog-gap);
   overscroll-behavior: contain;
 }
 
 .pi-overlay-card--s {
-  width: min(380px, 92vw);
+  width: min(100%, var(--pi-dialog-w-s));
 }
 
 .pi-overlay-card--m {
-  width: min(520px, 92vw);
+  width: min(100%, var(--pi-dialog-w-m));
 }
 
 .pi-overlay-card--l {
-  width: min(720px, 92vw);
+  width: min(100%, var(--pi-dialog-w-l));
 }
 
 .pi-overlay-title {
@@ -66,8 +72,8 @@
 }
 
 .pi-overlay-textarea {
-  min-height: 220px;
-  max-height: 42vh;
+  min-height: 120px;
+  max-height: min(42vh, 360px);
   resize: vertical;
 }
 

@@ -19,6 +19,7 @@ This folder contains **current** docs that should match shipped behavior.
 - [Integrations + External Tools](./integrations-external-tools.md)
 - [Agent Skills interop (skills vs integrations)](./agent-skills-interop.md)
 - [Compaction (`/compact`)](./compaction.md)
+- [Session persistence and workbook identity](./session-persistence.md)
 - [Manual full-workbook backups (`/backup`)](./manual-full-backups.md)
 - [WPS Spreadsheets support plan](./wps-support.md)
 

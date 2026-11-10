@@ -21,6 +21,7 @@
 import { requestChatInputFocus } from "./input-focus.js";
 import { installOverlayEscapeClose } from "./overlay-escape.js";
 import { registerOverlayCloser, unregisterOverlayCloser } from "./overlay-dialog.js";
+import { createDismissControl } from "./dismiss-control.js";
 
 export interface SettingsPageContext {
   /** Scrollable content region for the page. */
@@ -321,14 +322,11 @@ export function createSettingsShell(options: SettingsShellOptions): SettingsShel
 
     titleWrap.append(titleEl, subtitleEl);
 
-    const closeButton = document.createElement("button");
-    closeButton.type = "button";
-    closeButton.className = "pi-overlay-close";
-    closeButton.textContent = "×";
-    closeButton.setAttribute("aria-label", options.closeLabel());
-    closeButton.title = options.closeLabel();
-    closeButton.addEventListener("click", () => {
-      void requestClose();
+    const closeButton = createDismissControl({
+      onDismiss: () => {
+        void requestClose();
+      },
+      label: options.closeLabel(),
     });
 
     header.append(backButton, titleWrap, closeButton);
