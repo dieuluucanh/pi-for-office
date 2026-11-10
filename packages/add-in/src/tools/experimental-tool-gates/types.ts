@@ -76,6 +76,11 @@ export interface OfficeJsExecuteApprovalRequest {
   * mode and the approval message includes an explicit warning.
   */
  riskIdentifiers?: string[];
+ /**
+  * Tool that submitted the code (`execute_office_js` or `execute_wps_js`).
+  * Used to persist an "Always allow" grant for this tool.
+  */
+ toolName?: string;
 }
 
 export interface ExperimentalToolGateDependencies
@@ -91,4 +96,9 @@ export interface ExperimentalToolGateDependencies
  ) => Promise<boolean>;
  /** When provided, Auto mode skips the Office.js approval prompt. */
  getExecutionMode?: () => Promise<"yolo" | "safe">;
+ /**
+  * When provided, returns true for tools whose approval prompt is
+  * permanently suppressed (the user chose "Always allow").
+  */
+ isToolAlwaysAllowed?: (toolName: string) => boolean;
 }

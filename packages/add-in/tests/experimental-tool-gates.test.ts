@@ -392,6 +392,100 @@ void test("execute_office_js denial of risky code cancels execution in Auto mode
   assert.equal(executeCount, 0);
 });
 
+void test("execute_office_js skips approval when the tool is always allowed (Confirm mode)", async () => {
+  let executeCount = 0;
+  let approvalCount = 0;
+
+  const [officeTool] = await applyExperimentalToolGates([
+    createTestTool("execute_office_js", () => {
+      executeCount += 1;
+    }),
+  ], {
+    getExecutionMode: () => Promise.resolve("safe" as const),
+    isToolAlwaysAllowed: (toolName) => toolName === "execute_office_js",
+    requestOfficeJsExecuteApproval: () => {
+      approvalCount += 1;
+      return Promise.resolve(true);
+    },
+  });
+
+  await officeTool.execute("call-office", {
+    explanation: "Add totals column",
+    code: "const sheet = context.workbook.worksheets.getActiveWorksheet();\nreturn { ok: true };",
+  });
+
+  assert.equal(executeCount, 1);
+  assert.equal(approvalCount, 0);
+});
+
+void test("execute_office_js skips approval when always allowed even for risky code", async () => {
+  let executeCount = 0;
+  let approvalCount = 0;
+
+  const [officeTool] = await applyExperimentalToolGates([
+    createTestTool("execute_office_js", () => {
+      executeCount += 1;
+    }),
+  ], {
+    getExecutionMode: () => Promise.resolve("yolo" as const),
+    isToolAlwaysAllowed: () => true,
+    requestOfficeJsExecuteApproval: () => {
+      approvalCount += 1;
+      return Promise.resolve(true);
+    },
+  });
+
+  await officeTool.execute("call-office", {
+    explanation: "Read settings",
+    code: "return localStorage.getItem(\"connections.store.v1\");",
+  });
+
+  assert.equal(executeCount, 1);
+  assert.equal(approvalCount, 0);
+});
+
+void test("execute_office_js approval request carries the tool name", async () => {
+  let toolNameSeen = "";
+
+  const [officeTool] = await applyExperimentalToolGates([
+    createTestTool("execute_office_js", () => {}),
+  ], {
+    getExecutionMode: () => Promise.resolve("safe" as const),
+    requestOfficeJsExecuteApproval: (request) => {
+      toolNameSeen = request.toolName ?? "";
+      return Promise.resolve(true);
+    },
+  });
+
+  await officeTool.execute("call-office", {
+    explanation: "Inspect workbook",
+    code: "return { ok: true };",
+  });
+
+  assert.equal(toolNameSeen, "execute_office_js");
+});
+
+void test("execute_wps_js approval request carries the tool name", async () => {
+  let toolNameSeen = "";
+
+  const [wpsTool] = await applyExperimentalToolGates([
+    createTestTool("execute_wps_js", () => {}),
+  ], {
+    getExecutionMode: () => Promise.resolve("safe" as const),
+    requestOfficeJsExecuteApproval: (request) => {
+      toolNameSeen = request.toolName ?? "";
+      return Promise.resolve(true);
+    },
+  });
+
+  await wpsTool.execute("call-wps", {
+    explanation: "Inspect WPS workbook",
+    code: "return Application.ActiveWorkbook.Name;",
+  });
+
+  assert.equal(toolNameSeen, "execute_wps_js");
+});
+
 void test("buildOfficeJsExecuteApprovalMessage omits risk warning for clean requests", () => {
   const message = buildOfficeJsExecuteApprovalMessage({
     explanation: "Add totals column",

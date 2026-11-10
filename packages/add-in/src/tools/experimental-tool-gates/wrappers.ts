@@ -242,12 +242,14 @@ function defaultRequestOfficeJsExecuteApproval(
 function getDirectJsExecuteApprovalRequest(
   params: DynamicValue,
   apiName: "Office.js" | "WPS JSAPI",
+  toolName: string,
 ): OfficeJsExecuteApprovalRequest {
   if (!isExperimentalGateParamsShape(params)) {
     return {
       explanation: "",
       code: "",
       apiName,
+      toolName,
     };
   }
 
@@ -263,6 +265,7 @@ function getDirectJsExecuteApprovalRequest(
     explanation,
     code,
     apiName,
+    toolName,
   };
 }
 
@@ -299,13 +302,20 @@ function wrapDirectWorkbookJsToolWithHardGate(
   const requestApproval =
     dependencies.requestOfficeJsExecuteApproval
     ?? defaultRequestOfficeJsExecuteApproval;
+  const isToolAlwaysAllowed = dependencies.isToolAlwaysAllowed ?? (() => false);
 
   return {
     ...tool,
     execute: async (toolCallId, params, signal, onUpdate) => {
       throwIfAborted(signal);
 
-      const request = getDirectJsExecuteApprovalRequest(params, apiName);
+      // Persistent per-tool grant: skip the risk lint and the approval
+      // prompt entirely (pure and ambient-authority-flagged code alike).
+      if (isToolAlwaysAllowed(tool.name)) {
+        return tool.execute(toolCallId, params, signal, onUpdate);
+      }
+
+      const request = getDirectJsExecuteApprovalRequest(params, apiName, tool.name);
       const risk = assessOfficeJsCodeRisk(request.code);
 
       // Auto mode trusts pure host JSAPI code — skip the approval prompt.
@@ -467,7 +477,10 @@ function wrapPythonBridgeOnlyToolWithApprovalGate(
  * - `execute_office_js` and `execute_wps_js` prompt for confirmation on every
  *   call in Confirm mode. In Auto mode, pure host JSAPI code runs without a
  *   prompt, but code referencing ambient browser authority (network, storage,
- *   globals, dynamic evaluation) still requires per-call approval.
+ *   globals, dynamic evaluation) still requires per-call approval. When
+ *   `isToolAlwaysAllowed` reports the tool as allowlisted (the user chose
+ *   "Always allow"), both the risk lint and the prompt are skipped in every
+ *   mode.
  * - `files` has no gate — read, write, and delete are always available.
  */
 export function applyExperimentalToolGates(

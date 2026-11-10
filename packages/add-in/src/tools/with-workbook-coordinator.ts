@@ -45,6 +45,11 @@ export interface WorkbookExecutionPolicy {
    * Return `true` to proceed, `false` to block.
    */
   requestMutationApproval?: (request: MutationApprovalRequest) => Promise<boolean>;
+  /**
+   * When provided, returns true for tools whose mutation approval prompt is
+   * permanently suppressed (the user chose "Always allow").
+   */
+  isToolAlwaysAllowed?: (toolName: string) => boolean;
 }
 
 function makeContext(args: {
@@ -120,6 +125,12 @@ async function requireMutationApprovalIfNeeded(args: {
   toolName: string;
   params: DynamicValue;
 }): Promise<void> {
+  // Persistent per-tool grant: skip the mutation prompt entirely.
+  const isToolAlwaysAllowed = args.policy.isToolAlwaysAllowed ?? (() => false);
+  if (isToolAlwaysAllowed(args.toolName)) {
+    return;
+  }
+
   const getExecutionMode = args.policy.getExecutionMode ?? defaultGetExecutionMode;
   const executionMode = await getExecutionMode();
 

@@ -175,6 +175,21 @@ function buildBehaviorGroup(ctx: SettingsPageContext): HTMLElement {
     });
   }
 
+  // ── Always-allowed tools ──
+  const alwaysAllowedRow = createNavRow({
+    icon: lucide(ShieldCheck),
+    label: t("settings.row.alwaysAllowedTools"),
+    sublabel: t("settings.row.alwaysAllowedTools.sub"),
+    onActivate: () => ctx.navigate("approvals"),
+  });
+
+  const alwaysAllowedTools = deps.getAlwaysAllowedTools?.() ?? [];
+  alwaysAllowedRow.setValue(
+    alwaysAllowedTools.length === 0
+      ? t("settings.value.none")
+      : t("settings.value.tool_count", { count: alwaysAllowedTools.length }),
+  );
+
   // ── Fork model switch ──
   const forkToggle = createSettingToggleRow({
     label: t("settings.section.advanced.fork_label"),
@@ -318,6 +333,7 @@ function buildBehaviorGroup(ctx: SettingsPageContext): HTMLElement {
 
   group.list.append(
     autoApply.root,
+    alwaysAllowedRow.root,
     forkToggle.root,
     compactionToggle.root,
     retryToggle.root,

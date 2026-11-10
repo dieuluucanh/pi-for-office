@@ -290,6 +290,66 @@ void test("safe execution mode skips approval prompts for read tools", async () 
   assert.deepEqual(invalidatedWorkbookIds, []);
 });
 
+void test("safe execution mode skips mutation approval for always-allowed tools", async () => {
+  const coordinator = new FakeCoordinator();
+  const mutationEvents: WorkbookMutationEvent[] = [];
+  const invalidatedWorkbookIds: Array<string | null> = [];
+  let approvalCalls = 0;
+
+  const wrapped = wrapSingleTool({
+    tool: makeTool("write_cells"),
+    coordinator,
+    contextProvider: createContextProvider("url_sha256:safe-allow"),
+    mutationEvents,
+    invalidatedWorkbookIds,
+    executionPolicy: {
+      getExecutionMode: () => Promise.resolve("safe"),
+      isToolAlwaysAllowed: (toolName) => toolName === "write_cells",
+      requestMutationApproval: () => {
+        approvalCalls += 1;
+        return Promise.resolve(true);
+      },
+    },
+  });
+
+  await wrapped.execute("tc-safe-allow", { range: "Sheet1!A1", values: [[1]] });
+
+  assert.equal(approvalCalls, 0);
+  assert.equal(coordinator.writeCalls.length, 1);
+  assert.equal(mutationEvents.length, 1);
+});
+
+void test("safe execution mode still prompts for tools that are not always allowed", async () => {
+  const coordinator = new FakeCoordinator();
+  const mutationEvents: WorkbookMutationEvent[] = [];
+  const invalidatedWorkbookIds: Array<string | null> = [];
+  let approvalCalls = 0;
+
+  const wrapped = wrapSingleTool({
+    tool: makeTool("write_cells"),
+    coordinator,
+    contextProvider: createContextProvider("url_sha256:safe-not-allow"),
+    mutationEvents,
+    invalidatedWorkbookIds,
+    executionPolicy: {
+      getExecutionMode: () => Promise.resolve("safe"),
+      isToolAlwaysAllowed: () => false,
+      requestMutationApproval: () => {
+        approvalCalls += 1;
+        return Promise.resolve(false);
+      },
+    },
+  });
+
+  await assert.rejects(
+    () => wrapped.execute("tc-safe-not-allow", { range: "Sheet1!A1", values: [[1]] }),
+    /Mutation cancelled by user \(Confirm mode\)\./u,
+  );
+
+  assert.equal(approvalCalls, 1);
+  assert.equal(coordinator.writeCalls.length, 0);
+});
+
 void test("content-impact mutation tools do not trigger structure invalidation", async (t) => {
   const cases: Array<{ toolName: string; params: DynamicObject }> = [
     { toolName: "write_cells", params: { range: "Sheet1!A1", values: [[1]] } },

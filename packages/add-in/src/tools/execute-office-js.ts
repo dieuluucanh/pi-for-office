@@ -8,7 +8,8 @@ function isToolsExecuteOfficeJsPayloadShape(value: DynamicValue): value is Dynam
  * Security posture:
  * - always available (not behind /experimental)
  * - each execution requires a brief explanation (shown in tool cards and approval prompts)
- * - each execution requires explicit user approval
+ * - each execution requires explicit user approval unless the user chose
+ *   "Always allow" for this tool (see execution/always-allow.ts)
  */
 
 import { Type, type Static } from "@sinclair/typebox";

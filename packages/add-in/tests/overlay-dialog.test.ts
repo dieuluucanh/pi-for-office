@@ -11,7 +11,10 @@ import {
   CONFIRM_DIALOG_OVERLAY_ID,
   TEXT_INPUT_DIALOG_OVERLAY_ID,
 } from "../src/ui/overlay-ids.ts";
-import { requestConfirmationDialog } from "../src/ui/confirm-dialog.ts";
+import {
+  requestConfirmationDialog,
+  requestConfirmationDialogDecision,
+} from "../src/ui/confirm-dialog.ts";
 import { requestTextInputDialog } from "../src/ui/text-input-dialog.ts";
 import { installFakeDom } from "./fake-dom.test.ts";
 
@@ -246,6 +249,95 @@ void test("confirmation dialog resolves true when confirm button is clicked", as
     const approved = await pendingApproval;
     assert.equal(approved, true);
     assert.equal(document.getElementById(CONFIRM_DIALOG_OVERLAY_ID), null);
+  } finally {
+    restore();
+  }
+});
+
+void test("confirmation dialog decision resolves remember on Always allow", async () => {
+  const { document, restore } = installFakeDom();
+
+  try {
+    const pending = requestConfirmationDialogDecision({
+      title: "Allow direct Office.js execution?",
+      message: "Action: test",
+      confirmLabel: "Allow once",
+      alwaysLabel: "Always allow",
+      restoreFocusOnClose: false,
+    });
+
+    const overlay = document.getElementById(CONFIRM_DIALOG_OVERLAY_ID);
+    assert.ok(overlay);
+
+    const alwaysButton = findButtonByText(overlay, "Always allow");
+    assert.ok(alwaysButton);
+    if (!alwaysButton) {
+      throw new Error("Always allow button not found");
+    }
+
+    alwaysButton.dispatchEvent(new Event("click"));
+
+    assert.deepEqual(await pending, { confirmed: true, remember: true });
+    assert.equal(document.getElementById(CONFIRM_DIALOG_OVERLAY_ID), null);
+  } finally {
+    restore();
+  }
+});
+
+void test("confirmation dialog decision resolves not-confirmed on cancel", async () => {
+  const { document, restore } = installFakeDom();
+
+  try {
+    const pending = requestConfirmationDialogDecision({
+      title: "Allow workbook mutation in Confirm mode?",
+      message: "Tool: write_cells",
+      confirmLabel: "Allow once",
+      alwaysLabel: "Always allow",
+      restoreFocusOnClose: false,
+    });
+
+    const overlay = document.getElementById(CONFIRM_DIALOG_OVERLAY_ID);
+    assert.ok(overlay);
+
+    const cancelButton = findButtonByText(overlay, "Cancel");
+    assert.ok(cancelButton);
+    if (!cancelButton) {
+      throw new Error("Cancel button not found");
+    }
+
+    cancelButton.dispatchEvent(new Event("click"));
+
+    assert.deepEqual(await pending, { confirmed: false, remember: false });
+    assert.equal(document.getElementById(CONFIRM_DIALOG_OVERLAY_ID), null);
+  } finally {
+    restore();
+  }
+});
+
+void test("confirmation dialog decision omits the always button when no alwaysLabel is set", async () => {
+  const { document, restore } = installFakeDom();
+
+  try {
+    const pending = requestConfirmationDialogDecision({
+      title: "Allow workbook mutation in Confirm mode?",
+      message: "Tool: write_cells",
+      confirmLabel: "Allow once",
+      restoreFocusOnClose: false,
+    });
+
+    const overlay = document.getElementById(CONFIRM_DIALOG_OVERLAY_ID);
+    assert.ok(overlay);
+    assert.equal(findButtonByText(overlay, "Always allow"), null);
+
+    const approveButton = findButtonByText(overlay, "Allow once");
+    assert.ok(approveButton);
+    if (!approveButton) {
+      throw new Error("Approval button not found");
+    }
+
+    approveButton.dispatchEvent(new Event("click"));
+
+    assert.deepEqual(await pending, { confirmed: true, remember: false });
   } finally {
     restore();
   }

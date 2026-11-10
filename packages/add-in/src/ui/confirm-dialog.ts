@@ -18,10 +18,23 @@ export interface ConfirmDialogOptions {
   message: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  /**
+   * When set, renders a persistent "Always allow" action between Cancel and
+   * the confirm button. Choosing it resolves the decision with
+   * `remember: true` so the caller can persist the grant.
+   */
+  alwaysLabel?: string;
   confirmButtonTone?: ConfirmButtonTone;
   overlayId?: string;
   restoreFocusOnClose?: boolean;
   cardClassName?: string;
+}
+
+export interface ConfirmationDialogDecision {
+  /** True when the user confirmed (either once or persistently). */
+  confirmed: boolean;
+  /** True only when the user chose the persistent "Always allow" action. */
+  remember: boolean;
 }
 
 function canRenderConfirmationDialog(): boolean {
@@ -36,7 +49,28 @@ function getConfirmButtonClassName(tone: ConfirmButtonTone | undefined): string 
   return tone === "danger" ? "pi-overlay-btn--danger" : "pi-overlay-btn--primary";
 }
 
+/**
+ * Boolean-compatible confirmation prompt. Use
+ * `requestConfirmationDialogDecision` when the "Always allow" action is
+ * needed.
+ */
 export function requestConfirmationDialog(options: ConfirmDialogOptions): Promise<boolean> {
+  return requestConfirmationDialogDecision(options).then(
+    (decision) => decision.confirmed,
+  );
+}
+
+/**
+ * Confirmation prompt with an optional persistent "Always allow" action.
+ *
+ * Resolves `{ confirmed, remember }`:
+ * - confirm button → `{ confirmed: true, remember: false }`
+ * - always button  → `{ confirmed: true, remember: true }`
+ * - cancel/escape  → `{ confirmed: false, remember: false }`
+ */
+export function requestConfirmationDialogDecision(
+  options: ConfirmDialogOptions,
+): Promise<ConfirmationDialogDecision> {
   if (!canRenderConfirmationDialog()) {
     return Promise.reject(new Error(getConfirmationUiUnavailableError()));
   }
@@ -53,22 +87,27 @@ export function requestConfirmationDialog(options: ConfirmDialogOptions): Promis
 
     let settled = false;
 
-    const settle = (confirmed: boolean): void => {
+    const settle = (decision: ConfirmationDialogDecision): void => {
       if (settled) {
         return;
       }
 
       settled = true;
-      resolve(confirmed);
+      resolve(decision);
     };
 
     const cancel = (): void => {
-      settle(false);
+      settle({ confirmed: false, remember: false });
       dialog.close();
     };
 
     const confirm = (): void => {
-      settle(true);
+      settle({ confirmed: true, remember: false });
+      dialog.close();
+    };
+
+    const alwaysAllow = (): void => {
+      settle({ confirmed: true, remember: true });
       dialog.close();
     };
 
@@ -103,10 +142,25 @@ export function requestConfirmationDialog(options: ConfirmDialogOptions): Promis
     dialog.addCleanup(() => {
       cancelButton.removeEventListener("click", cancel);
       confirmButton.removeEventListener("click", confirm);
-      settle(false);
+      settle({ confirmed: false, remember: false });
     });
 
-    actions.append(cancelButton, confirmButton);
+    actions.append(cancelButton);
+
+    if (options.alwaysLabel !== undefined) {
+      const alwaysButton = createOverlayButton({
+        text: options.alwaysLabel,
+      });
+
+      alwaysButton.addEventListener("click", alwaysAllow);
+      dialog.addCleanup(() => {
+        alwaysButton.removeEventListener("click", alwaysAllow);
+      });
+
+      actions.append(alwaysButton);
+    }
+
+    actions.append(confirmButton);
     body.appendChild(message);
     dialog.card.append(header, body, actions);
     dialog.mount();

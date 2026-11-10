@@ -28,6 +28,7 @@ import {
   type SettingsPagesDependencies,
 } from "./dependencies.js";
 import { createRootPage } from "./root-page.js";
+import { createApprovalsPage } from "./approvals-page.js";
 import { createProvidersPage } from "./providers-page.js";
 import { createGatewayPage } from "./gateway-page.js";
 import { createProxyPage } from "./proxy-page.js";
@@ -48,6 +49,7 @@ export type ExtensionsHubTab = "connections" | "plugins" | "skills";
 
 export type SettingsPageId =
   | "root"
+  | "approvals"
   | "providers"
   | "gateway"
   | "proxy"
@@ -66,6 +68,7 @@ function getPageRegistry(): Map<string, SettingsShellPage> {
 
   const pages: SettingsShellPage[] = [
     createRootPage(),
+    createApprovalsPage(),
     createProvidersPage(),
     createGatewayPage(),
     createProxyPage(),

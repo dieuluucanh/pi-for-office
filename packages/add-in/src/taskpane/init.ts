@@ -53,6 +53,8 @@ import {
   applyExperimentalToolGates,
   buildOfficeJsExecuteApprovalMessage,
   buildPythonBridgeApprovalMessage,
+  EXECUTE_OFFICE_JS_TOOL_NAME,
+  EXECUTE_WPS_JS_TOOL_NAME,
 } from "../tools/experimental-tool-gates.js";
 import {
   buildMutationApprovalMessage,
@@ -72,6 +74,7 @@ import { wireCommandMenu } from "../commands/command-menu.js";
 import { executeSlashCommand } from "../commands/slash-command-execution.js";
 import { getUserRules, getWorkbookRules, hasAnyRules } from "../rules/store.js";
 import { createExecutionModeController } from "../execution/controller.js";
+import { createAlwaysAllowController } from "../execution/always-allow.js";
 import {
   PI_EXECUTION_MODE_CHANGED_EVENT,
   type ExecutionMode,
@@ -127,7 +130,11 @@ import {
   PI_REQUEST_INPUT_FOCUS_EVENT,
   moveCursorToEnd,
 } from "../ui/input-focus.js";
-import { requestConfirmationDialog } from "../ui/confirm-dialog.js";
+import {
+  requestConfirmationDialog,
+  requestConfirmationDialogDecision,
+  type ConfirmationDialogDecision,
+} from "../ui/confirm-dialog.js";
 import { TOOL_APPROVAL_OVERLAY_ID } from "../ui/overlay-ids.js";
 import { showActionToast, showToast } from "../ui/toast.js";
 import { PiSidebar, type EmptyHint } from "../ui/pi-sidebar.js";
@@ -598,6 +605,8 @@ export async function initTaskpane(opts: {
     settings,
     showToast,
   });
+
+  const alwaysAllowController = await createAlwaysAllowController({ settings });
 
   const getExecutionMode = (): ExecutionMode =>
     executionModeController.getMode();
@@ -1182,13 +1191,17 @@ export async function initTaskpane(opts: {
     title: string;
     message: string;
     confirmLabel?: string;
-  }): Promise<boolean> => {
-    return requestConfirmationDialog({
+    alwaysLabel?: string;
+  }): Promise<ConfirmationDialogDecision> => {
+    return requestConfirmationDialogDecision({
       overlayId: TOOL_APPROVAL_OVERLAY_ID,
       title: args.title,
       message: normalizeApprovalMessage(args.title, args.message),
       ...(args.confirmLabel !== undefined
         ? { confirmLabel: args.confirmLabel }
+        : {}),
+      ...(args.alwaysLabel !== undefined
+        ? { alwaysLabel: args.alwaysLabel }
         : {}),
       cancelLabel: t("confirm.cancel"),
       restoreFocusOnClose: true,
@@ -1230,19 +1243,38 @@ export async function initTaskpane(opts: {
 
       const gatedCoreTools = await applyExperimentalToolGates(coreTools, {
         getExecutionMode: () => Promise.resolve(getExecutionMode()),
-        requestOfficeJsExecuteApproval: (request) => {
+        isToolAlwaysAllowed: (toolName) => alwaysAllowController.hasTool(toolName),
+        requestOfficeJsExecuteApproval: async (request) => {
           const apiName = request.apiName ?? "Office.js";
-          return requestRuntimeToolApproval({
+          const decision = await requestRuntimeToolApproval({
             title:
               apiName === "WPS JSAPI"
                 ? t("init.confirm.wpsJsTitle")
                 : t("init.confirm.officeJsTitle"),
             message: buildOfficeJsExecuteApprovalMessage(request),
             confirmLabel: t("init.confirm.allowOnce"),
+            alwaysLabel: t("init.confirm.alwaysAllow"),
           });
+
+          if (decision.remember) {
+            const toolName = request.toolName
+              ?? (apiName === "WPS JSAPI"
+                ? EXECUTE_WPS_JS_TOOL_NAME
+                : EXECUTE_OFFICE_JS_TOOL_NAME);
+            try {
+              await alwaysAllowController.addTool(toolName);
+              showToast(
+                t("settings.toast.alwaysAllowedAdded", { tool: toolName }),
+              );
+            } catch {
+              showToast(t("settings.toast.alwaysAllowedFailed"));
+            }
+          }
+
+          return decision.confirmed;
         },
-        requestPythonBridgeApproval: (request) => {
-          return requestRuntimeToolApproval({
+        requestPythonBridgeApproval: async (request) => {
+          const decision = await requestRuntimeToolApproval({
             title: t("init.confirm.pythonTitle"),
             message: buildPythonBridgeApprovalMessage(
               request.toolName,
@@ -1251,6 +1283,7 @@ export async function initTaskpane(opts: {
             ),
             confirmLabel: t("init.confirm.allowBridge"),
           });
+          return decision.confirmed;
         },
       });
 
@@ -1282,12 +1315,29 @@ export async function initTaskpane(opts: {
         },
         {
           getExecutionMode: () => Promise.resolve(getExecutionMode()),
-          requestMutationApproval: (request) => {
-            return requestRuntimeToolApproval({
+          isToolAlwaysAllowed: (toolName) => alwaysAllowController.hasTool(toolName),
+          requestMutationApproval: async (request) => {
+            const decision = await requestRuntimeToolApproval({
               title: t("init.confirm.safeModeMutationTitle"),
               message: buildMutationApprovalMessage(request),
               confirmLabel: t("init.confirm.allowOnce"),
+              alwaysLabel: t("init.confirm.alwaysAllow"),
             });
+
+            if (decision.remember) {
+              try {
+                await alwaysAllowController.addTool(request.toolName);
+                showToast(
+                  t("settings.toast.alwaysAllowedAdded", {
+                    tool: request.toolName,
+                  }),
+                );
+              } catch {
+                showToast(t("settings.toast.alwaysAllowedFailed"));
+              }
+            }
+
+            return decision.confirmed;
           },
         },
       );
@@ -2025,6 +2075,9 @@ export async function initTaskpane(opts: {
   configureSettingsPages({
     getExecutionMode,
     setExecutionMode,
+    getAlwaysAllowedTools: alwaysAllowController.getTools,
+    removeAlwaysAllowedTool: (toolName) => alwaysAllowController.removeTool(toolName),
+    clearAlwaysAllowedTools: () => alwaysAllowController.clear(),
     getModelSwitchBehavior,
     setModelSwitchBehavior,
     onRulesSaved: async () => {

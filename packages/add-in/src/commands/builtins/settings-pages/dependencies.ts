@@ -28,6 +28,9 @@ export interface ExtensionsHubDependencies {
 export interface SettingsPagesDependencies {
   getExecutionMode?: () => ExecutionMode;
   setExecutionMode?: (mode: ExecutionMode) => Promise<void>;
+  getAlwaysAllowedTools?: () => string[];
+  removeAlwaysAllowedTool?: (toolName: string) => Promise<void>;
+  clearAlwaysAllowedTools?: () => Promise<void>;
   getModelSwitchBehavior?: () => ModelSwitchBehavior;
   setModelSwitchBehavior?: (behavior: ModelSwitchBehavior) => Promise<void>;
   extensionsHub?: ExtensionsHubDependencies;

@@ -2015,7 +2015,7 @@
 
 <h3 class="reveal" style="margin-top:22px">Experimental Gates</h3>
 <p class="card-desc reveal" style="margin-bottom:14px">
-  Six tools sit behind <code>/experimental</code> gates. A hard gate withholds the tool from the model entirely until its bridge is configured and reachable; the direct-JS tools additionally require per-call approval and pass an Office.js risk lint.
+  Six tools sit behind <code>/experimental</code> gates. A hard gate withholds the tool from the model entirely until its bridge is configured and reachable; the direct-JS tools additionally require approval and pass an Office.js risk lint (both skipped when the user has chosen "Always allow" for the tool).
 </p>
 <div class="tool-table-wrap reveal">
   <table class="tool-table ext-table">
@@ -2031,7 +2031,7 @@
         <td class="ext-accent" style="background:var(--violet-light)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--violet)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/></svg></td>
         <td class="t-name" style="color:var(--violet)">execute_office_js · execute_wps_js</td>
         <td class="t-desc">Hard gate — approval + risk lint</td>
-        <td class="t-desc">Requires explicit user approval per call; risky identifiers are flagged</td>
+        <td class="t-desc">Requires explicit user approval; risky identifiers are flagged. "Always allow" suppresses both.</td>
       </tr>
       <tr>
         <td class="ext-accent" style="background:var(--amber-light)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg></td>
@@ -2967,7 +2967,7 @@
   </div>
   <div class="spec-row">
     <div class="spec-key">Confirm (<code>safe</code>)</div>
-    <div class="spec-val">Every mutation tool call asks for approval before it reaches the workbook; the direct Office.js / WPS JS tools ask for approval in both modes.</div>
+    <div class="spec-val">Every mutation tool call asks for approval before it reaches the workbook; the direct Office.js / WPS JS tools ask for approval in both modes. Tools the user has chosen "Always allow" for skip these prompts.</div>
   </div>
   <div class="spec-row">
     <div class="spec-key">Source of truth</div>
@@ -3223,7 +3223,7 @@
 
 <div class="stats reveal" style="padding-top:0;margin-bottom:14px">
   <div class="stat">
-    <div class="stat-value"><span data-fact="tests.files">148</span></div>
+    <div class="stat-value"><span data-fact="tests.files">149</span></div>
     <div class="stat-label">Test files</div>
   </div>
   <div class="stat">
