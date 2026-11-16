@@ -87,13 +87,17 @@ Then restart Pi. Note that `pi install` pins the version it fetched into
 `~/.pi/agent/npm/package.json`, so Pi will **not** auto-upgrade — re-run the
 command above to get the newest bridge.
 
-Or from the monorepo (development) as the **dev bridge** on port `38618`
-(`--no-extensions` ignores settings, so the globally installed prod bridge
-never double-loads in the same process):
+Or from the monorepo (development) as the **repo-source bridge** on the same
+default port `38617` (`--no-extensions` ignores settings, so the globally
+installed bridge never double-loads in the same process):
 
 ```bash
-npm run bridge:dev   # repo root → pi --no-extensions -e ./packages/bridge-extension/src/index.ts --office-bridge-port 38618
+npm run bridge:dev   # repo root → pi --no-extensions -e ./packages/bridge-extension/src/index.ts
 ```
+
+The bridge is **off until you run `/office connect`** in that Pi process. It
+shares `38617` with the installed extension, so `/office close` any session
+that already owns it first — the bind error names the port.
 
 > **Troubleshooting: the agent says it has no `office_excel_modify_structure`**
 > (or any other newer tool). A bridge **< 0.3.0** ships a small hardcoded
@@ -182,11 +186,12 @@ Aliases: `on`/`start` = `connect`; `stop`/`off`/`disconnect` = `close`;
 ## Configuration
 
 - **Port** — flag `--office-bridge-port <port>` or env `PI_OFFICE_BRIDGE_PORT`
-  (default `38617`). `/office connect <port>` overrides both for one run. The
-  add-in connects to the same default; change both if you override it (the
-  add-in's bridge card has a **Bridge URL** row that both the WebSocket client
-  and the probe use). If the port is already taken by another Pi process, the
-  extension reports `EADDRINUSE` with the owner/close hint.
+  (default `38617`). `/office connect <port>` overrides both for one run. Every
+  add-in build — dev or hosted — connects to the same default; change both if
+  you override it (the add-in's bridge card has a **Bridge URL** row that both
+  the WebSocket client and the probe use). If the port is already taken by
+  another Pi process, the extension reports `EADDRINUSE` with the owner/close
+  hint.
 - **Autostart** — off by default. `--office-bridge-autostart` or
   `PI_OFFICE_BRIDGE_AUTOSTART=1` starts the bridge in `session_start` (the old
   pre-0.6 behaviour). There is no persisted GUI setting.

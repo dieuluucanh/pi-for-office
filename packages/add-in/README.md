@@ -98,21 +98,23 @@ The op catalog is the **single source of truth**: it lives in
 registry (`src/bridge/`) delegates to the local tool factories and a parity
 test (`tests/bridge-catalog-parity.test.ts`) fails if the two ever drift.
 
-The bridge port profile follows the **build mode**: dev builds
-(`npm run dev`) default to the dev ports, prod builds to the prod ports
-(`src/config/local-service-defaults.ts`):
+All builds use the same loopback ports (`src/config/local-service-defaults.ts`):
 
-| Service | Prod | Dev |
-| --- | --- | --- |
-| Pi bridge WS | `38617` | `38618` |
-| Python bridge | `3340` | `3350` |
-| Tmux bridge | `3341` | `3351` |
-| CORS proxy | `3003` | `3004` |
+| Service | Port |
+| --- | --- |
+| Pi bridge WS | `38617` |
+| Python bridge | `3340` |
+| Tmux bridge | `3341` |
+| CORS proxy | `3003` |
 
-Dev builds migrate any stored prod-default URL once on boot (dev builds only;
-custom URLs are never touched). Pair the modes: dev add-in ↔ dev bridge
-(`npm run bridge:dev`, repo root), prod add-in ↔ installed/prod bridge
-(`pi install npm:@dieulc/pi-office-bridge@latest`, port `38617`).
+The build mode only changes the setup commands the UI suggests (repo scripts
+for a dev build, the published one-liners otherwise). Every add-in build —
+dev or hosted — pairs with whichever process owns each port: the installed
+bridge on `38617` serves both, or run `npm run bridge:dev` from the repo.
+
+URLs stored by older dev-port builds (`38618` / `3004` / `3350` / `3351`) are
+repaired once on boot, in every build, by exact match; custom URLs are never
+touched.
 
 (Web Search + MCP are managed in `/tools`, or `/extensions` → Connections.)
 

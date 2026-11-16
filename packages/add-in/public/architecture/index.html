@@ -3047,44 +3047,40 @@
 
 <h3 class="reveal">Local Services &amp; Ports</h3>
 <p class="card-desc reveal" style="margin-bottom:12px">
-  Dev builds default to the dev ports, production builds to the prod ports. Stored prod-default URLs are migrated once on the first dev boot; custom URLs are never rewritten.
+  Every helper uses one loopback port, shared by dev and production builds: one process per port serves either add-in. URLs stored by older dev-port builds are repaired once on boot; custom URLs are never rewritten.
 </p>
 <div class="tool-table-wrap reveal">
   <table class="tool-table ext-table">
-    <thead><tr><th style="width:38px"></th><th>Service</th><th>Prod</th><th>Dev</th><th>What it does</th></tr></thead>
+    <thead><tr><th style="width:38px"></th><th>Service</th><th>Port</th><th>What it does</th></tr></thead>
     <tbody>
       <tr>
         <td class="ext-accent" style="background:var(--violet-light)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--violet)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg></td>
         <td class="t-name" style="color:var(--violet)">Pi bridge (WebSocket)</td>
-        <td class="t-desc"><code><span data-fact="bridge.pi.prodPort">38617</span></code></td>
-        <td class="t-desc"><code><span data-fact="bridge.pi.devPort">38618</span></code></td>
+        <td class="t-desc"><code><span data-fact="bridge.pi.port">38617</span></code></td>
         <td class="t-desc">Drives a local Pi agent from the pane. Loopback-only URL validation, <code>hello</code>/<code>welcome</code> handshake, 25 s heartbeat, reconnect backoff 1 s → 30 s.</td>
       </tr>
       <tr>
         <td class="ext-accent" style="background:var(--amber-light)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg></td>
         <td class="t-name" style="color:var(--amber)">Python bridge (HTTP)</td>
-        <td class="t-desc"><code><span data-fact="bridge.python.prodPort">3340</span></code></td>
-        <td class="t-desc"><code><span data-fact="bridge.python.devPort">3350</span></code></td>
+        <td class="t-desc"><code><span data-fact="bridge.python.port">3340</span></code></td>
         <td class="t-desc"><code>python_run</code> and <code>libreoffice_convert</code>. <code>stub</code> or <code>real</code> mode; bearer token; Pyodide fallback when the bridge is absent.</td>
       </tr>
       <tr>
         <td class="ext-accent" style="background:var(--brand-light)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg></td>
         <td class="t-name" style="color:var(--brand)">tmux bridge (HTTP)</td>
-        <td class="t-desc"><code><span data-fact="bridge.tmux.prodPort">3341</span></code></td>
-        <td class="t-desc"><code><span data-fact="bridge.tmux.devPort">3351</span></code></td>
+        <td class="t-desc"><code><span data-fact="bridge.tmux.port">3341</span></code></td>
         <td class="t-desc">Terminal sessions for the <code>tmux</code> tool — an in-memory simulator by default, or a real tmux subprocess.</td>
       </tr>
       <tr>
         <td class="ext-accent" style="background:var(--blue-light)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></td>
         <td class="t-name" style="color:var(--blue)">CORS proxy (HTTP/S)</td>
-        <td class="t-desc"><code><span data-fact="bridge.proxy.prodPort">3003</span></code></td>
-        <td class="t-desc"><code><span data-fact="bridge.proxy.devPort">3004</span></code></td>
+        <td class="t-desc"><code><span data-fact="bridge.proxy.port">3003</span></code></td>
         <td class="t-desc">OAuth + API relay for providers that block browser origins. Client-CIDR allowlist, target-host allowlist, 32 MB request cap, Codex WebSocket bridging.</td>
       </tr>
       <tr>
         <td class="ext-accent" style="background:oklch(0.94 0 0)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></td>
         <td class="t-name" style="color:var(--muted)">Background verify (dev only)</td>
-        <td class="t-desc" colspan="2"><code>3157</code></td>
+        <td class="t-desc"><code>3157</code></td>
         <td class="t-desc">Lets an agent verify the real taskpane while Office stays in the background — token-gated and compiled out of production builds.</td>
       </tr>
     </tbody>
@@ -3264,7 +3260,7 @@
         <td class="ext-accent" style="background:var(--violet-light)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--violet)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg></td>
         <td class="t-name" style="color:var(--violet)">test:pi-bridge</td>
         <td class="t-desc">8</td>
-        <td class="t-desc">Bridge manager + reconnect, card model, document identity, pane focus, probe, extensions hub, catalog parity, dev/prod service defaults</td>
+        <td class="t-desc">Bridge manager + reconnect, card model, document identity, pane focus, probe, extensions hub, catalog parity, single local-service port profile + legacy URL repair</td>
       </tr>
       <tr>
         <td class="ext-accent" style="background:var(--cyan-light)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2v2"/><path d="M12 22v-2"/><path d="M2 12h2"/><path d="M22 12h2"/></svg></td>

@@ -14,8 +14,8 @@ export const PYTHON_BRIDGE_ONLY_TOOL_NAMES = new Set<string>([
 ]);
 
 import {
- resolvePythonBridgeUrl,
- resolveTmuxBridgeUrl,
+ PYTHON_BRIDGE_URL,
+ TMUX_BRIDGE_URL,
 } from "../../config/local-service-defaults.js";
 
 export const TMUX_BRIDGE_URL_SETTING_KEY = "tmux.bridge.url";
@@ -23,8 +23,8 @@ export const PYTHON_BRIDGE_URL_SETTING_KEY = "python.bridge.url";
 export const PYTHON_BRIDGE_APPROVED_URL_SETTING_KEY =
  "python.bridge.approved.url";
 
-export const DEFAULT_TMUX_BRIDGE_URL = resolveTmuxBridgeUrl();
-export const DEFAULT_PYTHON_BRIDGE_URL = resolvePythonBridgeUrl();
+export const DEFAULT_TMUX_BRIDGE_URL = TMUX_BRIDGE_URL;
+export const DEFAULT_PYTHON_BRIDGE_URL = PYTHON_BRIDGE_URL;
 
 export type TmuxBridgeGateReason =
  | "missing_bridge_url"

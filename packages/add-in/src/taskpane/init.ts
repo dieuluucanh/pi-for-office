@@ -24,8 +24,7 @@ import {
   resolveRuntimeDefaultProxyUrl,
   validateOfficeProxyUrl,
 } from "../auth/proxy-validation.js";
-import { IS_DEV_BUILD } from "../config/local-service-defaults.js";
-import { applyDevServiceDefaultMigrations } from "../config/service-default-migration.js";
+import { applyLegacyServiceUrlRepairs } from "../config/service-url-repair.js";
 import { restoreCredentials } from "../auth/restore.js";
 import { invalidateBlueprint } from "../context/blueprint.js";
 import { ChangeTracker } from "../context/change-tracker.js";
@@ -393,9 +392,10 @@ export async function initTaskpane(opts: {
   // Seed a predictable proxy default for OAuth flows.
   await ensureDefaultProxyUrl(settings, spreadsheetHost.kind);
 
-  // Dev builds: rewrite stored prod-default service URLs to the dev ports so
-  // the pane targets the dev local services (mirrors ensureDefaultProxyUrl).
-  await applyDevServiceDefaultMigrations(settings, IS_DEV_BUILD);
+  // Repair URLs an older dev-port build could have stored (bridge 38618,
+  // proxy 3004, python 3350, tmux 3351). Runs in every build; exact matches
+  // only, so custom URLs are never touched.
+  await applyLegacyServiceUrlRepairs(settings);
 
   // 1a. One-time session-storage repair (idempotent, marker-guarded).
   // Fixes metadata rows that were never written, timestamps that keep a row out

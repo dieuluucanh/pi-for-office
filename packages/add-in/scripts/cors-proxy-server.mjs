@@ -93,8 +93,8 @@ const hasExplicitPort =
 
 /**
  * Listen-port precedence: `--port <n>` argv flag, then the PORT env var,
- * then the default. `--port` exists so the dev scripts can bind the dev
- * ports cross-platform (npm cannot set env vars inline on Windows cmd).
+ * then the default. `--port` exists for a one-off custom port; there is no
+ * build-mode port split (npm also cannot set env vars inline on Windows cmd).
  */
 function parsePortArg(argv) {
   const idx = argv.indexOf("--port");

@@ -460,45 +460,25 @@ async function deriveExpectedFacts(): Promise<Record<string, string>> {
     "tests.suites": String(await countTestSuiteScripts()),
     "checks.scripts": String(await countCheckScripts()),
 
-    "bridge.pi.prodPort": capture(
+    "bridge.pi.port": capture(
       serviceDefaults,
-      /BRIDGE_PROD_PORT = ([\d_]+)/u,
-      "BRIDGE_PROD_PORT",
+      /BRIDGE_PORT = ([\d_]+)/u,
+      "BRIDGE_PORT",
     ),
-    "bridge.pi.devPort": capture(
+    "bridge.python.port": capture(
       serviceDefaults,
-      /BRIDGE_DEV_PORT = ([\d_]+)/u,
-      "BRIDGE_DEV_PORT",
+      /PYTHON_PORT = ([\d_]+)/u,
+      "PYTHON_PORT",
     ),
-    "bridge.python.prodPort": capture(
+    "bridge.tmux.port": capture(
       serviceDefaults,
-      /PYTHON_PROD_PORT = ([\d_]+)/u,
-      "PYTHON_PROD_PORT",
+      /TMUX_PORT = ([\d_]+)/u,
+      "TMUX_PORT",
     ),
-    "bridge.python.devPort": capture(
+    "bridge.proxy.port": capture(
       serviceDefaults,
-      /PYTHON_DEV_PORT = ([\d_]+)/u,
-      "PYTHON_DEV_PORT",
-    ),
-    "bridge.tmux.prodPort": capture(
-      serviceDefaults,
-      /TMUX_PROD_PORT = ([\d_]+)/u,
-      "TMUX_PROD_PORT",
-    ),
-    "bridge.tmux.devPort": capture(
-      serviceDefaults,
-      /TMUX_DEV_PORT = ([\d_]+)/u,
-      "TMUX_DEV_PORT",
-    ),
-    "bridge.proxy.prodPort": capture(
-      serviceDefaults,
-      /PROXY_PROD_PORT = ([\d_]+)/u,
-      "PROXY_PROD_PORT",
-    ),
-    "bridge.proxy.devPort": capture(
-      serviceDefaults,
-      /PROXY_DEV_PORT = ([\d_]+)/u,
-      "PROXY_DEV_PORT",
+      /PROXY_PORT = ([\d_]+)/u,
+      "PROXY_PORT",
     ),
   };
 

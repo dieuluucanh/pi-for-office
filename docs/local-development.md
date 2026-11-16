@@ -9,53 +9,67 @@ deployment) see [releasing.md](./releasing.md).
 | Component | What it is | Runs where | Port (default) |
 | ----------- | ----------- | ------------ | ---------------- |
 | `packages/add-in` | Office.js task-pane add-in | your browser / Office sideload | HTTPS `3141` (Vite dev) |
-| `packages/bridge-extension` | `@dieulc/pi-office-bridge` — WebSocket bridge, lets Pi drive Excel/Word/PowerPoint | inside a local Pi process | `38617` prod / `38618` dev (loopback) |
-| Python bridge | `pi-for-office-python-bridge` — run Python / LibreOffice locally | separate Node process | `3340` prod / `3350` dev |
-| Tmux bridge | `pi-for-office-tmux-bridge` — tmux terminal access | separate Node process | `3341` prod / `3351` dev |
-| CORS proxy | `pi-for-office-proxy` — OAuth/CORS helper | separate Node process | `3003` prod / `3004` dev |
+| `packages/bridge-extension` | `@dieulc/pi-office-bridge` — WebSocket bridge, lets Pi drive Excel/Word/PowerPoint | inside a local Pi process | `38617` (loopback) |
+| Python bridge | `pi-for-office-python-bridge` — run Python / LibreOffice locally | separate Node process | `3340` |
+| Tmux bridge | `pi-for-office-tmux-bridge` — tmux terminal access | separate Node process | `3341` |
+| CORS proxy | `pi-for-office-proxy` — OAuth/CORS helper | separate Node process | `3003` |
 
 ## Dev vs production modes
 
-The add-in build selects which local-service ports it targets: the **dev**
-build (`npm run dev`, Vite) defaults to the dev ports, the **production** build
-(`vite build`, including the GitHub Pages deploy) keeps the prod ports. This
-lets a dev add-in and a prod add-in run side by side against their own
-helper services.
+Every local service uses **one loopback port**, and dev and production builds
+share it. The build mode no longer changes a port — it only changes the setup
+commands the UI suggests (repo scripts for a Vite build, the published
+one-liners for a production build). That means a Vite **dev add-in can attach
+to the same Pi session and helpers you use for real work**; you no longer need
+a second copy of every service.
 
-| Service | Prod (hosted add-in, installed Pi extension) | Dev (Vite add-in, repo bridge) |
+| Service | Port | Started by |
 | --- | --- | --- |
-| Pi bridge WS | `38617` | `38618` |
-| Python bridge | `3340` | `3350` |
-| Tmux bridge | `3341` | `3351` |
-| CORS proxy | `3003` | `3004` |
+| Pi bridge WS | `38617` | the installed bridge extension, or `npm run bridge:dev` (repo source) |
+| Python bridge | `3340` | `npx pi-for-office-python-bridge` or `npm run python:bridge:https` |
+| Tmux bridge | `3341` | `npx pi-for-office-tmux-bridge` or `npm run tmux:bridge:https` |
+| CORS proxy | `3003` | `npx pi-for-office-proxy` or `npm run proxy:https` |
 
-Rule of thumb: **dev add-in ↔ dev ports; prod add-in ↔ prod ports.** The dev
-add-in is wired to the dev ports automatically; if a stored setting still
-points at a prod default it is migrated once on boot (dev builds only). The
-Pi side pairs by which process owns the bridge: the dev bridge (`bridge:dev`
-below) listens on `38618`, the installed/prod extension on `38617`.
+**One process owns each port.** Start the repo script only after stopping (or
+`/office close`-ing) the published service on that port; a second listener
+fails with `EADDRINUSE` (the bridge's message names the port).
+
+**Legacy URLs.** Older dev builds stored dev-port URLs. On boot they are
+repaired once, in every build, by exact match:
+
+| Stored value | Repaired to |
+| --- | --- |
+| `ws://127.0.0.1:38618` | `ws://127.0.0.1:38617` |
+| `https://localhost:3004` (and `http://10.0.2.2:3004` for the WPS harness) | `https://localhost:3003` (and `http://10.0.2.2:3003`) |
+| `https://localhost:3350` (also the Python approval grant) | `https://localhost:3340` |
+| `https://localhost:3351` | `https://localhost:3341` |
+
+Custom URLs (any other host/port) and the org `VITE_PI_DEFAULT_PROXY_URL`
+override are never rewritten.
 
 **Start the full dev stack** (see the per-service sections below):
 
 ```bash
-# Terminal 1 — dev Pi bridge (repo source, dev port 38618)
-npm run bridge:dev   # repo root
+# Terminal 1 — repo-source Pi bridge (same port as the installed extension)
+npm run bridge:dev   # repo root; then /office connect in that Pi process
 
-# Terminal 2 — Python bridge (dev port)
-cd packages/add-in && npm run python:bridge:dev:https
+# Terminal 2 — Python bridge (repo source)
+cd packages/add-in && npm run python:bridge:https
 
-# Terminal 3 — tmux bridge (dev port)
-cd packages/add-in && npm run tmux:bridge:dev:https
+# Terminal 3 — tmux bridge (repo source)
+cd packages/add-in && npm run tmux:bridge:https
 
 # Terminal 4 — CORS proxy (only if testing OAuth/provider features)
-cd packages/add-in && ALLOW_ALL_TARGET_HOSTS=1 npm run proxy:dev
+cd packages/add-in && ALLOW_ALL_TARGET_HOSTS=1 npm run proxy:https
 
 # Terminal 5 — add-in dev server
 cd packages/add-in && npm run dev
 ```
 
-Then sideload the add-in and enable the Local Pi agent toggle (the dev build
-shows the dev bridge URL `ws://127.0.0.1:38618`).
+Then sideload the add-in and enable the Local Pi agent toggle. The Bridge URL
+row defaults to `ws://127.0.0.1:38617` for both the dev and production builds,
+so the dev add-in can attach to your real Pi session (or to the repo-source
+bridge from Terminal 1).
 
 ## Prerequisites
 
@@ -112,25 +126,29 @@ card** enables the pane↔Pi connection.
 
 ### 2a. Run the extension
 
-From a source checkout (workspace-linked deps resolve automatically), the
-dev bridge runs as a dedicated Pi process on the **dev port `38618`**
-(`--no-extensions` ignores settings, so the globally installed prod bridge
-never double-loads in the same process):
+Two ways to run the bridge, both on the same port `38617`:
+
+- **Installed extension (normal path):** `pi install npm:@dieulc/pi-office-bridge`
+  and restart Pi. Every add-in build — dev or hosted — defaults to `38617`, so
+  your real Pi session serves the dev pane too.
+- **Repo source (developer path):** run a dedicated Pi process with the local
+  extension. `--no-extensions` ignores settings, so the globally installed
+  bridge never double-loads or races for the port:
 
 ```bash
-npm run bridge:dev   # repo root → pi --no-extensions -e ./packages/bridge-extension/src/index.ts --office-bridge-port 38618
+npm run bridge:dev   # repo root → pi --no-extensions -e ./packages/bridge-extension/src/index.ts
 ```
 
-You should see a Pi notification:
+The bridge stays **off until you run `/office connect`** in that Pi process
+(manual lifecycle since bridge 0.6). If another session already owns `38617`,
+`/office close` it there first — the bind error names the port. After connect
+you should see:
 
 ```
-Office bridge listening on ws://127.0.0.1:38618
+Office bridge listening on ws://127.0.0.1:38617
 ```
 
-Keep that Pi process running in the background. (For the installed, published
-extension instead — the **prod** bridge on `38617` — run
-`pi install npm:@dieulc/pi-office-bridge` and restart Pi; `.pi/plans` is the
-only git-ignored part of `.pi/`.)
+Keep that Pi process running in the background.
 
 ### 2b. Enable it in the add-in
 
@@ -158,10 +176,9 @@ never stays **Connected** on a dead socket.
 
 ```bash
 # The bridge server answers HTTP /health on its port (bridge ≥ 0.2.0):
-curl http://127.0.0.1:38618/health   # dev bridge (repo source, --no-extensions -e)
-curl http://127.0.0.1:38617/health   # prod bridge (npm-installed extension)
-# → { "ok": true, "service": "pi-office-bridge", "serverVersion": "0.3.0",
-#     "capabilities": ["http-health"], "catalogVersion": 1, "panes": [ … ] }
+curl http://127.0.0.1:38617/health   # whichever bridge owns the port
+# → { "ok": true, "service": "pi-office-bridge", "serverVersion": "0.x.y",
+#     "capabilities": ["http-health", …], "catalogVersion": 1, "panes": [ … ] }
 ```
 
 `panes` lists attached panes with their host (`excel` / `word` /
@@ -188,9 +205,8 @@ real document content — not “Unknown op”.
 
 ### 2e. Custom URL / port
 
-The bridge card has a **Bridge URL** row (default `ws://127.0.0.1:38617` prod /
-`ws://127.0.0.1:38618` dev). To
-run the bridge on another port, start Pi with
+The bridge card has a **Bridge URL** row (default `ws://127.0.0.1:38617` for
+every build). To run the bridge on another port, start Pi with
 `--office-bridge-port <port>` or `PI_OFFICE_BRIDGE_PORT=<port>` and set the
 card URL to match — **both** the WebSocket client and the `/health` probe use
 it. The URL must stay loopback (`127.0.0.1` / `localhost`) for security.
@@ -205,22 +221,11 @@ npm test
 
 ## 3. Python bridge
 
-Dev builds target the **dev port `3350`**; the published one-liner serves the
-prod port `3340` (see *Dev vs production modes*). Dev variants:
+Both the published one-liner (`npx pi-for-office-python-bridge`) and the repo
+script bind the shared port `3340` (see *Dev vs production modes*). From
+`packages/add-in`:
 
 ```bash
-cd packages/add-in
-
-npm run python:bridge:dev          # stub mode, HTTPS on 3350
-npm run python:bridge:dev:https    # stub mode, HTTPS on 3350
-PYTHON_BRIDGE_MODE=real npm run python:bridge:dev:https   # real mode
-```
-
-Prod variants (published package, port `3340`):
-
-```bash
-cd packages/add-in
-
 # Stub mode (simulated responses; nothing installed locally) — HTTP:
 npm run python:bridge
 # HTTPS:
@@ -229,6 +234,9 @@ npm run python:bridge:https
 # Real mode (needs python3 + LibreOffice):
 PYTHON_BRIDGE_MODE=real npm run python:bridge:https
 ```
+
+Stop any other listener on `3340` first; the repo script does not choose a
+random port.
 
 Verify:
 
@@ -245,22 +253,11 @@ The `python_run` tool falls back to in-browser Pyodide when the bridge is off.
 
 ## 4. Tmux bridge
 
-Dev builds target the **dev port `3351`**; the published one-liner serves the
-prod port `3341` (see *Dev vs production modes*). Dev variants:
+Both the published one-liner (`npx pi-for-office-tmux-bridge`) and the repo
+script bind the shared port `3341` (see *Dev vs production modes*). From
+`packages/add-in`:
 
 ```bash
-cd packages/add-in
-
-npm run tmux:bridge:dev              # stub mode, HTTP on 3351
-npm run tmux:bridge:dev:https        # stub mode, HTTPS on 3351
-TMUX_BRIDGE_MODE=tmux npm run tmux:bridge:dev:https   # real tmux mode
-```
-
-Prod variants (published package, port `3341`):
-
-```bash
-cd packages/add-in
-
 # Stub mode (all platforms) — HTTP:
 npm run tmux:bridge
 # HTTPS:
@@ -269,6 +266,9 @@ npm run tmux:bridge:https
 # Real tmux mode (macOS/Linux only; tmux must be installed):
 TMUX_BRIDGE_MODE=tmux npm run tmux:bridge:https
 ```
+
+Stop any other listener on `3341` first; the repo script does not choose a
+random port.
 
 Verify:
 
@@ -284,10 +284,9 @@ No fallback — the tmux tool needs the bridge server.
 ## Full dev stack
 
 Already covered above — see **Start the full dev stack** in the
-[*Dev vs production modes*](#dev-vs-production-modes) section: dev bridges run
-on their dev ports (`38618` / `3350` / `3351` / `3004`). The prod equivalents
-(npm-installed bridge, `npx pi-for-office-*`) keep the prod ports
-(`38617` / `3340` / `3341` / `3003`).
+[*Dev vs production modes*](#dev-vs-production-modes) section. Every helper
+uses one port (`38617` / `3340` / `3341` / `3003`), shared by the repo scripts
+and the published `npx` one-liners; run only one process per port.
 
 ## Troubleshooting
 
@@ -295,12 +294,12 @@ on their dev ports (`38618` / `3350` / `3351` / `3004`). The prod equivalents
 | --------- | -------------- | ----- |
 | Agent says it has no `office_excel_modify_structure` (can't add sheets) | Installed bridge < 0.3.0 — its old catalog has no structure/modify tools, and it ignores the pane's `hello.ops` | `pi install npm:@dieulc/pi-office-bridge@latest`, restart Pi; verify with `/office-tools` (29 tools incl. `office_excel_modify_structure`) |
 | “Test connection” says the bridge is an older version (/health unavailable) | Installed bridge < 0.2.0 (no HTTP surface) | `pi install npm:@dieulc/pi-office-bridge@latest`, restart Pi, probe again |
-| Probe times out (“No answer from /health within 3s”) | Bridge not running, or Pi restarting | Start the dev bridge (`npm run bridge:dev`) or keep Pi running; `curl http://127.0.0.1:38618/health` (dev) / `38617` (prod) |
-| Agent says a tool is missing (`office_*`) | Bridge/proxy version skew, or wrong mode's bridge is running | Ensure dev add-in ↔ dev bridge (`npm run bridge:dev`) and prod add-in ↔ prod/installed bridge; `/office` shows each attached pane's ops |
+| Probe times out (“No answer from /health within 3s”) | Bridge not running, or Pi restarting | Start the bridge (`npm run bridge:dev`, then `/office connect`) or keep Pi running; `curl http://127.0.0.1:38617/health` |
+| Agent says a tool is missing (`office_*`) | The bridge owning `38617` is older than the pane (unknown ops are dropped) | Update the installed bridge (`pi install npm:@dieulc/pi-office-bridge@latest`) + restart, or run `npm run bridge:dev`; `/office` shows each pane's ops and `opsIgnoredCount` |
 | Probe says “The browser blocked local network access” | Office on the web + Chrome 142+ Local Network Access | Use desktop Office (WebView2), or allow localhost access in the browser |
 | Badge stuck on “Reconnecting (attempt N)…” | Pi process died / socket dropped | Start Pi again — the card reconnects automatically (backoff + watchdog) |
-| Bridge on a different port than the card expects | Pi started with `--office-bridge-port` / `PI_OFFICE_BRIDGE_PORT`, or dev/prod mismatch | Match the card's Bridge URL row to the port: dev build → `38618`, prod build → `38617` |
-| Toggle stays “Error” with connection refused | Pi process not running the extension, or port conflict | Check the port (`EADDRINUSE`); override with `PI_OFFICE_BRIDGE_PORT` on both sides |
+| Bridge on a different port than the card expects | Pi started with `--office-bridge-port` / `PI_OFFICE_BRIDGE_PORT` | Set the card's Bridge URL row to that port; the default is `38617` for every build |
+| Toggle stays “Error” with connection refused | Pi process not running the extension, or port conflict | Check the port (`EADDRINUSE`); close the owning session (`/office close`) or pass `--office-bridge-port` and match the card URL |
 | “Unknown op …” | Client registry empty (older add-in build) | Rebuild the add-in; this was fixed by wiring `ALL_BRIDGE_OPS` |
 | Word/PowerPoint registered as Excel | Host detection disabled | Rebuild the add-in; host detection runs from the bridge manager |
 | Python/tmux probe fails with TLS warning | Self-signed bridge certs | `mkcert -install` once, or accept the cert in the taskpane webview |

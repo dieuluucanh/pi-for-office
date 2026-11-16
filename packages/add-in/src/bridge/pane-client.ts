@@ -23,7 +23,7 @@ import {
   type ServerMessage,
   type WelcomeMessage,
 } from "@dieulc/pi-office-protocol";
-import { defaultBridgePort } from "../config/local-service-defaults.js";
+import { BRIDGE_PORT } from "../config/local-service-defaults.js";
 import type { OfficeOpExecutor } from "./ops.js";
 import { createPaneFocusReporter, type PaneFocusState } from "./pane-focus.js";
 
@@ -151,7 +151,7 @@ export class PaneBridgeClient {
     this.callbacks = callbacks;
     this.ops = options.ops;
     this.catalogVersion = options.catalogVersion;
-    const port = extractPort(options.url) ?? defaultBridgePort();
+    const port = extractPort(options.url) ?? BRIDGE_PORT;
     this.url = options.url ?? `ws://127.0.0.1:${port}`;
   }
 

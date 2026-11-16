@@ -19,8 +19,8 @@ import {
 import { ALL_BRIDGE_OPS, opsForHost } from "./registry.js";
 import { detectOfficeAppFromGlobals } from "../host/index.js";
 import {
-  defaultBridgePort,
-  resolvePiBridgeUrl,
+  BRIDGE_PORT,
+  PI_BRIDGE_URL,
 } from "../config/local-service-defaults.js";
 import type {
   DocumentIdentity,
@@ -36,7 +36,7 @@ const PI_BRIDGE_SETTING_KEY = "pi-bridge.enabled";
 
 /** Persisted bridge WebSocket URL; only loopback ws:// or wss:// is valid. */
 export const PI_BRIDGE_URL_SETTING_KEY = "pi-bridge.url";
-export const DEFAULT_PI_BRIDGE_URL = resolvePiBridgeUrl();
+export const DEFAULT_PI_BRIDGE_URL = PI_BRIDGE_URL;
 
 /**
  * Documented DOM events the manager emits for pane-facing bridge output.
@@ -266,7 +266,7 @@ export function validatePiBridgeUrl(raw: string): string {
     );
   }
   // Normalize: drop any path/trailing slashes and default the port.
-  const port = parsed.port !== "" ? parsed.port : String(defaultBridgePort());
+  const port = parsed.port !== "" ? parsed.port : String(BRIDGE_PORT);
   return `${parsed.protocol}//${host}:${port}`;
 }
 

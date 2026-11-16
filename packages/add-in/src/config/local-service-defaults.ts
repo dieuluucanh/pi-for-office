@@ -1,22 +1,24 @@
 /**
- * Local-service defaults — the single source of truth for which ports the
- * add-in's local helper services use, and how those defaults differ between
- * dev and production builds.
+ * Local-service ports — one loopback profile shared by dev and production
+ * builds.
  *
- * Mode signal: Vite's `import.meta.env.DEV` (true under `vite dev`, false for
- * `vite build`, including the GitHub Pages deploy and `serve:dist`). Under
- * Node/tests `import.meta.env` is undefined, so the guarded read fails closed
- * to the production profile — existing tests that assert prod defaults keep
- * passing.
+ * Port profile:
  *
- * Port profiles:
+ * | Service        | Port  |
+ * | -------------- | ----- |
+ * | Pi bridge WS   | 38617 |
+ * | CORS proxy     | 3003  |
+ * | Python bridge  | 3340  |
+ * | Tmux bridge    | 3341  |
  *
- * | Service        | Prod | Dev |
- * | --------------- | ------ | ------ |
- * | Pi bridge WS   | 38617 | 38618 |
- * | CORS proxy     | 3003  | 3004  |
- * | Python bridge  | 3340  | 3350  |
- * | Tmux bridge    | 3341  | 3351  |
+ * The build mode never changes a port: a Vite dev add-in and the hosted add-in
+ * both target the same helper services, so one process per port serves either.
+ * Only the setup-command copy differs (repo scripts for a dev build, the
+ * published one-liners otherwise).
+ *
+ * Older builds used a dev port profile (bridge 38618, proxy 3004, python 3350,
+ * tmux 3351). URLs they stored are repaired once on boot by
+ * `service-url-repair.ts`.
  */
 
 /** Whether this build is a dev build (Vite dev server). */
@@ -32,77 +34,50 @@ function readIsDevBuild(): boolean {
 
 /* ── Pi bridge (WebSocket) ──────────────────────────────────────────── */
 
-export const BRIDGE_PROD_PORT = 38617;
-export const BRIDGE_DEV_PORT = 38618;
+/** Pi bridge port. Must match `BRIDGE_DEFAULT_PORT` in the protocol package. */
+export const BRIDGE_PORT = 38617;
 
-export const PROD_PI_BRIDGE_URL = `ws://127.0.0.1:${BRIDGE_PROD_PORT}`;
-export const DEV_PI_BRIDGE_URL = `ws://127.0.0.1:${BRIDGE_DEV_PORT}`;
-
-export function defaultBridgePort(isDev = IS_DEV_BUILD): number {
- return isDev ? BRIDGE_DEV_PORT : BRIDGE_PROD_PORT;
-}
-
-export function resolvePiBridgeUrl(isDev = IS_DEV_BUILD): string {
- return isDev ? DEV_PI_BRIDGE_URL : PROD_PI_BRIDGE_URL;
-}
+export const PI_BRIDGE_URL = `ws://127.0.0.1:${BRIDGE_PORT}`;
 
 /* ── CORS proxy (HTTP/S) ────────────────────────────────────────────── */
 
-export const PROXY_PROD_PORT = 3003;
-export const PROXY_DEV_PORT = 3004;
+export const PROXY_PORT = 3003;
 
-export const PROD_LOCAL_PROXY_URL = `https://localhost:${PROXY_PROD_PORT}`;
-export const DEV_LOCAL_PROXY_URL = `https://localhost:${PROXY_DEV_PORT}`;
-
-export function resolveLocalProxyUrl(isDev = IS_DEV_BUILD): string {
- return isDev ? DEV_LOCAL_PROXY_URL : PROD_LOCAL_PROXY_URL;
-}
+export const LOCAL_PROXY_URL = `https://localhost:${PROXY_PORT}`;
 
 /* ── Python bridge ──────────────────────────────────────────────────── */
 
-export const PYTHON_PROD_PORT = 3340;
-export const PYTHON_DEV_PORT = 3350;
+export const PYTHON_PORT = 3340;
 
-export const PROD_PYTHON_BRIDGE_URL = `https://localhost:${PYTHON_PROD_PORT}`;
-export const DEV_PYTHON_BRIDGE_URL = `https://localhost:${PYTHON_DEV_PORT}`;
-
-export function resolvePythonBridgeUrl(isDev = IS_DEV_BUILD): string {
- return isDev ? DEV_PYTHON_BRIDGE_URL : PROD_PYTHON_BRIDGE_URL;
-}
+export const PYTHON_BRIDGE_URL = `https://localhost:${PYTHON_PORT}`;
 
 /* ── Tmux bridge ────────────────────────────────────────────────────── */
 
-export const TMUX_PROD_PORT = 3341;
-export const TMUX_DEV_PORT = 3351;
+export const TMUX_PORT = 3341;
 
-export const PROD_TMUX_BRIDGE_URL = `https://localhost:${TMUX_PROD_PORT}`;
-export const DEV_TMUX_BRIDGE_URL = `https://localhost:${TMUX_DEV_PORT}`;
-
-export function resolveTmuxBridgeUrl(isDev = IS_DEV_BUILD): string {
- return isDev ? DEV_TMUX_BRIDGE_URL : PROD_TMUX_BRIDGE_URL;
-}
+export const TMUX_BRIDGE_URL = `https://localhost:${TMUX_PORT}`;
 
 /* ── Setup commands (one-liners the user runs to start a service) ───── */
 
 /**
- * Python bridge setup command. Dev builds point at the repo dev script
- * (`npm run python:bridge:dev:https` from packages/add-in); otherwise the
- * published one-liner.
+ * Python bridge setup command. Dev builds point at the repo script
+ * (`npm run python:bridge:https` from packages/add-in); otherwise the
+ * published one-liner. Both bind the shared port.
  */
 export function resolvePythonBridgeSetupCommand(isDev = IS_DEV_BUILD): string {
  return isDev
-  ? "npm run python:bridge:dev:https"
+  ? "npm run python:bridge:https"
   : "npx pi-for-office-python-bridge";
 }
 
 /** Tmux bridge setup command (dev script vs published one-liner). */
 export function resolveTmuxBridgeSetupCommand(isDev = IS_DEV_BUILD): string {
  return isDev
-  ? "npm run tmux:bridge:dev:https"
+  ? "npm run tmux:bridge:https"
   : "npx pi-for-office-tmux-bridge";
 }
 
 /** CORS proxy setup command (dev script vs published one-liner). */
 export function resolveProxySetupCommand(isDev = IS_DEV_BUILD): string {
- return isDev ? "npm run proxy:dev" : "npx pi-for-office-proxy";
+ return isDev ? "npm run proxy:https" : "npx pi-for-office-proxy";
 }

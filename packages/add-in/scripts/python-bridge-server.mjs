@@ -36,11 +36,12 @@ if (useHttps && useHttp) {
 }
 
 const HOST = process.env.HOST || (useHttps ? "localhost" : "127.0.0.1");
+const DEFAULT_PORT = 3340;
 
 /**
  * Listen-port precedence: `--port <n>` argv flag, then the PORT env var,
- * then the default. `--port` exists so the dev scripts can bind the dev
- * ports cross-platform (npm cannot set env vars inline on Windows cmd).
+ * then the default. `--port` exists for a one-off custom port; there is no
+ * build-mode port split (npm also cannot set env vars inline on Windows cmd).
  */
 function parsePortArg(argv) {
   const idx = argv.indexOf("--port");
@@ -69,7 +70,7 @@ const PORT =
     ? parsePort(PORT_ARG)
     : typeof process.env.PORT === "string" && process.env.PORT.trim().length > 0
       ? parsePort(process.env.PORT)
-      : 3340;
+      : DEFAULT_PORT;
 
 const MODE_RAW = (process.env.PYTHON_BRIDGE_MODE || "stub")
   .trim()

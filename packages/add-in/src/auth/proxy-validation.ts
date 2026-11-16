@@ -7,10 +7,13 @@
  */
 
 import type { SpreadsheetHostKind } from "../host/types.js";
-import { resolveLocalProxyUrl } from "../config/local-service-defaults.js";
+import {
+ LOCAL_PROXY_URL,
+ PROXY_PORT,
+} from "../config/local-service-defaults.js";
 
-export const DEFAULT_LOCAL_PROXY_URL = resolveLocalProxyUrl();
-export const WPS_DEV_HOST_GATEWAY_PROXY_URL = "http://10.0.2.2:3004";
+export const DEFAULT_LOCAL_PROXY_URL = LOCAL_PROXY_URL;
+export const WPS_DEV_HOST_GATEWAY_PROXY_URL = `http://10.0.2.2:${PROXY_PORT}`;
 
 /**
  * Resolve the build-time default proxy URL override (org/central deployments).
